@@ -1,5 +1,7 @@
 # План 1: Foundation + Domain (Shared, ChartOfAccounts, Ledger, Payables)
 
+> Перед реализацией прочитать [обязательные уточнения согласованности](2026-09-22-plan-consistency.md). Они исправляют даты, резервирование, транзакции и безопасность в ранних фрагментах ниже.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Собрать решение с проверяемыми границами слоёв и реализовать три доменных контекста (ChartOfAccounts, Ledger, Payables) поверх общего ядра значений — с тестами всех инвариантов, без базы и без UI.
@@ -1377,12 +1379,13 @@ public class BudgetLineTests
         FluentActions.Invoking(() => ExerciseLine().Commit(Guid.NewGuid())).Should().Throw<LedgerException>();
 
     [Fact]
-    public void Liquidation_reduces_encumbered()
+    public void Liquidation_moves_encumbered_to_actuals_and_keeps_available()
     {
         var line = ExerciseLine();
         line.RecordLiquidation(Money.Of(36_000m));
         line.Encumbered.Should().Be(Money.Of(60_000m));
-        line.Available.Should().Be(Money.Of(183_000m));
+        line.Actuals.Should().Be(Money.Of(168_000m));
+        line.Available.Should().Be(Money.Of(147_000m));
     }
 
     [Fact]
@@ -1584,6 +1587,7 @@ public sealed class BudgetLine
         Encumbered += amount;
     }
 
+    /// <summary>Ликвидация encumbrance: резерв под PO превращается в реальный расход. Available не меняется.</summary>
     public void RecordLiquidation(Money amount)
     {
         RequirePositive(amount, nameof(amount));
@@ -1593,6 +1597,7 @@ public sealed class BudgetLine
         }
 
         Encumbered -= amount;
+        Actuals += amount;
     }
 
     private BudgetReservation FindHeld(Guid reservationId)
@@ -2648,7 +2653,8 @@ public interface IVendorInvoiceRepository
 {
     Task<VendorInvoice?> FindAsync(Guid id, CancellationToken ct = default);
     Task<IReadOnlyList<VendorInvoice>> ListAsync(CancellationToken ct = default);
-    Task<bool> ExistsAsync(Guid vendorId, string number, CancellationToken ct = default);
+    /// <summary>Есть ли другой (не Rejected) инвойс того же поставщика с тем же номером.</summary>
+    Task<bool> ExistsDuplicateAsync(Guid vendorId, string number, Guid excludingInvoiceId, CancellationToken ct = default);
     Task AddAsync(VendorInvoice invoice, CancellationToken ct = default);
 }
 ```
