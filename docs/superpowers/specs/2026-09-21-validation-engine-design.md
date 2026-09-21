@@ -298,73 +298,36 @@ RuleOutcome
 
 `ValidationSubjectAssembler` — вспомогательный компонент Application, собирает снимки из четырёх контекстов.
 
-### 5.2 Транзакции по шагам
+### 5.2 Атомарные команды
 
-| Шаг | Транзакции | Агрегаты | Оценка |
-|---|---|---|---|
-| CreateDraft / UpdateDraft | 1 | `VendorInvoice` | нет |
-| Validate | 1 | `EvaluationRecord` + audit | `Manual` |
-| Submit | N + 1, компенсация | ① `BudgetLine.Reserve` по одной транзакции на строку; ② `VendorInvoice.Submit` + `EvaluationRecord` | `Submit`; при Hard Stop ① не выполняется |
-| Approve | 1 | `VendorInvoice.Approve` + `EvaluationRecord` | `Approve`; если оценка хуже предыдущей — отказ, инвойс остаётся Submitted |
-| Override | 1 | `VendorInvoice.Override` + `EvaluationRecord` | перевалидация с override |
-| Reject | 1 + компенсация | `VendorInvoice.Reject`; затем `BudgetLine.Release` ×N | — |
-| Post | **1 (исключение)** | `VendorInvoice.Post` + `BudgetLine.Commit` ×N + `Encumbrance.Liquidate` ×M + `JournalEntry` + audit | `Post`; `PostingEligibility` обязан пройти |
+Create/Update, Submit, Approve, Override, Reject/Withdraw, Post — каждая команда выполняется в одной транзакции tenant-БД. Submit и Reject не имеют промежуточных коммитов и компенсаций. CommandId, actor, request hash и сохранённый результат обеспечивают идемпотентность через `ap.ProcessedCommands`.
 
-### 5.3 Submit — резервирование и concurrency
+### 5.3 Submit
 
-```
-Submit(invoiceId, actor):
-  invoice = load; subject = assembler.Build(invoice)
-  eval = pipeline.Evaluate(subject, rules, Submit)
-  if eval.Overall == HardStop: save eval; audit; return eval
+Начать транзакцию, проверить receipt и RowVersion, загрузить данные и сгруппировать distributions по budget/PO key. Вычислить AvailableForInvoice = Amended - Actuals - Encumbered - Held + OwnHeld. При HardStop сохранить отказ без резервов. Иначе захватить budget reserves, encumbrance claims и PO billing claims, записать Submitted, evaluation, audit и receipt; один SaveChanges/commit. Конфликт — полный rollback; один повтор в новом scope со свежими данными, затем retryable Conflict. Reject/Withdraw атомарно освобождает claims и reserves.
 
-  reservations = []
-  foreach dist in invoice.Distributions:
-      try:
-          line = budgetLines.Load(dist.Account, fy)            // читает RowVersion
-          r = line.Reserve(dist.AmountToCheck, invoice.Ref)
-          budgetLines.Save(line)                                // UPDATE ... WHERE RowVersion = @v
-      catch ConcurrencyConflict:
-          retry once; if again → release all; return eval + BUDGET_CONCURRENCY (Hard)
-      if r.Refused: release all; return eval + BUDGET_AVAILABILITY recomputed (Hard)
-      reservations += r
+### 5.4 Post
 
-  invoice.Submit(eval.Id, reservations); save invoice + eval; audit
-  (на любом сбое после резервирования — Release всех резервов в finally)
-```
-
-`Reserve` — метод одного агрегата: проверка `Available ≥ amount` и запись `Held` внутри одной строки
-под rowversion. Два параллельных Submit → второй получает конфликт, перечитывает, видит `Held`, отказывает.
-
-Висящие резервы при сбое компенсации — на слайде: фоновый reconciler по `Reservation.SourceRef`.
-
-### 5.4 Post — одна транзакция
-
-```
-Post(invoiceId, actor):
-  invoice = load (Approved)
-  eval = pipeline.Evaluate(assembler.Build(invoice), rules, Post)
-  if !PostingEligibility.Passes(eval, invoice, period): save eval; return
-
-  using tx = unitOfWork.Begin():
-      invoice.Post(eval.Id)
-      foreach res in invoice.ReservationRefs: budgetLine.Commit(res)
-      foreach dist with PoLineRef: encumbrance.Liquidate(...); budgetLine.Encumbered -= ...
-      journal = JournalEntry.Create(eval.PostingPreview, period, actor)
-      audit.Record(InvoicePosted, ...)
-      tx.Commit()
-```
-
-Исключение из `DDD-8.3` — записано в манифесте. Резерв, взятый на Submit, делает Post безопасным для
-eventual consistency в production (outbox) — транзакция здесь удобство, не необходимость.
+Короткая Serializable-транзакция включает загрузку и перевалидацию, проверку активного цикла согласований/правил/периода, погашение собственных резервов и PO claims, журнал, статус, audit и receipt. Actuals увеличивается ровно на сумму инвойса, Encumbered уменьшается на liquidation, Held уменьшается на собственный резерв. Journal уникален по SourceRef + PostingKind; повтор команды не создаёт второй журнал. Финансовые и бюджетные записи балансируются отдельно внутри фонда. LLM не вызывается внутри транзакции.
 
 ### 5.5 Идемпотентность и события
 
-`Submit` / `Approve` / `Post` — проверка «инвойс уже в целевом статусе → вернуть текущее состояние».
-`IdempotencyKey` и таблица `ap.ProcessedCommands` — на слайде.
+Все mutating-команды несут CommandId и ожидаемый RowVersion. Receipt сохраняется в той же транзакции; повтор того же payload возвращает сохранённый результат, другой payload под тем же ключом — Conflict. Авторизация проверяется до выдачи receipt. Domain events/outbox не реализуются; описываются как вариант при разделении сервисов.
 
-Доменные события в демо не используются.
-На слайде production: `InvoiceSubmitted`, `InvoicePosted`, `BudgetAmended`, `EvaluationRecorded` через outbox.
+### Завершённые правила жизненного цикла (22 сентября 2026)
+
+1. **Версии.** `ContentVersion` увеличивается только при изменении суммы, поставщика, дат, PO или distributions. `RowVersion` SQL Server меняется при любой записи и служит optimistic concurrency. Evaluation.TransactionVersion означает ContentVersion. Approve/Override не изменяют ContentVersion. Резервы и PO claims принадлежат InvoiceId + ContentVersion. При Reject/Withdraw старые решения остаются историей, но больше не удовлетворяют новый цикл согласования.
+2. **Повторное согласование.** Изменение содержания или fingerprint применимых правил открывает новый ApprovalCycleId и делает старые approvals/overrides неприменимыми. Изменение свободного бюджета вызывает новую оценку без автоматического сброса approvals; новый HardStop блокирует действие, новый SoftStop требует своего override. Сравнение только числового severity недостаточно. Post требует активный цикл с тем же ContentVersion и fingerprint.
+3. **SoftStop на Submit.** В Soft-фонде Submitted может удерживать резерв сверх available до разрешения исключения. UI явно показывает дефицит и не позволяет Post без override. В Hard-фонде недостаток бюджета запрещает резерв. После Reject/Withdraw весь резерв освобождается атомарно.
+4. **PO tolerance.** База допуска — утверждённая сумма PO-строки, не её текущий остаток. `ProjectedBilled = AlreadyPostedAgainstPo + OtherActiveInvoiceClaims + CurrentInvoicePoAmount`; `CumulativeExcess = max(0, ProjectedBilled - AuthorizedPoAmount)`. При CumulativeExcess > AuthorizedPoAmount × 0.05 — HardStop. Нужен отдельный claim полной суммы PO-backed инвойса, включая превышение: encumbrance claim захватывает только ликвидируемую часть, а PO billing claim защищает накопленный допуск. Обе суммы меняются атомарно. Change order в демо не редактируется, поддерживается как seed-допущение.
+5. **Дубликаты.** `NormalizedInvoiceNumber = Number.Trim().ToUpperInvariant()`. Уникальный индекс `(VendorId, NormalizedInvoiceNumber)` внутри tenant-БД, включая Draft/Rejected/Posted. Предварительная проверка даёт удобную ошибку, индекс закрывает гонку. Reject не освобождает номер. Пресеты всегда создают уникальный номер.
+6. **Даты.** InvoiceDate, ServiceDate и PostingDate отдельные поля; для демо все равны 2026-06-15. Бюджетный год и открытый период определяются PostingDate, период допустимости услуги — ServiceDate, effective-правила демо — InvoiceDate. EvaluatedAt/RecordedAt — реальные UTC timestamp. Другие варианты дат отклоняются с объяснением ограничения демо, не молча приводятся к одной дате.
+7. **Начальное состояние.** `ledger.OpeningBalances` хранит Account, FiscalYear, AsOfDate, InitialActuals, InitialEncumbered, SourceReference. Seed-остатки — начальный снимок, а не вымышленные проводки. Сверка: opening actuals + проведённые в прототипе финансовые расходы = actuals; encumbered отдельно сверяется с opening PO и его движениями.
+8. **Отзыв.** `Withdraw` доступен автору для Submitted/Approved до Post. Одна транзакция освобождает budget/encumbrance/billing claims, закрывает цикл согласований, возвращает Draft и сохраняет причину в audit. После Post редактирование/отзыв запрещены. Корректирующие проводки и credit notes вне объёма.
+9. **Готовность к оплате.** Вычисляемый `ReadyForPaymentHandoff = Posted && VendorActive && !PaymentHold && DueDate <= BusinessDate`. Добавить DueDate и PaymentHold; BusinessDate передаётся явно. Это готовность передачи в платёжный модуль, не разрешение отправить деньги. Cash availability, банковские реквизиты и банковский платёж не реализуются. Статус Payable не хранить.
+10. **Повтор демо.** Отдельная операторская команда `demo-reset --tenant springfield --confirm springfield` разрешена только при Environment=Demo и признаке IsDemo у тенанта. Проверить allowlist database names и закрыть активные операции на время сброса. Пересоздать только demo tenant-БД, повторить seed; Master и второй тенант не затрагивать. Никакого автоматического сброса при старте и удаления volumes штатной командой запуска. История Demo намеренно сбрасывается, что явно показывается оператору.
+
+Вне объёма: мультивалютность (только USD, decimal(18,2), более двух дробных знаков — ошибка), налоги, credit notes, годовое закрытие, реальные закупочные проверки, изменение PO, банковские интеграции.
 
 ---
 
@@ -457,7 +420,7 @@ Dockerfile). Web ждёт healthcheck, при старте выполняет м
 
 Ключевые тесты конвейера: `Scenario_NonPo_701_ExceedsAvailable_By13000_IsHardStop`,
 `Scenario_NonPo_701_AfterAmendment13000_IsSoftStop_ProcurementThreshold`,
-`Scenario_NonPo_701_AfterAmendment_WithOverride_IsAllowed`,
+`Scenario_NonPo_701_AfterAmendment_WithOverride_IsWarning`,
 `Scenario_PoBacked_WithinRemaining_IsAllowed_AvailableUnchanged`,
 `Scenario_PoBacked_Excess3Pct_IsWarning`, `Scenario_PoBacked_Excess8Pct_IsHardStop`,
 `Scenario_MultiFund_101_Overage_IsSoftStop_202_501_Allowed`, `Scenario_MultiFund_501_UsesExpenseNotExpenditure`,

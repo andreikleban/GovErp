@@ -16,6 +16,10 @@
 
 ## Global Constraints
 
+- `TransactionVersion` означает ContentVersion, а не SQL RowVersion. Оценка сохраняет ApprovalCycleId и полный fingerprint применимых правил; старые согласования другого цикла не удовлетворяют маршрут.
+- PO snapshot содержит AuthorizedPoAmount, AlreadyPostedAgainstPo, OtherActiveInvoiceClaims, CurrentInvoicePoAmount и вычисляемое decimal CumulativePoExcessPct = max(0, AlreadyPostedAgainstPo + OtherActiveInvoiceClaims + CurrentInvoicePoAmount - AuthorizedPoAmount) / AuthorizedPoAmount. Нулевая AuthorizedPoAmount делает PO недопустимым до расчёта. Допуск проверяется накопительно относительно AuthorizedPoAmount, а liquidation отдельно ограничена свободным encumbrance. Claims полной суммы и ликвидируемой части не смешивать.
+- Payment eligibility здесь означает только ReadyForPaymentHandoff: Posted, VendorActive, нет PaymentHold, DueDate <= явно переданной BusinessDate. Не создавать хранимый статус Payable.
+
 - Всё из плана 1.
 - `GovErp.Domain.Validation` не ссылается на другие контексты. Всё, что нужно от ChartOfAccounts/Ledger/Payables, приходит в снимках со **своими** перечислениями Validation (`FundKind`, `BudgetControl`, `GrantRule`, `FundRestriction`, `GrantEligibilityResult`, `ApproverRole`). Маппинг — в плане 3.
 - Порядок шагов фиксирован: `ValidationStep` 1..8. Конфигурируются включённость, severity и параметры.
@@ -1414,7 +1418,7 @@ public sealed class PoLiquidationRule : IValidationRule
                 continue;
             }
 
-            var excessPct = e.Remaining.IsZero ? 1m : d.Excess.Amount / e.Remaining.Amount;
+            var excessPct = e.CumulativePoExcessPct; // вычислено по полной утверждённой PO-сумме, posted и всем billing claims
             var computed = RuleSupport.Map(("liquidation", d.LiquidationAmount.ToString()), ("excess", d.Excess.ToString()),
                 ("excessPct", (excessPct * 100).ToString("0.00", CultureInfo.InvariantCulture)));
 

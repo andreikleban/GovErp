@@ -16,6 +16,10 @@
 
 ## Global Constraints
 
+- Уточнение модели: `VendorInvoice.Version` в старых примерах означает `ContentVersion`; SQL `RowVersion` — отдельный concurrency token. `ApprovalCycleId` отделяет повторные согласования без изменения содержания. ReturnToDraft закрывает цикл, но не увеличивает ContentVersion до реальной правки.
+- В task 6–8 включить `EncumbranceClaim`, `PoBillingClaim` (полная PO-backed сумма), `OpeningBalance`, DueDate, ServiceDate, PostingDate, PaymentHold и Withdraw. Точные переходы — spec §5 «Завершённые правила жизненного цикла».
+- Approvals/overrides после Reject/Withdraw остаются в истории с закрытым ApprovalCycleId; коллекции не очищать. Новый цикл не считает прежние решения действующими.
+
 - `TargetFramework=net10.0`, `LangVersion=latest`, `Nullable=enable`, `ImplicitUsings=enable`, `TreatWarningsAsErrors=true`, `DisableTransitiveProjectReferences=true` — в `Directory.Build.props` для всех проектов.
 - Версии пакетов — только в `Directory.Packages.props` (`ManagePackageVersionsCentrally=true`).
 - Имена проектов: `GovErp.Domain.<Context>`, `GovErp.Application.Web`, `GovErp.Infrastructure`, `GovErp.Web`; тесты — `tests/GovErp.<Проект>.Tests` (`NM-1`, `NM-7`).
@@ -2601,11 +2605,11 @@ public sealed class VendorInvoice
     {
         RequireStatus(InvoiceStatus.Rejected, "return to draft");
         Status = InvoiceStatus.Draft;
-        _approvals.Clear();
-        _overrides.Clear();
+        // Закрыть текущий ApprovalCycleId; историю approvals сохранить.
+        // Overrides прежнего цикла сохранить как неприменимую историю.
         _reservationRefs.Clear();
         LastEvaluationRef = null;
-        Version++;
+        // ReturnToDraft не меняет ContentVersion; начать новый ApprovalCycleId.
     }
 
     public void Post(Guid evaluationRef, DateTimeOffset at)

@@ -1,6 +1,6 @@
 # Обязательные уточнения к планам 1–4
 
-Это результат сверки планов 22 сентября 2026. При противоречии с ранними фрагментами кода выполнять решения ниже. Код в планах — проектные наброски, он ещё не собран и не протестирован. Эти уточнения должны быть перенесены в спецификацию и манифест первым коммитом реализации; новые функции сверх согласованного объёма не добавляются.
+Это результат сверки планов 22 сентября 2026. При противоречии с ранними фрагментами кода выполнять решения ниже. Код в планах — проектные наброски, он ещё не собран и не протестирован. Финансовые переходы и завершённые правила жизненного цикла перенесены в спецификацию и манифест; новые функции сверх согласованного объёма не добавляются.
 
 ## 1. Даты, сценарии и честные допущения
 
@@ -38,7 +38,7 @@ ProjectedAvailable = AvailableForThisInvoice - RequiredNewBudget
 
 OwnHeld — активные резервы **этого документа и его текущей версии** на данной бюджетной строке. При Approve/Post нельзя ещё раз вычитать собственный резерв. В снимке сохранять Available, OwnHeld, RequiredNewBudget и ProjectedAvailable раздельно.
 
-На Submit также захватывается часть существующего encumbrance. Добавить в Ledger дочернюю сущность `EncumbranceClaim`: Id, InvoiceId, InvoiceVersion, Amount, Status (Held/Consumed/Released). Это не новый encumbrance и не дополнительное вычитание из бюджета.
+На Submit также захватывается часть существующего encumbrance. Добавить в Ledger дочернюю сущность `EncumbranceClaim`: Id, InvoiceId, ContentVersion, Amount, Status (Held/Consumed/Released). Это не новый encumbrance и не дополнительное вычитание из бюджета.
 
 ```text
 ClaimableForInvoice = RemainingEncumbrance - OtherInvoicesHeldClaims
@@ -65,9 +65,9 @@ Held_after = Held_before - Sum(own budget reservations)
 
 ## 5. Команды, разрешения и версии
 
-- Mutating-команды получают `CommandId` и `ExpectedInvoiceVersion`; формы удерживают CommandId при повторе того же запроса. Изменённые данные — новый CommandId.
+- Mutating-команды получают `CommandId` и `ExpectedRowVersion`; формы удерживают CommandId при повторе того же запроса. Изменённые данные — новый CommandId.
 - `ap.ProcessedCommands`: CommandId, ActorId, CommandType, RequestHash, ResultJson; unique CommandId внутри tenant-БД. Повтор того же запроса возвращает receipt, другой payload под тем же ID — Conflict. Одного сравнения целевого статуса недостаточно.
-- Override привязан к evaluation/outcome, RuleId + RuleVersion, строке распределения, InvoiceVersion, actor, reason. Перенос на изменённый документ или другую строку запрещён. В application-контракт Override добавить evaluationId, distributionLine и expectedVersion.
+- Override привязан к evaluation/outcome, RuleId + RuleVersion, строке распределения, ContentVersion, actor, reason. Перенос на изменённый документ или другую строку запрещён. В application-контракт Override добавить evaluationId, distributionLine и expectedVersion.
 - DepartmentHead удовлетворяет только шаг своего департамента. Проверки tenant/role/department и автор ≠ согласующий выполняются сервером.
 - Хранить полный перечень применённых версий правил, включая прошедшие, а не только максимальный номер по слою. Итоговый fingerprint вычислять по упорядоченному набору ID/version/parameters и версии engine.
 - Изменение fingerprint запускает новую оценку и при необходимости новое согласование. После повторного согласования по актуальному fingerprint Post должен стать возможным; не создавать вечный `REVALIDATION_REQUIRED`.
@@ -102,7 +102,7 @@ Concurrency-тесты синхронизируют две операции ба
 
 ## Порядок применения
 
-- [ ] До реализации обновить spec и ARCHITECTURE по разделам 1–6, убрать ссылки на старый компенсационный Submit.
+- [x] Обновить spec и ARCHITECTURE: атомарный Submit/Post, версии содержимого и цикл согласований; удалить старые алгоритмы Submit/Post из плана 3.
 - [ ] План 1 task 6–7: ownership резервов/claims, ChangeStamp, арифметика Post.
 - [ ] План 2 tasks 1, 5–7: снимки own holds/claims, группировка строк, fingerprint и корректный Warning.
 - [ ] План 3 tasks 3–5, 8: схемы claims/receipts, атомарные операции, permissions, все regression-тесты.

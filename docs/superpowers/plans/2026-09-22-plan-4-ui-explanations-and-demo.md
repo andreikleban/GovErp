@@ -136,4 +136,14 @@
 
 ## Проверка покрытия
 
+### Дополнение: отзыв, готовность к оплате и повторяемость демо
+
+**Files:** `src/GovErp.Web/Components/Invoices/InvoiceActions.razor`, `PaymentHandoffPanel.razor`, `src/GovErp.Infrastructure/Seed/DemoResetService.cs`, `tests/GovErp.Application.Web.Tests/Seed/DemoResetTests.cs`, `docs/DEMO.md`.
+
+- [ ] Добавить Withdraw с причиной для автора Submitted/Approved. Показывать старые approvals как историю закрытого цикла, не удалять из Audit.
+- [ ] Показывать «Готов к передаче в платёжный модуль» и список проверенных условий. Не подписывать эту панель как отправленный платёж; DueDate, PaymentHold и BusinessDate показывать явно.
+- [ ] Реализовать отдельную операторскую команду `demo-reset --tenant springfield --confirm springfield` по ограничениям spec §5. Ни кнопка формы инвойса, ни обычный startup не сбрасывают данные.
+- [ ] Тесты: отказ вне Demo; отказ без совпадающего подтверждения/IsDemo; отказ для неизвестной БД; Springfield восстановлен, Master/Shelbyville сохранены; активная операция не пересекается со сбросом.
+- [ ] Проверить два последовательных полных показа с явным reset между ними. После каждого исходный Non-PO показывает дефицит 13000, PO имеет полный seed-остаток. Обновить DEMO.md и commit: `feat: add explicit demo reset and payment handoff preview`.
+
 Логин/tenancy — task 1; ввод и сценарии — task 2; результат, preview, audit — task 3; approvals/amendment/Post — task 4; реальный сменный LLM — task 5; контейнеры, тесты и 15-минутный показ — task 6. Критичные доменные исправления описаны в обязательном документе согласованности и выполняются до task 1.
