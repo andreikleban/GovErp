@@ -35,7 +35,7 @@
 | **Object (code)** | `ObjectCode` | Вид расхода / дохода / актива (53100 Professional Services) |
 | **Account code / combination** | `AccountCode` | Полный адрес: `Fund-Department-Object-Grant` |
 | **Valid combination** | `AccountCombination` | Заведённая и утверждённая комбинация сегментов с effective dates и статусом |
-| **Combination rule** | `CombinationRule` | Правило допустимости сочетаний: «если Fund = 701, Grant обязателен» |
+| **Combination rule** | `Fund.GrantPolicy`, `AllowedDepartments`, `AllowedObjects` | Правило допустимости сочетаний: «если Fund = 701, Grant обязателен» |
 | **Grant** | `Grant` | Целевое финансирование с периодом, спонсором, allowable costs и разрешёнными департаментами |
 | **Allowable cost** | `Grant.AllowableObjects` | Категория расходов, которую грант разрешает оплачивать |
 | **Effective dating** | `EffectiveFrom / EffectiveTo` | Период, в течение которого запись (правило, комбинация, версия) действует |
@@ -81,3 +81,6 @@
 | **Tenant** | `TenantId`, `ITenantContext` | Одна государственная единица (город); своя БД |
 | **Audit event** | `AuditEvent`, `IAuditTrail` | Append-only запись «кто, что, когда, по какой версии» |
 | **Actor** | `ActorContext` | Пользователь или сервис, выполняющий сценарий; передаётся явно |
+
+| **PO billing claim** | PoBillingClaim | Захват полной суммы PO-backed инвойса для накопительного допуска; отдельно от ликвидируемого encumbrance |
+| **Approval cycle** | ApprovalCycleId | Цикл согласований для одной версии содержимого и набора правил; история старых циклов сохраняется |

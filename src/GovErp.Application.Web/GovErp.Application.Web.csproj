@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../GovErp.Domain.Shared/GovErp.Domain.Shared.csproj" />
+    <ProjectReference Include="../GovErp.Domain.ChartOfAccounts/GovErp.Domain.ChartOfAccounts.csproj" />
+    <ProjectReference Include="../GovErp.Domain.Ledger/GovErp.Domain.Ledger.csproj" />
+    <ProjectReference Include="../GovErp.Domain.Payables/GovErp.Domain.Payables.csproj" />
+    <ProjectReference Include="../GovErp.Domain.Validation/GovErp.Domain.Validation.csproj" />
+  </ItemGroup>
+</Project>

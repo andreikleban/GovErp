@@ -430,3 +430,8 @@ FodyWeavers.xsd
 
 # Docker / secrets
 .env
+
+# Local build and execution caches
+.packages/
+.superpowers/
+.worktrees/

@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../GovErp.Domain.Shared/GovErp.Domain.Shared.csproj" />
+  </ItemGroup>
+</Project>

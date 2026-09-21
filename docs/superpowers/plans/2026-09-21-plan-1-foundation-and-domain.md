@@ -1,5 +1,11 @@
 # План 1: Foundation + Domain (Shared, ChartOfAccounts, Ledger, Payables)
 
+## Статус выполнения — 22 сентября 2026
+
+Задачи 1–9 реализованы в ветке codex/foundation. Проверено: 13 проектов собираются без предупреждений; 133 теста (Shared 44, CoA 26, Ledger 38, Payables 19, Architecture 6) проходят. Минимальный Blazor host отвечает HTTP 200. SQL Server, EF, конвейер Validation и UI сценариев остаются для планов 2–4.
+
+Фактические API учитывают последние уточнения: Money отклоняет дробные центы; ContentVersion и ApprovalCycleId раздельны; claims полной PO-суммы отделены от encumbrance; история согласований не очищается. Сборка тестируется с .NET SDK 10.0.401. Ревью после остановки субагентов выполнено основным агентом; независимое субагентное ревью не завершено из-за лимита.
+
 > Перед реализацией прочитать [обязательные уточнения согласованности](2026-09-22-plan-consistency.md). Они исправляют даты, резервирование, транзакции и безопасность в ранних фрагментах ниже.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

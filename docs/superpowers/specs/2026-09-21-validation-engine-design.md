@@ -124,10 +124,9 @@ year-end lapse vs carryforward для грантов; pooled cash и due to/from
 | `Department`, `ObjectCode` | код, имя, `IsActive`; `ObjectCode.Category` (Expenditure / Asset / Liability / Budgetary) | анемичные | — |
 | `Grant` | `Code`, `Sponsor`, `IsFederal`, `Period`, `AllowedDepartments`, `AllowableObjects`, `Status` | `IsEligible(date, dept, object)` | — |
 | `AccountCombination` | `Code: AccountCode`, `Status` (Pending / Active / Inactive), `EffectiveFrom/To`, `ApprovedBy` | `Approve(user)`, `Deactivate(date)` | нельзя `Approve` активную; `EffectiveTo ≥ EffectiveFrom` |
-| `CombinationRule` | `Version`, `Effective*`, `Condition`, `Constraint` | анемичный | — |
 
 Репозитории: `IFundRepository`, `IGrantRepository`, `IAccountCombinationRepository`,
-`ICombinationRuleRepository`, `IReferenceDataRepository`.
+`IReferenceDataRepository`.
 
 ### 3.3 Ledger
 
@@ -362,7 +361,7 @@ tests/
 
 | Схема | Таблицы |
 |---|---|
-| `coa` | Funds, Departments, ObjectCodes, Grants, AccountCombinations, CombinationRules |
+| `coa` | Funds, Departments, ObjectCodes, Grants, AccountCombinations |
 | `ledger` | BudgetLines, BudgetAmendments, BudgetReservations, Encumbrances, JournalEntries, JournalLines, FiscalPeriods |
 | `ap` | Vendors, PurchaseOrders, PurchaseOrderLines, VendorInvoices, InvoiceDistributions, InvoiceApprovals, InvoiceOverrides |
 | `validation` | RuleDefinitions, EvaluationRecords (json-колонки: Outcomes, InputSnapshot, PostingPreview, ApprovalRoute), Explanations |
