@@ -49,6 +49,25 @@ public sealed class DomainPurityTests
     }
 
     [Fact]
+    public void Ui_facing_app_services_do_not_expose_entities()
+    {
+        var app = typeof(GovErp.Application.Web.Common.ActorContext).Assembly;
+        var entityTypes = Domains.SelectMany(a => a.GetTypes())
+            .Where(t => t.Namespace?.EndsWith(".Entities", StringComparison.Ordinal) == true).ToHashSet();
+        var services = app.GetTypes()
+            .Where(t => t.IsInterface && t.Name.StartsWith('I') && t.Name.EndsWith("AppService", StringComparison.Ordinal)).ToList();
+        services.Should().NotBeEmpty();
+        var offenders = services
+            .SelectMany(t => t.GetMethods())
+            .SelectMany(m => m.GetParameters().Select(p => p.ParameterType).Append(m.ReturnType))
+            .SelectMany(Unwrap)
+            .Where(entityTypes.Contains).Select(t => t.FullName).Distinct().ToList();
+        offenders.Should().BeEmpty(because: "CA-10: UI-facing services return view models");
+
+        static IEnumerable<Type> Unwrap(Type t) => t.IsGenericType ? t.GetGenericArguments().SelectMany(Unwrap).Append(t) : [t];
+    }
+
+    [Fact]
     public void Shared_kernel_contains_only_values()
     {
         Assert.All(Assembly.Load("GovErp.Domain.Shared").GetExportedTypes(),
