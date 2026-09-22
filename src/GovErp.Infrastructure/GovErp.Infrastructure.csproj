@@ -7,4 +7,10 @@
     <ProjectReference Include="../GovErp.Domain.Validation/GovErp.Domain.Validation.csproj" />
     <ProjectReference Include="../GovErp.Application.Web/GovErp.Application.Web.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design"><PrivateAssets>all</PrivateAssets></PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Identity.Core" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+  </ItemGroup>
 </Project>
