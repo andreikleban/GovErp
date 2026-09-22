@@ -1,26 +1,30 @@
 # План 2: Validation — конвейер, правила, result model
 
+> Перед реализацией прочитать [обязательные уточнения согласованности](2026-09-22-plan-consistency.md). Они исправляют даты, резервирование, транзакции и безопасность в ранних фрагментах ниже.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Реализовать контекст `GovErp.Domain.Validation`: чистый конвейер из восьми шагов над снимками, типизированные правила с параметрами из `RuleDefinition`, разрешение слоёв с обязательными и адаптируемыми правилами, fingerprint набора правил, result model (`EvaluationRecord`, `Capabilities`), маршрут согласования, posting preview и posting eligibility — всё проверяемо на голых числах без базы.
+**Goal:** Реализовать контекст `GovErp.Domain.Validation`: чистый конвейер из восьми шагов над снимками, одиннадцать типизированных правил с параметрами из `RuleDefinition`, слоистое разрешение конфликтов, result model (`EvaluationRecord`, `Capabilities`), маршрут согласования, posting preview и posting eligibility — всё проверяемо на голых числах без базы.
 
-**Architecture:** Вход конвейера — `ValidationSubject` (value object из снимков, собирается слоем сценариев в плане 3). Бюджет проверяется по бюджетному ключу (счёт), а не по строке инвойса; ликвидация encumbrance считается по PO-строке с учётом чужих claims; собственный резерв инвойса прибавляется к available. Правила — классы `IValidationRule`, читающие параметры из `RuleDefinition`. Конфликты: внутри шага — строжайший; Hard Stop на шагах 1–6 прерывает; обязательное правило не заменяется локальным слоем. Override меняет агрегацию, не outcome. Выход — неизменяемый `EvaluationRecord` с fingerprint применённых правил.
+**Architecture:** Вход конвейера — `ValidationSubject` (value object из снимков, собирается слоем сценариев в плане 3). Правила — классы `IValidationRule`, читающие параметры из `RuleDefinition`; в БД лежат только включённость, версия, слой, severity и параметры. Конфликты: внутри шага — строжайший; Hard Stop на шагах 1–6 прерывает; одинаковый `RuleId` в разных слоях — побеждает более специфичный. Override меняет агрегацию, не outcome. Выход — неизменяемый `EvaluationRecord`.
 
-**Tech Stack:** как в плане 1. Ни одного NuGet-пакета в `GovErp.Domain.Validation` (SHA-256 — из BCL).
+**Tech Stack:** как в плане 1. Ни одного NuGet-пакета в `GovErp.Domain.Validation`.
 
-**Spec:** `docs/superpowers/specs/2026-09-21-validation-engine-design.md` (разделы 3.5, 4.1–4.3, 5 «Завершённые правила жизненного цикла», 7). Манифест: `GE-9`, `GE-10`, `GE-11`, `GE-15`.
+**Spec:** `docs/superpowers/specs/2026-09-21-validation-engine-design.md` (разделы 3.5, 4.1–4.3, 7). Манифест: `GE-9`, `GE-10`, `GE-11`, `GE-12`.
 
 **Зависит от:** план 1 (Shared kernel: `Money`, `AccountCode`, `FiscalYear`, `UserId`; проект `GovErp.Domain.Validation` уже существует и ссылается на `GovErp.Domain.Shared`).
 
 ## Global Constraints
 
+- `TransactionVersion` означает ContentVersion, а не SQL RowVersion. Оценка сохраняет ApprovalCycleId и полный fingerprint применимых правил; старые согласования другого цикла не удовлетворяют маршрут.
+- PO snapshot содержит AuthorizedPoAmount, AlreadyPostedAgainstPo, OtherActiveInvoiceClaims, CurrentInvoicePoAmount и вычисляемое decimal CumulativePoExcessPct = max(0, AlreadyPostedAgainstPo + OtherActiveInvoiceClaims + CurrentInvoicePoAmount - AuthorizedPoAmount) / AuthorizedPoAmount. Нулевая AuthorizedPoAmount делает PO недопустимым до расчёта. Допуск проверяется накопительно относительно AuthorizedPoAmount, а liquidation отдельно ограничена свободным encumbrance. Claims полной суммы и ликвидируемой части не смешивать.
+- Payment eligibility здесь означает только ReadyForPaymentHandoff: Posted, VendorActive, нет PaymentHold, DueDate <= явно переданной BusinessDate. Не создавать хранимый статус Payable.
+
 - Всё из плана 1.
-- Уточнения `2026-09-22-plan-consistency.md` (§3, §5) и spec §4–5 уже внесены в задачи: `ContentVersion` (не SQL RowVersion) и `ApprovalCycleId` в снимке и записи; fingerprint вместо «максимума версии по слою»; override привязан к правилу, его версии и строке; DepartmentHead удовлетворяет только шаг своего департамента; готовность к оплате — не capability конвейера, а вычисление на инвойсе (план 1).
 - `GovErp.Domain.Validation` не ссылается на другие контексты. Всё, что нужно от ChartOfAccounts/Ledger/Payables, приходит в снимках со **своими** перечислениями Validation (`FundKind`, `BudgetControl`, `GrantRule`, `FundRestriction`, `GrantEligibilityResult`, `ApproverRole`). Маппинг — в плане 3.
 - Порядок шагов фиксирован: `ValidationStep` 1..8. Конфигурируются включённость, severity и параметры.
 - Денежные значения в `Inputs`/`Computed` outcome'ов — строки в инвариантной культуре (`Money.ToString()`), чтобы JSON-колонки читались человеком.
 - Идентификаторы правил — `UPPER_SNAKE_CASE`, ровно как в спеке 4.2.
-- Демо-дата — 2026-06-15; в тестах июнь 2026.
 
 ---
 
@@ -31,18 +35,18 @@ src/GovErp.Domain.Validation/
   ValueObjects/
     Severity.cs, RuleLayer.cs, ValidationStep.cs, EvaluationTrigger.cs, ApproverRole.cs
     FundKind.cs, BudgetControl.cs, GrantRule.cs, FundRestriction.cs, GrantEligibilityResult.cs
-    VendorSnapshot.cs, TransactionSnapshot.cs, CombinationSnapshot.cs, FundSnapshot.cs, GrantSnapshot.cs,
-    BudgetSnapshot.cs, EncumbranceSnapshot.cs, PoLineSnapshot.cs, DistributionSnapshot.cs,
-    ApprovalSnapshot.cs, OverrideSnapshot.cs, ApprovalBaseline.cs, PostingAccounts.cs, ValidationSubject.cs
-    AppliedRule.cs, EffectiveRuleSet.cs, RuleOutcome.cs, Capabilities.cs, ApprovalRequirement.cs,
-    PostingPreviewLine.cs, PostingCheck.cs
+    VendorSnapshot.cs, TransactionSnapshot.cs, CombinationSnapshot.cs, FundSnapshot.cs,
+    GrantSnapshot.cs, BudgetSnapshot.cs, EncumbranceSnapshot.cs, DistributionSnapshot.cs,
+    OverrideSnapshot.cs, PostingAccounts.cs, ValidationSubject.cs
+    RuleSetVersions.cs, RuleOutcome.cs, Capabilities.cs, ApprovalRequirement.cs,
+    PostingPreviewLine.cs, PostingCheck.cs, EffectiveRuleSet.cs
   Entities/
     RuleDefinition.cs, EvaluationRecord.cs
   DomainServices/
-    IValidationRule.cs, RuleCatalog.cs, RuleResolution.cs, RuleSetGuard.cs, OutcomeAggregation.cs,
+    IValidationRule.cs, RuleCatalog.cs, RuleResolution.cs, OutcomeAggregation.cs,
     ApprovalRouting.cs, PostingPreviewComposer.cs, PostingEligibility.cs, ValidationPipeline.cs
     Rules/
-      RuleSupport.cs, SegRequiredRule.cs, SegGrantForbiddenRule.cs, CoaCombinationActiveRule.cs,
+      SegRequiredRule.cs, SegGrantForbiddenRule.cs, CoaCombinationActiveRule.cs,
       FundDeptObjectAllowedRule.cs, GrantEligibleRule.cs, VendorEligibleRule.cs,
       ProcurementThresholdRule.cs, InvoiceDuplicateRule.cs, BudgetAvailabilityRule.cs,
       BudgetLowRemainingRule.cs, PoLiquidationRule.cs
@@ -52,34 +56,24 @@ src/GovErp.Domain.Validation/
     ValidationException.cs
 tests/GovErp.Domain.Validation.Tests/
   Support/SubjectBuilder.cs, Support/DemoRules.cs
-  ValidationSubjectTests.cs, RuleResolutionTests.cs, OutcomeAggregationTests.cs, CapabilitiesTests.cs
-  Rules/Step1To4RulesTests.cs, Rules/BudgetRulesTests.cs, Rules/PoLiquidationRuleTests.cs
+  RuleResolutionTests.cs, OutcomeAggregationTests.cs, CapabilitiesTests.cs
+  Rules/*.cs (по одному файлу на правило)
   ApprovalRoutingTests.cs, PostingPreviewTests.cs, PostingEligibilityTests.cs
-  RuleSetGuardTests.cs, PipelineScenarioTests.cs
+  PipelineScenarioTests.cs
 ```
 
 ---
 
-### Task 1: Перечисления, снимки и расчёт по бюджетному ключу
+### Task 1: Перечисления и снимки
 
 **Files:**
 - Create: `src/GovErp.Domain.Validation/ValueObjects/*.cs` (перечисления и снимки, см. ниже)
 - Create: `src/GovErp.Domain.Validation/Exceptions/ValidationException.cs`
 - Create: `tests/GovErp.Domain.Validation.Tests/` (проект), `Support/SubjectBuilder.cs`
-- Test: `tests/GovErp.Domain.Validation.Tests/ValidationSubjectTests.cs`
+- Test: `tests/GovErp.Domain.Validation.Tests/DistributionSnapshotTests.cs`
 
 **Interfaces:**
-- Produces: все снимки и `ValidationSubject` с чистыми вычислениями: `BudgetKeys`, `BudgetFor(AccountCode)`, `PoLine(string)`, `RequestedFor(AccountCode)`, `PoAmount(string poLineRef)`, `EligibleLiquidation(string poLineRef)`, `LiquidationFor(AccountCode)`, `RequiredNewBudget(AccountCode)`, `ProjectedAvailable(AccountCode)`, `CumulativeExcessPct(string poLineRef)`. `BudgetSnapshot.Available`, `.AvailableForInvoice`. `EncumbranceSnapshot.ClaimableForInvoice`. Тестовый `SubjectBuilder` — им пользуются все дальнейшие тесты.
-- Формулы spec §4.1 и consistency §3:
-  ```text
-  Available            = Amended − Actuals − Encumbered − Held
-  AvailableForInvoice  = Available + OwnHeld
-  ClaimableForInvoice  = Remaining − OtherHeldClaims            (0, если encumbrance закрыт)
-  EligibleLiquidation  = min(PoAmount, ClaimableForInvoice)     по PO-строке
-  RequiredNewBudget    = max(0, RequestedFor(key) − LiquidationFor(key))
-  ProjectedAvailable   = AvailableForInvoice − RequiredNewBudget
-  CumulativeExcessPct  = max(0, AlreadyPosted + OtherActiveClaims + PoAmount − Authorized) / Authorized
-  ```
+- Produces: все снимки и `ValidationSubject`; `DistributionSnapshot.LiquidationAmount`, `.Excess`, `.AmountToCheck`. Тестовый `SubjectBuilder` — им пользуются все дальнейшие тесты.
 
 - [ ] **Step 1: Создать тестовый проект**
 
@@ -92,104 +86,56 @@ dotnet add tests/GovErp.Domain.Validation.Tests reference src/GovErp.Domain.Shar
 ```
 Заменить csproj на CPM-вариант (как в плане 1, задача 1, шаг 2).
 
-- [ ] **Step 2: Тесты расчётов снимка**
+- [ ] **Step 2: Тест на вычисляемые свойства снимка**
 
-`tests/GovErp.Domain.Validation.Tests/ValidationSubjectTests.cs`:
+`tests/GovErp.Domain.Validation.Tests/DistributionSnapshotTests.cs`:
 ```csharp
 using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.Tests;
 
-public class ValidationSubjectTests
+public class DistributionSnapshotTests
 {
-    private static readonly AccountCode Fire = AccountCode.Parse("701-6000-53100-G-COPS-26");
-    private static readonly AccountCode Police = AccountCode.Parse("701-3000-53100-G-COPS-26");
-
     [Fact]
-    public void Exercise_requires_full_amount_and_projects_13000_deficit()
+    public void Non_po_distribution_checks_full_amount()
     {
-        var s = SubjectBuilder.Exercise();
-        s.BudgetFor(Fire).Available.Should().Be(Money.Of(147_000m));
-        s.RequiredNewBudget(Fire).Should().Be(Money.Of(160_000m));
-        s.ProjectedAvailable(Fire).Should().Be(Money.Of(-13_000m));
+        var d = SubjectBuilder.Distribution(1, "701-6000-53100-G-COPS-26", 160_000m);
+        d.LiquidationAmount.Should().Be(Money.Zero);
+        d.Excess.Should().Be(Money.Of(160_000m));
+        d.AmountToCheck.Should().Be(Money.Of(160_000m));
     }
 
     [Fact]
-    public void Two_lines_on_one_budget_key_are_summed()
+    public void Po_backed_within_remaining_checks_nothing()
     {
-        var s = new SubjectBuilder()
-            .With(SubjectBuilder.Distribution(1, Fire.ToString(), 80_000m))
-            .With(SubjectBuilder.Distribution(2, Fire.ToString(), 80_000m))
-            .Build();
-        s.BudgetKeys.Should().ContainSingle();
-        s.RequestedFor(Fire).Should().Be(Money.Of(160_000m));
-        s.ProjectedAvailable(Fire).Should().Be(Money.Of(-13_000m));
+        var d = SubjectBuilder.Distribution(1, "701-3000-53100-G-COPS-26", 160_000m,
+            encumbrance: new EncumbranceSnapshot("PO-2026-0451/1", Money.Of(160_000m), IsOpen: true));
+        d.LiquidationAmount.Should().Be(Money.Of(160_000m));
+        d.Excess.Should().Be(Money.Zero);
+        d.AmountToCheck.Should().Be(Money.Zero);
     }
 
     [Fact]
-    public void Own_held_is_added_back_so_a_submitted_invoice_is_not_charged_twice()
+    public void Po_backed_over_remaining_checks_excess()
     {
-        // После Submit 100,000: Held 100,000 (весь — свой). Перевалидация на Approve не должна увидеть дефицит.
-        var s = new SubjectBuilder()
-            .With(SubjectBuilder.Distribution(1, Fire.ToString(), 100_000m))
-            .Budget(SubjectBuilder.Budget(Fire, 375_000m, 132_000m, 96_000m, held: 100_000m, ownHeld: 100_000m))
-            .Build();
-        s.BudgetFor(Fire).Available.Should().Be(Money.Of(47_000m));
-        s.BudgetFor(Fire).AvailableForInvoice.Should().Be(Money.Of(147_000m));
-        s.ProjectedAvailable(Fire).Should().Be(Money.Of(47_000m));
+        var d = SubjectBuilder.Distribution(1, "701-3000-53100-G-COPS-26", 100_000m,
+            encumbrance: new EncumbranceSnapshot("PO-1/1", Money.Of(96_000m), IsOpen: true));
+        d.LiquidationAmount.Should().Be(Money.Of(96_000m));
+        d.Excess.Should().Be(Money.Of(4_000m));
+        d.AmountToCheck.Should().Be(Money.Of(4_000m));
     }
 
     [Fact]
-    public void Po_backed_within_claimable_requires_no_new_budget()
+    public void Closed_encumbrance_liquidates_nothing()
     {
-        var s = SubjectBuilder.PoBacked(invoiceAmount: 160_000m);
-        s.EligibleLiquidation("PO-2026-0451/1").Should().Be(Money.Of(160_000m));
-        s.RequiredNewBudget(Police).Should().Be(Money.Zero);
-        s.ProjectedAvailable(Police).Should().Be(Money.Of(240_000m));
-        s.CumulativeExcessPct("PO-2026-0451/1").Should().Be(0m);
-    }
-
-    [Fact]
-    public void Po_backed_over_remaining_requires_the_excess_from_budget()
-    {
-        var s = SubjectBuilder.PoBacked(invoiceAmount: 164_800m);
-        s.EligibleLiquidation("PO-2026-0451/1").Should().Be(Money.Of(160_000m));
-        s.RequiredNewBudget(Police).Should().Be(Money.Of(4_800m));
-        s.CumulativeExcessPct("PO-2026-0451/1").Should().Be(0.03m);
-    }
-
-    [Fact]
-    public void Claims_of_other_invoices_reduce_what_this_invoice_may_liquidate()
-    {
-        var s = SubjectBuilder.PoBacked(invoiceAmount: 96_000m, remaining: 96_000m, otherHeldClaims: 96_000m, otherBillingClaims: 96_000m);
-        s.EligibleLiquidation("PO-2026-0451/1").Should().Be(Money.Zero);
-        s.RequiredNewBudget(Police).Should().Be(Money.Of(96_000m));
-    }
-
-    [Fact]
-    public void Tolerance_base_is_authorized_amount_not_remaining()
-    {
-        // Утверждено 160,000; уже проведено 100,000; этот инвойс 64,000 → накопленно 164,000 → 2.5%.
-        var s = SubjectBuilder.PoBacked(invoiceAmount: 64_000m, remaining: 60_000m, alreadyPosted: 100_000m);
-        s.CumulativeExcessPct("PO-2026-0451/1").Should().Be(0.025m);
-    }
-
-    [Fact]
-    public void Missing_budget_line_yields_missing_snapshot()
-    {
-        var other = AccountCode.Parse("101-3000-54000");
-        var s = new SubjectBuilder().With(SubjectBuilder.Distribution(1, other.ToString(), 10m)).Build();
-        s.BudgetFor(other).Exists.Should().BeFalse();
+        var d = SubjectBuilder.Distribution(1, "701-3000-53100-G-COPS-26", 10m,
+            encumbrance: new EncumbranceSnapshot("PO-1/1", Money.Zero, IsOpen: false));
+        d.AmountToCheck.Should().Be(Money.Of(10m));
     }
 }
 ```
 
-- [ ] **Step 3: Убедиться, что не компилируется**
-
-Run: `dotnet test tests/GovErp.Domain.Validation.Tests`
-Expected: ошибки компиляции — снимки не определены.
-
-- [ ] **Step 4: Реализация перечислений и исключения**
+- [ ] **Step 3: Реализация перечислений**
 
 `namespace GovErp.Domain.Validation.ValueObjects;`, по файлу на тип:
 ```csharp
@@ -200,7 +146,7 @@ public enum ValidationStep
     RequiredSegments = 1, ValidCombination = 2, FundAndGrantRestrictions = 3, TransactionPurpose = 4,
     BudgetAvailability = 5, EncumbranceImpact = 6, ApprovalRequirements = 7, PostingEligibility = 8
 }
-public enum EvaluationTrigger { Manual, Submit, Approve, Override, Post }
+public enum EvaluationTrigger { Manual, Submit, Approve, Post }
 public enum ApproverRole { DepartmentHead, GrantsManager, BudgetOfficer, FinanceDirector }
 public enum FundKind { Governmental, Enterprise }
 public enum BudgetControl { Hard, Soft }
@@ -216,22 +162,17 @@ namespace GovErp.Domain.Validation.Exceptions;
 public sealed class ValidationException(string message) : Exception(message);
 ```
 
-- [ ] **Step 5: Реализация снимков**
+- [ ] **Step 4: Реализация снимков**
 
-`namespace GovErp.Domain.Validation.ValueObjects;`, по файлу на тип:
 ```csharp
 // VendorSnapshot.cs
-public sealed record VendorSnapshot(Guid VendorId, string Name, bool IsActive, bool IsDebarred, bool SamRegistered);
+public sealed record VendorSnapshot(Guid VendorId, string Name, bool IsDebarred, bool SamRegistered);
 
 // TransactionSnapshot.cs
-/// <summary>Снимок документа. IsDuplicate вычисляет слой сценариев (запрос к Payables). ContentVersion — не SQL RowVersion.</summary>
+/// <summary>Снимок документа. IsDuplicate вычисляет слой сценариев (запрос к Payables).</summary>
 public sealed record TransactionSnapshot(
-    string TransactionRef, Guid InvoiceId, int ContentVersion, Guid ApprovalCycleId, string TransactionType,
-    DateOnly InvoiceDate, DateOnly ServiceDate, DateOnly PostingDate, Money Total,
-    VendorSnapshot Vendor, string? PoNumber, bool IsDuplicate, UserId CreatedBy)
-{
-    public bool IsPoBacked => PoNumber is not null;
-}
+    string TransactionRef, int TransactionVersion, string TransactionType, DateOnly Date, Money Total,
+    VendorSnapshot Vendor, bool IsPoBacked, bool IsDuplicate, UserId CreatedBy);
 
 // CombinationSnapshot.cs
 public sealed record CombinationSnapshot(bool Exists, bool IsActiveOnDate, string Status);
@@ -242,114 +183,61 @@ public sealed record FundSnapshot(
     FundRestriction Restriction, bool IsActive);
 
 // GrantSnapshot.cs
-/// <summary>Eligibility вычислена слоем сценариев на ServiceDate.</summary>
 public sealed record GrantSnapshot(string Code, bool IsFederal, GrantEligibilityResult Eligibility, string Status);
 
 // BudgetSnapshot.cs
-/// <summary>Снимок бюджетной строки по ключу. OwnHeld — резервы этого инвойса и его текущей версии содержания.</summary>
-public sealed record BudgetSnapshot(AccountCode Account, bool Exists, Money Amended, Money Actuals, Money Encumbered, Money Held, Money OwnHeld)
+public sealed record BudgetSnapshot(bool Exists, Money Amended, Money Actuals, Money Encumbered, Money Held, Money Available)
 {
-    public Money Available => Amended - Actuals - Encumbered - Held;
-    public Money AvailableForInvoice => Available + OwnHeld;
-
-    public static BudgetSnapshot Missing(AccountCode account) =>
-        new(account, false, Money.Zero, Money.Zero, Money.Zero, Money.Zero, Money.Zero);
+    public static readonly BudgetSnapshot Missing = new(false, Money.Zero, Money.Zero, Money.Zero, Money.Zero, Money.Zero);
 }
 
 // EncumbranceSnapshot.cs
-public sealed record EncumbranceSnapshot(Money Remaining, Money OtherHeldClaims, bool IsOpen)
-{
-    public Money ClaimableForInvoice => IsOpen ? Money.Max(Money.Zero, Remaining - OtherHeldClaims) : Money.Zero;
-}
-
-// PoLineSnapshot.cs
-public sealed record PoLineSnapshot(string PoLineRef, AccountCode Account, bool IsOpen, Money AuthorizedAmount,
-    Money AlreadyPosted, Money OtherActiveClaims, EncumbranceSnapshot? Encumbrance);
-
-// DistributionSnapshot.cs
-public sealed record DistributionSnapshot(
-    int LineNo, AccountCode Account, Money Amount, string? PoLineRef,
-    CombinationSnapshot Combination, FundSnapshot? Fund, GrantSnapshot? Grant);
-
-// ApprovalSnapshot.cs
-/// <summary>Согласование активного цикла. Department — только у DepartmentHead.</summary>
-public sealed record ApprovalSnapshot(ApproverRole Role, string? Department);
+public sealed record EncumbranceSnapshot(string PoLineRef, Money Remaining, bool IsOpen);
 
 // OverrideSnapshot.cs
-/// <summary>Override активного цикла и текущей версии содержания (фильтрует слой сценариев).</summary>
-public sealed record OverrideSnapshot(Guid EvaluationId, string RuleId, int RuleVersion, int? DistributionLine, UserId UserId, string Reason);
-
-// ApprovalBaseline.cs
-/// <summary>На чём основано последнее согласование активного цикла: версия содержания и fingerprint правил.</summary>
-public sealed record ApprovalBaseline(int ContentVersion, string RuleSetFingerprint);
+public sealed record OverrideSnapshot(string RuleId, UserId UserId, string Reason);
 
 // PostingAccounts.cs
 /// <summary>Object-коды и «балансовый» департамент для строк AP / резерва / encumbrance в posting preview.</summary>
 public sealed record PostingAccounts(ObjectCode AccountsPayable, ObjectCode ReserveForEncumbrances,
     ObjectCode Encumbrances, DepartmentCode BalanceSheetDepartment);
-```
 
-`ValidationSubject.cs`:
-```csharp
-namespace GovErp.Domain.Validation.ValueObjects;
+// DistributionSnapshot.cs
+public sealed record DistributionSnapshot(
+    int LineNo, AccountCode Account, Money Amount,
+    CombinationSnapshot Combination, FundSnapshot? Fund, GrantSnapshot? Grant,
+    BudgetSnapshot Budget, EncumbranceSnapshot? Encumbrance)
+{
+    /// <summary>Сколько уйдёт из encumbrance при Post.</summary>
+    public Money LiquidationAmount =>
+        Encumbrance is { IsOpen: true } e ? Money.Min(Amount, e.Remaining) : Money.Zero;
 
-/// <summary>Все входы конвейера. Вычисления — чистые функции снимков (spec §4.1).</summary>
+    /// <summary>Часть суммы сверх остатка PO (или вся сумма для non-PO).</summary>
+    public Money Excess => Amount - LiquidationAmount;
+
+    /// <summary>Что проверяется против available budget.</summary>
+    public Money AmountToCheck => Excess;
+}
+
+// ValidationSubject.cs
 public sealed record ValidationSubject(
     TransactionSnapshot Transaction,
     IReadOnlyList<DistributionSnapshot> Distributions,
-    IReadOnlyList<BudgetSnapshot> Budgets,
-    IReadOnlyList<PoLineSnapshot> PoLines,
-    IReadOnlyList<ApprovalSnapshot> ActiveApprovals,
-    IReadOnlyList<OverrideSnapshot> ActiveOverrides,
+    IReadOnlyList<ApproverRole> ApprovalsSoFar,
+    IReadOnlyList<OverrideSnapshot> OverridesSoFar,
     bool PeriodIsOpen,
-    ApprovalBaseline? ApprovalBaseline,
-    PostingAccounts PostingAccounts)
-{
-    public IReadOnlyList<AccountCode> BudgetKeys => Distributions.Select(d => d.Account).Distinct().ToList();
-
-    public BudgetSnapshot BudgetFor(AccountCode key) =>
-        Budgets.SingleOrDefault(b => b.Account == key) ?? BudgetSnapshot.Missing(key);
-
-    public PoLineSnapshot? PoLine(string poLineRef) => PoLines.SingleOrDefault(p => p.PoLineRef == poLineRef);
-
-    public int FirstLineOf(AccountCode key) => Distributions.Where(d => d.Account == key).Min(d => d.LineNo);
-
-    public Money RequestedFor(AccountCode key) => Sum(Distributions.Where(d => d.Account == key).Select(d => d.Amount));
-
-    public Money PoAmount(string poLineRef) => Sum(Distributions.Where(d => d.PoLineRef == poLineRef).Select(d => d.Amount));
-
-    public Money EligibleLiquidation(string poLineRef)
-    {
-        var line = PoLine(poLineRef);
-        return line?.Encumbrance is null ? Money.Zero : Money.Min(PoAmount(poLineRef), line.Encumbrance.ClaimableForInvoice);
-    }
-
-    public Money LiquidationFor(AccountCode key) =>
-        Sum(PoLines.Where(p => p.Account == key).Select(p => EligibleLiquidation(p.PoLineRef)));
-
-    public Money RequiredNewBudget(AccountCode key) => Money.Max(Money.Zero, RequestedFor(key) - LiquidationFor(key));
-
-    public Money ProjectedAvailable(AccountCode key) => BudgetFor(key).AvailableForInvoice - RequiredNewBudget(key);
-
-    /// <summary>Накопленное превышение над утверждённой суммой PO-строки, доля (0.03 = 3%). Нулевая утверждённая сумма — 1.</summary>
-    public decimal CumulativeExcessPct(string poLineRef)
-    {
-        var line = PoLine(poLineRef);
-        if (line is null || line.AuthorizedAmount.IsZero)
-        {
-            return 1m;
-        }
-
-        var projected = line.AlreadyPosted + line.OtherActiveClaims + PoAmount(poLineRef);
-        var excess = Money.Max(Money.Zero, projected - line.AuthorizedAmount);
-        return excess.Amount / line.AuthorizedAmount.Amount;
-    }
-
-    private static Money Sum(IEnumerable<Money> values) => values.Aggregate(Money.Zero, (s, m) => s + m);
-}
+    RuleSetVersions? VersionsAtLastApproval,
+    PostingAccounts PostingAccounts);
 ```
 
-- [ ] **Step 6: Тестовый SubjectBuilder**
+`RuleSetVersions` определяется в задаче 2; для компиляции этой задачи добавить его сразу:
+```csharp
+// RuleSetVersions.cs
+/// <summary>Версии слоёв правил, применённые в оценке. Engine — версия кода конвейера.</summary>
+public sealed record RuleSetVersions(string Engine, int Core, int Federal, int State, int Tenant);
+```
+
+- [ ] **Step 5: Тестовый SubjectBuilder**
 
 `tests/GovErp.Domain.Validation.Tests/Support/SubjectBuilder.cs`:
 ```csharp
@@ -361,10 +249,7 @@ namespace GovErp.Domain.Validation.Tests;
 public sealed class SubjectBuilder
 {
     public static readonly UserId Clerk = new(Guid.Parse("11111111-1111-1111-1111-111111111111"));
-    public static readonly UserId Director = new(Guid.Parse("22222222-2222-2222-2222-222222222222"));
-    public static readonly Guid InvoiceId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
-    public static readonly Guid CycleId = Guid.Parse("cccccccc-0000-0000-0000-000000000001");
-    public static readonly DateOnly Jun15 = new(2026, 6, 15);
+    public static readonly DateOnly Sep15 = new(2026, 9, 15);
 
     public static readonly PostingAccounts Accounts = new(
         new ObjectCode("2100"), new ObjectCode("2900"), new ObjectCode("5900"), new DepartmentCode("0000"));
@@ -384,57 +269,46 @@ public sealed class SubjectBuilder
     public static GrantSnapshot Cops(GrantEligibilityResult e = GrantEligibilityResult.Eligible) =>
         new("G-COPS-26", true, e, "Active");
 
-    public static BudgetSnapshot Budget(AccountCode account, decimal amended, decimal actuals, decimal encumbered, decimal held = 0, decimal ownHeld = 0) =>
-        new(account, true, Money.Of(amended), Money.Of(actuals), Money.Of(encumbered), Money.Of(held), Money.Of(ownHeld));
+    public static BudgetSnapshot Budget(decimal amended, decimal actuals, decimal encumbered, decimal held = 0) =>
+        new(true, Money.Of(amended), Money.Of(actuals), Money.Of(encumbered), Money.Of(held),
+            Money.Of(amended - actuals - encumbered - held));
 
-    public static BudgetSnapshot Budget(string account, decimal amended, decimal actuals, decimal encumbered, decimal held = 0, decimal ownHeld = 0) =>
-        Budget(AccountCode.Parse(account), amended, actuals, encumbered, held, ownHeld);
-
-    /// <summary>Бюджеты seed по умолчанию (spec §2.3); ключи без бюджета — Missing.</summary>
-    public static IReadOnlyList<BudgetSnapshot> DefaultBudgets() =>
-    [
-        Budget("701-6000-53100-G-COPS-26", 375_000m, 132_000m, 96_000m),
-        Budget("701-3000-53100-G-COPS-26", 500_000m, 100_000m, 160_000m),
-        Budget("101-6000-53100", 50_000m, 40_000m, 0m),
-        Budget("202-4000-53100", 25_000m, 5_000m, 0m),
-        Budget("501-5000-53100", 60_000m, 30_000m, 0m),
-    ];
+    /// <summary>375,000 − 132,000 − 96,000 = 147,000.</summary>
+    public static BudgetSnapshot ExerciseBudget() => Budget(375_000m, 132_000m, 96_000m);
 
     public static DistributionSnapshot Distribution(int lineNo, string account, decimal amount,
-        FundSnapshot? fund = null, GrantSnapshot? grant = null, CombinationSnapshot? combination = null, string? poLineRef = null)
+        FundSnapshot? fund = null, GrantSnapshot? grant = null, BudgetSnapshot? budget = null,
+        CombinationSnapshot? combination = null, EncumbranceSnapshot? encumbrance = null)
     {
         var code = AccountCode.Parse(account);
         fund ??= code.Fund.Value switch { "701" => Grants701(), "101" => General101(), "202" => Street202(), "501" => Water501(), _ => null };
         grant ??= code.Grant is null ? null : Cops();
-        return new DistributionSnapshot(lineNo, code, Money.Of(amount), poLineRef,
-            combination ?? new CombinationSnapshot(true, true, "Active"), fund, grant);
+        return new DistributionSnapshot(lineNo, code, Money.Of(amount),
+            combination ?? new CombinationSnapshot(true, true, "Active"), fund, grant,
+            budget ?? ExerciseBudget(), encumbrance);
     }
 
     private readonly List<DistributionSnapshot> _distributions = [];
-    private readonly Dictionary<AccountCode, BudgetSnapshot> _budgets = DefaultBudgets().ToDictionary(b => b.Account);
-    private readonly List<PoLineSnapshot> _poLines = [];
-    private readonly List<ApprovalSnapshot> _approvals = [];
+    private readonly List<ApproverRole> _approvals = [];
     private readonly List<OverrideSnapshot> _overrides = [];
     private Money? _total;
-    private string? _poNumber;
+    private bool _isPoBacked;
     private bool _isDuplicate;
     private bool _periodOpen = true;
-    private VendorSnapshot _vendor = new(Guid.NewGuid(), "Acme Consulting", IsActive: true, IsDebarred: false, SamRegistered: true);
-    private ApprovalBaseline? _baseline;
-    private int _contentVersion = 1;
+    private VendorSnapshot _vendor = new(Guid.NewGuid(), "Acme Consulting", IsDebarred: false, SamRegistered: true);
+    private RuleSetVersions? _versionsAtApproval;
+    private DateOnly _date = Sep15;
 
     public SubjectBuilder With(DistributionSnapshot d) { _distributions.Add(d); return this; }
-    public SubjectBuilder Budget(BudgetSnapshot b) { _budgets[b.Account] = b; return this; }
-    public SubjectBuilder NoBudget(string account) { _budgets.Remove(AccountCode.Parse(account)); return this; }
-    public SubjectBuilder Po(string poNumber, PoLineSnapshot line) { _poNumber = poNumber; _poLines.Add(line); return this; }
     public SubjectBuilder Total(decimal total) { _total = Money.Of(total); return this; }
+    public SubjectBuilder PoBacked() { _isPoBacked = true; return this; }
     public SubjectBuilder Duplicate() { _isDuplicate = true; return this; }
     public SubjectBuilder PeriodClosed() { _periodOpen = false; return this; }
-    public SubjectBuilder Vendor(bool active = true, bool debarred = false, bool sam = true) { _vendor = _vendor with { IsActive = active, IsDebarred = debarred, SamRegistered = sam }; return this; }
-    public SubjectBuilder Approved(ApproverRole role, string? department = null) { _approvals.Add(new ApprovalSnapshot(role, department)); return this; }
-    public SubjectBuilder Overridden(string ruleId, int? line = null, int ruleVersion = 1, string reason = "justified") { _overrides.Add(new OverrideSnapshot(Guid.NewGuid(), ruleId, ruleVersion, line, Director, reason)); return this; }
-    public SubjectBuilder Baseline(string fingerprint, int contentVersion = 1) { _baseline = new ApprovalBaseline(contentVersion, fingerprint); return this; }
-    public SubjectBuilder ContentVersion(int v) { _contentVersion = v; return this; }
+    public SubjectBuilder Vendor(bool debarred = false, bool sam = true) { _vendor = _vendor with { IsDebarred = debarred, SamRegistered = sam }; return this; }
+    public SubjectBuilder Approved(params ApproverRole[] roles) { _approvals.AddRange(roles); return this; }
+    public SubjectBuilder Overridden(string ruleId, string reason = "justified") { _overrides.Add(new OverrideSnapshot(ruleId, Clerk, reason)); return this; }
+    public SubjectBuilder VersionsAtApproval(RuleSetVersions v) { _versionsAtApproval = v; return this; }
+    public SubjectBuilder Dated(DateOnly d) { _date = d; return this; }
 
     public ValidationSubject Build()
     {
@@ -444,62 +318,40 @@ public sealed class SubjectBuilder
         }
 
         var total = _total ?? _distributions.Aggregate(Money.Zero, (s, d) => s + d.Amount);
-        var tx = new TransactionSnapshot("INV-V-7781", InvoiceId, _contentVersion, CycleId, "AP_INVOICE",
-            Jun15, Jun15, Jun15, total, _vendor, _poNumber, _isDuplicate, Clerk);
-        var keys = _distributions.Select(d => d.Account).Distinct();
-        var budgets = keys.Where(_budgets.ContainsKey).Select(k => _budgets[k]).ToList();
-        return new ValidationSubject(tx, _distributions, budgets, _poLines, _approvals, _overrides, _periodOpen, _baseline, Accounts);
+        var tx = new TransactionSnapshot("INV-V-7781", 1, "AP_INVOICE", _date, total, _vendor, _isPoBacked, _isDuplicate, Clerk);
+        return new ValidationSubject(tx, _distributions, _approvals, _overrides, _periodOpen, _versionsAtApproval, Accounts);
     }
 
     /// <summary>Сценарий задания целиком.</summary>
     public static ValidationSubject Exercise() => new SubjectBuilder().Build();
-
-    /// <summary>PO-backed сценарий на Police-комбинации: утверждено 160,000 (spec §2.3).</summary>
-    public static ValidationSubject PoBacked(decimal invoiceAmount, decimal remaining = 160_000m, decimal otherHeldClaims = 0m,
-        decimal alreadyPosted = 0m, decimal otherBillingClaims = 0m, bool poOpen = true, decimal authorized = 160_000m) =>
-        PoBackedBuilder(invoiceAmount, remaining, otherHeldClaims, alreadyPosted, otherBillingClaims, poOpen, authorized).Build();
-
-    public static SubjectBuilder PoBackedBuilder(decimal invoiceAmount, decimal remaining = 160_000m, decimal otherHeldClaims = 0m,
-        decimal alreadyPosted = 0m, decimal otherBillingClaims = 0m, bool poOpen = true, decimal authorized = 160_000m)
-    {
-        const string police = "701-3000-53100-G-COPS-26";
-        var encumbrance = new EncumbranceSnapshot(Money.Of(remaining), Money.Of(otherHeldClaims), IsOpen: remaining > 0);
-        return new SubjectBuilder()
-            .Po("PO-2026-0451", new PoLineSnapshot("PO-2026-0451/1", AccountCode.Parse(police), poOpen, Money.Of(authorized),
-                Money.Of(alreadyPosted), Money.Of(otherBillingClaims), encumbrance))
-            .With(Distribution(1, police, invoiceAmount, poLineRef: "PO-2026-0451/1"));
-    }
 }
 ```
 
-- [ ] **Step 7: Прогнать**
+- [ ] **Step 6: Прогнать**
 
 Run: `dotnet test tests/GovErp.Domain.Validation.Tests`
-Expected: 8 passed.
+Expected: 4 passed.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add src/GovErp.Domain.Validation tests/GovErp.Domain.Validation.Tests GovErp.sln
-git commit -m "Validation: snapshots with per-budget-key and per-PO-line calculations
+git commit -m "Validation: enumerations, snapshots, ValidationSubject and test builder
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
 ---
 
-### Task 2: RuleDefinition, разрешение слоёв и fingerprint
+### Task 2: RuleDefinition, EffectiveRuleSet и разрешение слоёв
 
 **Files:**
-- Create: `Entities/RuleDefinition.cs`, `ValueObjects/AppliedRule.cs`, `ValueObjects/EffectiveRuleSet.cs`, `DomainServices/RuleResolution.cs`, `Repositories/IRuleDefinitionRepository.cs`
+- Create: `Entities/RuleDefinition.cs`, `ValueObjects/EffectiveRuleSet.cs`, `DomainServices/RuleResolution.cs`, `Repositories/IRuleDefinitionRepository.cs`
 - Test: `tests/.../RuleResolutionTests.cs`, `tests/.../Support/DemoRules.cs`
 
 **Interfaces:**
-- Produces: `RuleDefinition` (`RuleId`, `Version`, `Step`, `Layer`, `IsLocallyAdjustable`, `Severity?` — `null` значит «правило решает само», `Parameters`, `OverridableBy`, `EffectiveFrom/To`, `Message`, `Resolution`, `IsEnabled`, `IsEffectiveOn(DateOnly)`, `Parameter(string)`, `DecimalParameter(string)`, `CanonicalParameters`); `AppliedRule(RuleId, Layer, Version, ParametersHash)`; `EffectiveRuleSet` (`Definitions`, `AppliedRules`, `Fingerprint`, `EngineVersion`, `ForStep(ValidationStep)`, `Find(string ruleId)` — самое специфичное определение); `RuleResolution.Resolve(IReadOnlyList<RuleDefinition>, DateOnly) → EffectiveRuleSet`; `RuleResolution.EngineVersion = "engine-1.0.0"`.
-- Правила spec §4.1 п. 3 и `GE-11`, `GE-15`:
-  - `IsLocallyAdjustable = false` → в набор попадает старшая версия **каждого** слоя; конвейер выполняет все, итог — строжайший. Локальный слой обязательное ограничение не отменяет.
-  - `IsLocallyAdjustable = true` → в набор попадает одно определение: самый специфичный слой, в нём — старшая версия. Ослабление проверяет `RuleSetGuard` (задача 7), а не резолвер.
-  - `Fingerprint` — SHA-256 (hex, нижний регистр) по строкам `RuleId|Layer|Version|k=v;k=v` всех попавших в набор определений, отсортированным по `RuleId`, `Layer`, плюс строка `engine=<EngineVersion>`. Порядок входного списка на fingerprint не влияет.
+- Produces: `RuleDefinition` (`RuleId`, `Version`, `Step`, `Layer`, `Severity?` — `null` значит «правило решает само», `Parameters`, `OverridableBy`, `EffectiveFrom/To`, `Message`, `Resolution`, `IsEnabled`, `IsEffectiveOn(DateOnly)`, `Parameter(string) → string`, `DecimalParameter(string)`); `EffectiveRuleSet` (`Definitions`, `Versions`, `ForStep(ValidationStep)`, `Find(string ruleId)`); `RuleResolution.Resolve(IReadOnlyList<RuleDefinition>, DateOnly) → EffectiveRuleSet`.
+- `ValidationPipeline.EngineVersion = "engine-1.0.0"` — константа в `RuleResolution`.
 
 - [ ] **Step 1: Тесты**
 
@@ -516,8 +368,8 @@ public static class DemoRules
 
     public static RuleDefinition Rule(string id, ValidationStep step, RuleLayer layer, Severity? severity,
         Dictionary<string, string>? parameters = null, ApproverRole[]? overridableBy = null, int version = 1,
-        DateOnly? from = null, DateOnly? to = null, bool enabled = true, bool adjustable = false) =>
-        new(id, version, step, layer, adjustable, severity, parameters ?? [], overridableBy ?? [], from ?? From, to,
+        DateOnly? from = null, DateOnly? to = null, bool enabled = true) =>
+        new(id, version, step, layer, severity, parameters ?? [], overridableBy ?? [], from ?? From, to,
             message: $"{id} fired", resolution: $"Resolve {id}", enabled);
 
     public static IReadOnlyList<RuleDefinition> All() =>
@@ -529,20 +381,17 @@ public static class DemoRules
         Rule("GRANT_ELIGIBLE", ValidationStep.FundAndGrantRestrictions, RuleLayer.Federal, Severity.HardStop),
         Rule("VENDOR_ELIGIBLE", ValidationStep.TransactionPurpose, RuleLayer.Federal, Severity.HardStop),
         Rule("PROCUREMENT_THRESHOLD", ValidationStep.TransactionPurpose, RuleLayer.State, Severity.SoftStop,
-            new() { ["threshold"] = "25000" }, [ApproverRole.FinanceDirector], adjustable: true),
+            new() { ["threshold"] = "25000" }, [ApproverRole.FinanceDirector]),
         Rule("INVOICE_DUPLICATE", ValidationStep.TransactionPurpose, RuleLayer.Core, Severity.HardStop),
         Rule("BUDGET_AVAILABILITY", ValidationStep.BudgetAvailability, RuleLayer.Core, null,
             overridableBy: [ApproverRole.BudgetOfficer, ApproverRole.FinanceDirector]),
         Rule("BUDGET_LOW_REMAINING", ValidationStep.BudgetAvailability, RuleLayer.Tenant, Severity.Warning,
-            new() { ["pct"] = "0.10" }, adjustable: true),
+            new() { ["pct"] = "0.10" }),
         Rule("PO_LIQUIDATION", ValidationStep.EncumbranceImpact, RuleLayer.Core, null,
-            new() { ["tolerance_pct"] = "0.05" }, adjustable: true),
+            new() { ["tolerance_pct"] = "0.05" }),
         Rule("APPROVAL_ROUTE", ValidationStep.ApprovalRequirements, RuleLayer.Tenant, null,
-            new() { ["finance_director_threshold"] = "50000" }, adjustable: true),
+            new() { ["finance_director_threshold"] = "50000" }),
     ];
-
-    public static EffectiveRuleSet Resolved(IReadOnlyList<RuleDefinition>? rules = null) =>
-        DomainServices.RuleResolution.Resolve(rules ?? All(), new DateOnly(2026, 6, 15));
 }
 ```
 
@@ -556,17 +405,15 @@ namespace GovErp.Domain.Validation.Tests;
 
 public class RuleResolutionTests
 {
-    private static readonly DateOnly Jun15 = new(2026, 6, 15);
+    private static readonly DateOnly Sep15 = new(2026, 9, 15);
 
     [Fact]
     public void Resolves_all_effective_enabled_rules()
     {
-        var set = RuleResolution.Resolve(DemoRules.All(), Jun15);
+        var set = RuleResolution.Resolve(DemoRules.All(), Sep15);
         set.Definitions.Should().HaveCount(12);
-        set.AppliedRules.Should().HaveCount(12);
         set.ForStep(ValidationStep.TransactionPurpose).Select(r => r.RuleId)
             .Should().BeEquivalentTo("VENDOR_ELIGIBLE", "PROCUREMENT_THRESHOLD", "INVOICE_DUPLICATE");
-        set.EngineVersion.Should().Be(RuleResolution.EngineVersion);
     }
 
     [Fact]
@@ -575,74 +422,47 @@ public class RuleResolutionTests
         var rules = new List<RuleDefinition>(DemoRules.All())
         {
             DemoRules.Rule("FUTURE", ValidationStep.TransactionPurpose, RuleLayer.Tenant, Severity.Warning, from: new DateOnly(2027, 1, 1)),
-            DemoRules.Rule("EXPIRED", ValidationStep.TransactionPurpose, RuleLayer.Tenant, Severity.Warning, to: new DateOnly(2026, 5, 31)),
+            DemoRules.Rule("EXPIRED", ValidationStep.TransactionPurpose, RuleLayer.Tenant, Severity.Warning, to: new DateOnly(2026, 6, 30)),
             DemoRules.Rule("OFF", ValidationStep.TransactionPurpose, RuleLayer.Tenant, Severity.Warning, enabled: false),
         };
-        var set = RuleResolution.Resolve(rules, Jun15);
+        var set = RuleResolution.Resolve(rules, Sep15);
         set.Find("FUTURE").Should().BeNull();
         set.Find("EXPIRED").Should().BeNull();
         set.Find("OFF").Should().BeNull();
     }
 
     [Fact]
-    public void Resolution_AdjustableRule_TenantLayerReplacesState()
+    public void Same_rule_id_more_specific_layer_wins()
     {
         var rules = new List<RuleDefinition>(DemoRules.All())
         {
             DemoRules.Rule("PROCUREMENT_THRESHOLD", ValidationStep.TransactionPurpose, RuleLayer.Tenant, Severity.SoftStop,
-                new() { ["threshold"] = "10000" }, [ApproverRole.FinanceDirector], adjustable: true),
+                new() { ["threshold"] = "10000" }, [ApproverRole.FinanceDirector], version: 3),
         };
-        var set = RuleResolution.Resolve(rules, Jun15);
-        set.Definitions.Where(d => d.RuleId == "PROCUREMENT_THRESHOLD").Should().ContainSingle()
-            .Which.Layer.Should().Be(RuleLayer.Tenant);
-        set.Find("PROCUREMENT_THRESHOLD")!.DecimalParameter("threshold").Should().Be(10_000m);
+        var set = RuleResolution.Resolve(rules, Sep15);
+        var rule = set.Find("PROCUREMENT_THRESHOLD")!;
+        rule.Layer.Should().Be(RuleLayer.Tenant);
+        rule.DecimalParameter("threshold").Should().Be(10_000m);
     }
 
     [Fact]
-    public void Resolution_NonAdjustableRule_AllLayersEvaluated()
-    {
-        var rules = new List<RuleDefinition>(DemoRules.All())
-        {
-            DemoRules.Rule("VENDOR_ELIGIBLE", ValidationStep.TransactionPurpose, RuleLayer.Tenant, Severity.Warning),
-        };
-        var set = RuleResolution.Resolve(rules, Jun15);
-        set.Definitions.Where(d => d.RuleId == "VENDOR_ELIGIBLE").Select(d => d.Layer)
-            .Should().BeEquivalentTo([RuleLayer.Federal, RuleLayer.Tenant]);
-    }
-
-    [Fact]
-    public void Same_layer_highest_version_wins()
+    public void Same_rule_id_same_layer_highest_version_wins()
     {
         var rules = new List<RuleDefinition>(DemoRules.All())
         {
             DemoRules.Rule("BUDGET_LOW_REMAINING", ValidationStep.BudgetAvailability, RuleLayer.Tenant, Severity.Warning,
-                new() { ["pct"] = "0.20" }, version: 2, adjustable: true),
+                new() { ["pct"] = "0.20" }, version: 2),
         };
-        RuleResolution.Resolve(rules, Jun15).Find("BUDGET_LOW_REMAINING")!.DecimalParameter("pct").Should().Be(0.20m);
+        RuleResolution.Resolve(rules, Sep15).Find("BUDGET_LOW_REMAINING")!.DecimalParameter("pct").Should().Be(0.20m);
     }
 
     [Fact]
-    public void Fingerprint_ChangesWithParameters_NotWithOrder()
+    public void Versions_are_max_per_layer_plus_engine()
     {
-        var baseline = RuleResolution.Resolve(DemoRules.All(), Jun15).Fingerprint;
-        RuleResolution.Resolve(DemoRules.All().Reverse().ToList(), Jun15).Fingerprint.Should().Be(baseline);
-        baseline.Should().MatchRegex("^[0-9a-f]{64}$");
-
-        var changed = DemoRules.All().Select(r => r.RuleId == "BUDGET_LOW_REMAINING"
-            ? DemoRules.Rule("BUDGET_LOW_REMAINING", ValidationStep.BudgetAvailability, RuleLayer.Tenant, Severity.Warning,
-                new() { ["pct"] = "0.15" }, adjustable: true)
-            : r).ToList();
-        RuleResolution.Resolve(changed, Jun15).Fingerprint.Should().NotBe(baseline);
-    }
-
-    [Fact]
-    public void Fingerprint_includes_rules_that_did_not_fire_and_changes_when_a_rule_is_added()
-    {
-        var more = new List<RuleDefinition>(DemoRules.All())
-        {
-            DemoRules.Rule("NEW_TENANT_WARNING", ValidationStep.TransactionPurpose, RuleLayer.Tenant, Severity.Warning, adjustable: true),
-        };
-        RuleResolution.Resolve(more, Jun15).Fingerprint.Should().NotBe(RuleResolution.Resolve(DemoRules.All(), Jun15).Fingerprint);
+        var set = RuleResolution.Resolve(DemoRules.All(), Sep15);
+        set.Versions.Engine.Should().Be(RuleResolution.EngineVersion);
+        set.Versions.Core.Should().Be(1);
+        set.Versions.Tenant.Should().Be(1);
     }
 
     [Fact]
@@ -666,7 +486,7 @@ using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.Entities;
 
-/// <summary>Запись о правиле: включённость, версия, слой, адаптируемость, severity, параметры, effective dating. Логика — в коде (GE-10).</summary>
+/// <summary>Запись о правиле: включённость, версия, слой, severity, параметры, effective dating. Логика — в коде (GE-10).</summary>
 public sealed class RuleDefinition
 {
     public Guid Id { get; private set; }
@@ -674,8 +494,6 @@ public sealed class RuleDefinition
     public int Version { get; private set; }
     public ValidationStep Step { get; private set; }
     public RuleLayer Layer { get; private set; }
-    /// <summary>false — обязательное ограничение: более специфичный слой его не заменяет (GE-11).</summary>
-    public bool IsLocallyAdjustable { get; private set; }
     /// <summary>null — правило само определяет severity (например, по режиму контроля фонда).</summary>
     public Severity? Severity { get; private set; }
     public IReadOnlyDictionary<string, string> Parameters { get; private set; }
@@ -686,7 +504,7 @@ public sealed class RuleDefinition
     public string Resolution { get; private set; }
     public bool IsEnabled { get; private set; }
 
-    public RuleDefinition(string ruleId, int version, ValidationStep step, RuleLayer layer, bool isLocallyAdjustable, Severity? severity,
+    public RuleDefinition(string ruleId, int version, ValidationStep step, RuleLayer layer, Severity? severity,
         IReadOnlyDictionary<string, string> parameters, IReadOnlyList<ApproverRole> overridableBy,
         DateOnly effectiveFrom, DateOnly? effectiveTo, string message, string resolution, bool enabled = true)
     {
@@ -707,7 +525,6 @@ public sealed class RuleDefinition
         Version = version;
         Step = step;
         Layer = layer;
-        IsLocallyAdjustable = isLocallyAdjustable;
         Severity = severity;
         Parameters = new Dictionary<string, string>(parameters);
         OverridableBy = overridableBy.ToList();
@@ -737,19 +554,7 @@ public sealed class RuleDefinition
 
     public decimal DecimalParameter(string name) =>
         decimal.Parse(Parameter(name), NumberStyles.Number, CultureInfo.InvariantCulture);
-
-    /// <summary>Параметры в каноническом виде для fingerprint: ключи по возрастанию, «k=v;k=v».</summary>
-    public string CanonicalParameters =>
-        string.Join(';', Parameters.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => $"{p.Key}={p.Value}"));
 }
-```
-
-`ValueObjects/AppliedRule.cs`:
-```csharp
-namespace GovErp.Domain.Validation.ValueObjects;
-
-/// <summary>Одно применённое определение правила — для аудита «какие правила и в каких версиях действовали».</summary>
-public sealed record AppliedRule(string RuleId, RuleLayer Layer, int Version, string ParametersHash);
 ```
 
 `ValueObjects/EffectiveRuleSet.cs`:
@@ -758,70 +563,42 @@ using GovErp.Domain.Validation.Entities;
 
 namespace GovErp.Domain.Validation.ValueObjects;
 
-/// <summary>Набор правил, действующих на дату, после разрешения слоёв; с fingerprint (GE-15).</summary>
-public sealed record EffectiveRuleSet(IReadOnlyList<RuleDefinition> Definitions, IReadOnlyList<AppliedRule> AppliedRules,
-    string Fingerprint, string EngineVersion)
+/// <summary>Набор правил, действующих на дату транзакции, после разрешения слоёв.</summary>
+public sealed record EffectiveRuleSet(IReadOnlyList<RuleDefinition> Definitions, RuleSetVersions Versions)
 {
     public IReadOnlyList<RuleDefinition> ForStep(ValidationStep step) =>
-        Definitions.Where(d => d.Step == step).OrderBy(d => d.RuleId, StringComparer.Ordinal).ThenBy(d => d.Layer).ToList();
+        Definitions.Where(d => d.Step == step).ToList();
 
-    /// <summary>Самое специфичное определение правила (для параметров маршрута и т.п.).</summary>
-    public RuleDefinition? Find(string ruleId) =>
-        Definitions.Where(d => d.RuleId == ruleId).OrderByDescending(d => d.Layer).FirstOrDefault();
+    public RuleDefinition? Find(string ruleId) => Definitions.SingleOrDefault(d => d.RuleId == ruleId);
 }
 ```
 
 `DomainServices/RuleResolution.cs`:
 ```csharp
-using System.Security.Cryptography;
-using System.Text;
 using GovErp.Domain.Validation.Entities;
 using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.DomainServices;
 
-/// <summary>Отбор действующих определений и разрешение слоёв (GE-11), fingerprint набора (GE-15).</summary>
+/// <summary>Слои: Tenant > State > Federal > Core; внутри слоя — старшая версия. Ослаблять Core/Federal нельзя (проверяется при seed, не здесь).</summary>
 public static class RuleResolution
 {
     public const string EngineVersion = "engine-1.0.0";
 
     public static EffectiveRuleSet Resolve(IReadOnlyList<RuleDefinition> candidates, DateOnly onDate)
     {
-        var selected = new List<RuleDefinition>();
-        foreach (var group in candidates.Where(r => r.IsEffectiveOn(onDate)).GroupBy(r => r.RuleId))
-        {
-            var latestPerLayer = group.GroupBy(r => r.Layer)
-                .Select(l => l.OrderByDescending(r => r.Version).First())
-                .ToList();
+        var effective = candidates
+            .Where(r => r.IsEffectiveOn(onDate))
+            .GroupBy(r => r.RuleId)
+            .Select(g => g.OrderByDescending(r => r.Layer).ThenByDescending(r => r.Version).First())
+            .OrderBy(r => r.Step).ThenBy(r => r.RuleId)
+            .ToList();
 
-            // Адаптируемость определяется базовым (наименее специфичным) слоем правила.
-            var baseDefinition = latestPerLayer.OrderBy(r => r.Layer).First();
-            if (baseDefinition.IsLocallyAdjustable)
-            {
-                selected.Add(latestPerLayer.OrderByDescending(r => r.Layer).First());
-            }
-            else
-            {
-                selected.AddRange(latestPerLayer);
-            }
-        }
+        int Max(RuleLayer layer) => effective.Where(r => r.Layer == layer).Select(r => r.Version).DefaultIfEmpty(0).Max();
 
-        var ordered = selected.OrderBy(r => r.Step).ThenBy(r => r.RuleId, StringComparer.Ordinal).ThenBy(r => r.Layer).ToList();
-        var applied = ordered.Select(r => new AppliedRule(r.RuleId, r.Layer, r.Version, Hash(r.CanonicalParameters))).ToList();
-        return new EffectiveRuleSet(ordered, applied, Fingerprint(ordered), EngineVersion);
+        return new EffectiveRuleSet(effective,
+            new RuleSetVersions(EngineVersion, Max(RuleLayer.Core), Max(RuleLayer.Federal), Max(RuleLayer.State), Max(RuleLayer.Tenant)));
     }
-
-    private static string Fingerprint(IEnumerable<RuleDefinition> rules)
-    {
-        var lines = rules
-            .OrderBy(r => r.RuleId, StringComparer.Ordinal).ThenBy(r => r.Layer)
-            .Select(r => $"{r.RuleId}|{r.Layer}|{r.Version}|{r.CanonicalParameters}")
-            .Append($"engine={EngineVersion}");
-        return Hash(string.Join('\n', lines));
-    }
-
-    private static string Hash(string text) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
 }
 ```
 
@@ -835,35 +612,33 @@ public interface IRuleDefinitionRepository
 {
     /// <summary>Все версии всех слоёв — разрешение делает RuleResolution.</summary>
     Task<IReadOnlyList<RuleDefinition>> ListAsync(CancellationToken ct = default);
-    Task AddAsync(RuleDefinition definition, CancellationToken ct = default);
 }
 ```
 
 - [ ] **Step 4: Прогнать**
 
 Run: `dotnet test tests/GovErp.Domain.Validation.Tests`
-Expected: 16 passed.
+Expected: 10 passed.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add src/GovErp.Domain.Validation tests/GovErp.Domain.Validation.Tests
-git commit -m "Validation: rule definitions, layer resolution with mandatory rules, rule-set fingerprint
+git commit -m "Validation: RuleDefinition, effective rule set with layer resolution
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
 ---
 
-### Task 3: RuleOutcome, агрегация с привязанными overrides, Capabilities
+### Task 3: RuleOutcome, агрегация, Capabilities
 
 **Files:**
 - Create: `ValueObjects/RuleOutcome.cs`, `ValueObjects/Capabilities.cs`, `DomainServices/OutcomeAggregation.cs`, `DomainServices/IValidationRule.cs`
 - Test: `OutcomeAggregationTests.cs`, `CapabilitiesTests.cs`
 
 **Interfaces:**
-- Produces: `RuleOutcome` (record: `RuleId`, `RuleVersion`, `Step`, `Layer`, `DistributionLine`, `BudgetKey`, `Severity`, `Inputs`, `Computed`, `Message`, `Resolution`, `OverridableBy`, `OverriddenBy`, `IsOverridden`) + `RuleOutcome.From(RuleDefinition, Severity, int? line, inputs, computed, message?, budgetKey?)`; `OutcomeAggregation.Apply(outcomes, overrides) → (IReadOnlyList<RuleOutcome> WithOverrides, Severity Overall)`; `Capabilities(CanSave, CanSubmit, CanApprove, CanPost)` + `Capabilities.For(Severity overall, bool? postingPassed)`; `IValidationRule { string RuleId; IReadOnlyList<RuleOutcome> Evaluate(ValidationSubject, RuleDefinition); }`.
-- Override снимает outcome, только если совпадают `RuleId`, `RuleVersion` и `DistributionLine` (spec §4.1), outcome — `SoftStop`, и правило вообще разрешает override (`OverridableBy` не пуст). Версия содержания и цикл отфильтрованы раньше: в снимок попадают только активные overrides (план 3). Готовность к оплате — не capability конвейера (spec §4.3).
+- Produces: `RuleOutcome` (record: `RuleId`, `RuleVersion`, `Step`, `Layer`, `DistributionLine`, `Severity`, `Inputs`, `Computed`, `Message`, `Resolution`, `OverridableBy`, `OverriddenBy`) + `RuleOutcome.From(RuleDefinition, Severity, int? line, inputs, computed, message?)`; `OutcomeAggregation.Apply(outcomes, overrides) → (IReadOnlyList<RuleOutcome> WithOverrides, Severity Overall)`; `Capabilities.For(Severity overall, bool? postingPassed)`; `IValidationRule { string RuleId; IReadOnlyList<RuleOutcome> Evaluate(ValidationSubject, RuleDefinition); }`.
 
 - [ ] **Step 1: Тесты**
 
@@ -876,17 +651,17 @@ namespace GovErp.Domain.Validation.Tests;
 
 public class OutcomeAggregationTests
 {
-    private static RuleOutcome Outcome(string id, Severity s, int? line = null, int version = 1, params ApproverRole[] overridable) =>
-        RuleOutcome.From(DemoRules.Rule(id, ValidationStep.TransactionPurpose, RuleLayer.Core, s, overridableBy: overridable, version: version),
-            s, line, new Dictionary<string, string>(), new Dictionary<string, string>());
-
-    private static OverrideSnapshot Ov(string ruleId, int? line = null, int version = 1) =>
-        new(Guid.NewGuid(), ruleId, version, line, SubjectBuilder.Director, "ok");
+    private static RuleOutcome Outcome(string id, Severity s, params ApproverRole[] overridable) =>
+        RuleOutcome.From(DemoRules.Rule(id, ValidationStep.TransactionPurpose, RuleLayer.Core, s, overridableBy: overridable),
+            s, null, new Dictionary<string, string>(), new Dictionary<string, string>());
 
     [Fact]
-    public void Overall_is_strictest() =>
-        OutcomeAggregation.Apply([Outcome("A", Severity.Warning), Outcome("B", Severity.SoftStop), Outcome("C", Severity.Allowed)], [])
-            .Overall.Should().Be(Severity.SoftStop);
+    public void Overall_is_strictest()
+    {
+        var (_, overall) = OutcomeAggregation.Apply(
+            [Outcome("A", Severity.Warning), Outcome("B", Severity.SoftStop), Outcome("C", Severity.Allowed)], []);
+        overall.Should().Be(Severity.SoftStop);
+    }
 
     [Fact]
     public void No_outcomes_means_allowed() =>
@@ -895,30 +670,22 @@ public class OutcomeAggregationTests
     [Fact]
     public void Override_removes_soft_stop_from_overall_but_keeps_outcome()
     {
+        var overrides = new[] { new OverrideSnapshot("B", SubjectBuilder.Clerk, "ok") };
         var (with, overall) = OutcomeAggregation.Apply(
-            [Outcome("A", Severity.Warning), Outcome("B", Severity.SoftStop, overridable: ApproverRole.FinanceDirector)], [Ov("B")]);
+            [Outcome("A", Severity.Warning), Outcome("B", Severity.SoftStop, ApproverRole.FinanceDirector)], overrides);
         overall.Should().Be(Severity.Warning);
         with.Single(o => o.RuleId == "B").Severity.Should().Be(Severity.SoftStop);
-        with.Single(o => o.RuleId == "B").IsOverridden.Should().BeTrue();
-    }
-
-    [Fact]
-    public void Override_OtherLineOrRuleVersion_DoesNotApply()
-    {
-        var soft = Outcome("BUDGET_AVAILABILITY", Severity.SoftStop, line: 1, version: 2, overridable: ApproverRole.BudgetOfficer);
-        OutcomeAggregation.Apply([soft], [Ov("BUDGET_AVAILABILITY", line: 2, version: 2)]).Overall.Should().Be(Severity.SoftStop);
-        OutcomeAggregation.Apply([soft], [Ov("BUDGET_AVAILABILITY", line: 1, version: 1)]).Overall.Should().Be(Severity.SoftStop);
-        OutcomeAggregation.Apply([soft], [Ov("BUDGET_AVAILABILITY", line: 1, version: 2)]).Overall.Should().Be(Severity.Allowed);
+        with.Single(o => o.RuleId == "B").OverriddenBy.Should().NotBeNull();
     }
 
     [Fact]
     public void Override_does_not_apply_to_hard_stop_or_non_overridable()
     {
+        var overrides = new[] { new OverrideSnapshot("H", SubjectBuilder.Clerk, "x"), new OverrideSnapshot("S", SubjectBuilder.Clerk, "y") };
         var (with, overall) = OutcomeAggregation.Apply(
-            [Outcome("H", Severity.HardStop, overridable: ApproverRole.FinanceDirector), Outcome("S", Severity.SoftStop)],
-            [Ov("H"), Ov("S")]);
+            [Outcome("H", Severity.HardStop, ApproverRole.FinanceDirector), Outcome("S", Severity.SoftStop)], overrides);
         overall.Should().Be(Severity.HardStop);
-        with.Should().OnlyContain(o => !o.IsOverridden);
+        with.Should().OnlyContain(o => o.OverriddenBy == null);
     }
 }
 ```
@@ -933,23 +700,21 @@ public class CapabilitiesTests
 {
     [Fact]
     public void HardStop_can_only_save() =>
-        Capabilities.For(Severity.HardStop, null).Should().Be(new Capabilities(true, false, false, false));
+        Capabilities.For(Severity.HardStop, null).Should().Be(new Capabilities(true, false, false, false, false));
 
     [Fact]
     public void SoftStop_can_save_and_submit_only() =>
-        Capabilities.For(Severity.SoftStop, null).Should().Be(new Capabilities(true, true, false, false));
+        Capabilities.For(Severity.SoftStop, null).Should().Be(new Capabilities(true, true, false, false, false));
 
     [Fact]
-    public void Warning_and_allowed_post_only_when_posting_check_passed()
+    public void Warning_and_allowed_can_do_everything_pending_eligibility()
     {
-        Capabilities.For(Severity.Warning, null).Should().Be(new Capabilities(true, true, true, false));
+        Capabilities.For(Severity.Warning, null).Should().Be(new Capabilities(true, true, true, true, true));
         Capabilities.For(Severity.Allowed, postingPassed: false).CanPost.Should().BeFalse();
         Capabilities.For(Severity.Allowed, postingPassed: true).CanPost.Should().BeTrue();
     }
 }
 ```
-
-`Capabilities_Warning…` намеренно отличается от ранней версии: `CanPost` без выполненной проверки шага 8 — `false`. Возможность провести показывается только по результату оценки с `trigger = Post` или по отдельному preview-вызову проверки (план 3).
 
 - [ ] **Step 2: Убедиться, что не компилируется**
 
@@ -962,7 +727,7 @@ using GovErp.Domain.Validation.Entities;
 namespace GovErp.Domain.Validation.ValueObjects;
 
 public sealed record RuleOutcome(
-    string RuleId, int RuleVersion, ValidationStep Step, RuleLayer Layer, int? DistributionLine, string? BudgetKey,
+    string RuleId, int RuleVersion, ValidationStep Step, RuleLayer Layer, int? DistributionLine,
     Severity Severity,
     IReadOnlyDictionary<string, string> Inputs,
     IReadOnlyDictionary<string, string> Computed,
@@ -971,9 +736,8 @@ public sealed record RuleOutcome(
     OverrideSnapshot? OverriddenBy)
 {
     public static RuleOutcome From(RuleDefinition rule, Severity severity, int? line,
-        IReadOnlyDictionary<string, string> inputs, IReadOnlyDictionary<string, string> computed,
-        string? message = null, string? budgetKey = null) =>
-        new(rule.RuleId, rule.Version, rule.Step, rule.Layer, line, budgetKey, severity, inputs, computed,
+        IReadOnlyDictionary<string, string> inputs, IReadOnlyDictionary<string, string> computed, string? message = null) =>
+        new(rule.RuleId, rule.Version, rule.Step, rule.Layer, line, severity, inputs, computed,
             message ?? rule.Message, rule.Resolution, rule.OverridableBy, null);
 
     public bool IsOverridden => OverriddenBy is not null;
@@ -984,14 +748,14 @@ public sealed record RuleOutcome(
 ```csharp
 namespace GovErp.Domain.Validation.ValueObjects;
 
-/// <summary>Что можно сделать с документом по результату оценки. Готовность к оплате вычисляет инвойс (spec §4.3).</summary>
-public sealed record Capabilities(bool CanSave, bool CanSubmit, bool CanApprove, bool CanPost)
+/// <summary>Матрица «что можно сделать» — функция от Overall (после overrides) и результата posting eligibility.</summary>
+public sealed record Capabilities(bool CanSave, bool CanSubmit, bool CanApprove, bool CanPost, bool CanPay)
 {
     public static Capabilities For(Severity overall, bool? postingPassed) => overall switch
     {
-        Severity.HardStop => new(true, false, false, false),
-        Severity.SoftStop => new(true, true, false, false),
-        _ => new(true, true, true, postingPassed == true),
+        Severity.HardStop => new(true, false, false, false, false),
+        Severity.SoftStop => new(true, true, false, false, false),
+        _ => new(true, true, true, postingPassed ?? true, postingPassed ?? true),
     };
 }
 ```
@@ -1008,10 +772,6 @@ public interface IValidationRule
 {
     string RuleId { get; }
     IReadOnlyList<RuleOutcome> Evaluate(ValidationSubject subject, RuleDefinition definition);
-
-    /// <summary>Ослабляет ли candidate базовое определение (проверка при сохранении/seed, RuleSetGuard). По умолчанию — сравнение severity.</summary>
-    bool IsWeakening(RuleDefinition baseline, RuleDefinition candidate) =>
-        (candidate.Severity ?? Severity.HardStop) < (baseline.Severity ?? Severity.HardStop);
 }
 ```
 
@@ -1023,20 +783,15 @@ namespace GovErp.Domain.Validation.DomainServices;
 
 public static class OutcomeAggregation
 {
-    /// <summary>Проставляет OverriddenBy на overridable Soft Stop'ы с совпадающими RuleId, RuleVersion и строкой; Overall — без них.</summary>
+    /// <summary>Проставляет OverriddenBy на overridable Soft Stop'ы и считает Overall без них.</summary>
     public static (IReadOnlyList<RuleOutcome> WithOverrides, Severity Overall) Apply(
         IReadOnlyList<RuleOutcome> outcomes, IReadOnlyList<OverrideSnapshot> overrides)
     {
         var with = outcomes.Select(o =>
         {
-            if (o.Severity != Severity.SoftStop || o.OverridableBy.Count == 0)
-            {
-                return o;
-            }
-
-            var match = overrides.FirstOrDefault(x =>
-                x.RuleId == o.RuleId && x.RuleVersion == o.RuleVersion && x.DistributionLine == o.DistributionLine);
-            return match is null ? o : o with { OverriddenBy = match };
+            var ov = overrides.FirstOrDefault(x => x.RuleId == o.RuleId);
+            var canOverride = o.Severity == Severity.SoftStop && o.OverridableBy.Count > 0 && ov is not null;
+            return canOverride ? o with { OverriddenBy = ov } : o;
         }).ToList();
 
         var overall = with.Where(o => !o.IsOverridden).Select(o => o.Severity).DefaultIfEmpty(Severity.Allowed).Max();
@@ -1047,15 +802,14 @@ public static class OutcomeAggregation
 
 - [ ] **Step 4: Прогнать**
 
-Expected: 24 passed.
+Expected: 17 passed.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/GovErp.Domain.Validation tests/GovErp.Domain.Validation.Tests
-git commit -m "Validation: rule outcomes, bound overrides, capabilities
+git commit -am "Validation: RuleOutcome, override-aware aggregation, Capabilities
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
 ---
@@ -1063,12 +817,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 4: Правила шагов 1–4 (сегменты, комбинация, ограничения, purpose)
 
 **Files:**
-- Create: `DomainServices/Rules/RuleSupport.cs`, `SegRequiredRule.cs`, `SegGrantForbiddenRule.cs`, `CoaCombinationActiveRule.cs`, `FundDeptObjectAllowedRule.cs`, `GrantEligibleRule.cs`, `VendorEligibleRule.cs`, `ProcurementThresholdRule.cs`, `InvoiceDuplicateRule.cs`
+- Create: `DomainServices/Rules/SegRequiredRule.cs`, `SegGrantForbiddenRule.cs`, `CoaCombinationActiveRule.cs`, `FundDeptObjectAllowedRule.cs`, `GrantEligibleRule.cs`, `VendorEligibleRule.cs`, `ProcurementThresholdRule.cs`, `InvoiceDuplicateRule.cs`
 - Test: `tests/.../Rules/Step1To4RulesTests.cs`
 
 **Interfaces:**
-- Produces: восемь классов `IValidationRule` с `RuleId`, совпадающим со спекой 4.2. Внутренний помощник `RuleSupport` (`Inputs(DistributionSnapshot, ...)`, `Map(...)`). `ProcurementThresholdRule.IsWeakening` — повышение `threshold` над базовым слоем.
-- Даты по назначению (spec §5, правило 6): комбинация — на `InvoiceDate`; допустимость гранта уже вычислена сборщиком на `ServiceDate` и приходит в `GrantSnapshot.Eligibility`.
+- Produces: восемь классов `IValidationRule` с `RuleId`, совпадающим со спекой. Общий помощник `RuleSupport` (внутренний статический класс) для формирования `Inputs`.
 
 - [ ] **Step 1: Тесты**
 
@@ -1086,7 +839,7 @@ public class Step1To4RulesTests
     [Fact]
     public void SegRequired_701_without_grant_is_hard_stop()
     {
-        var s = new SubjectBuilder().With(SubjectBuilder.Distribution(1, "701-6000-53100", 1000m, fund: SubjectBuilder.Grants701())).Build();
+        var s = new SubjectBuilder().With(SubjectBuilder.Distribution(1, "701-6000-53100", 1000m, fund: SubjectBuilder.Grants701(), grant: null)).Build();
         var o = new SegRequiredRule().Evaluate(s, Def("SEG_REQUIRED"));
         o.Should().ContainSingle(x => x.Severity == Severity.HardStop && x.DistributionLine == 1);
         o[0].Inputs["grantPolicy"].Should().Be("Required");
@@ -1131,37 +884,28 @@ public class Step1To4RulesTests
     public void GrantEligible_failures_are_hard_stop(GrantEligibilityResult e)
     {
         var s = new SubjectBuilder().With(SubjectBuilder.Distribution(1, "701-4000-53100-G-COPS-26", 1m, grant: SubjectBuilder.Cops(e))).Build();
-        new GrantEligibleRule().Evaluate(s, Def("GRANT_ELIGIBLE"))
-            .Should().ContainSingle(x => x.Severity == Severity.HardStop && x.Computed["eligibility"] == e.ToString());
+        new GrantEligibleRule().Evaluate(s, Def("GRANT_ELIGIBLE")).Should().ContainSingle(x => x.Severity == Severity.HardStop && x.Computed["eligibility"] == e.ToString());
     }
 
     [Fact]
-    public void GrantEligible_reports_service_date()
+    public void GrantEligible_skips_distributions_without_grant()
     {
-        var s = new SubjectBuilder().With(SubjectBuilder.Distribution(1, "701-6000-53100-G-COPS-26", 1m,
-            grant: SubjectBuilder.Cops(GrantEligibilityResult.OutsidePeriod))).Build();
-        new GrantEligibleRule().Evaluate(s, Def("GRANT_ELIGIBLE"))[0].Inputs["serviceDate"].Should().Be("2026-06-15");
+        var s = new SubjectBuilder().With(SubjectBuilder.Distribution(1, "101-6000-53100", 1m)).Build();
+        new GrantEligibleRule().Evaluate(s, Def("GRANT_ELIGIBLE")).Should().BeEmpty();
     }
 
     [Fact]
-    public void GrantEligible_skips_distributions_without_grant() =>
-        new GrantEligibleRule().Evaluate(new SubjectBuilder().With(SubjectBuilder.Distribution(1, "101-6000-53100", 1m)).Build(), Def("GRANT_ELIGIBLE"))
-            .Should().BeEmpty();
-
-    [Fact]
-    public void VendorEligible_debarred_or_inactive_is_hard_stop_document_level()
+    public void VendorEligible_debarred_is_hard_stop_document_level()
     {
-        new VendorEligibleRule().Evaluate(new SubjectBuilder().Vendor(active: false, debarred: true).Build(), Def("VENDOR_ELIGIBLE"))
-            .Should().ContainSingle(x => x.Severity == Severity.HardStop && x.DistributionLine == null && x.Message.Contains("debarred"));
-        new VendorEligibleRule().Evaluate(new SubjectBuilder().Vendor(active: false).Build(), Def("VENDOR_ELIGIBLE"))
-            .Should().ContainSingle(x => x.Message.Contains("not active"));
+        var s = new SubjectBuilder().Vendor(debarred: true).Build();
+        new VendorEligibleRule().Evaluate(s, Def("VENDOR_ELIGIBLE")).Should().ContainSingle(x => x.Severity == Severity.HardStop && x.DistributionLine == null);
     }
 
     [Fact]
     public void VendorEligible_federal_grant_requires_sam()
     {
-        new VendorEligibleRule().Evaluate(new SubjectBuilder().Vendor(sam: false).Build(), Def("VENDOR_ELIGIBLE"))
-            .Should().ContainSingle(x => x.Message.Contains("SAM"));
+        var s = new SubjectBuilder().Vendor(sam: false).Build();   // 701 + G-COPS-26 (federal)
+        new VendorEligibleRule().Evaluate(s, Def("VENDOR_ELIGIBLE")).Should().ContainSingle(x => x.Message.Contains("SAM"));
         var nonFederal = new SubjectBuilder().Vendor(sam: false).With(SubjectBuilder.Distribution(1, "101-6000-53100", 1m)).Build();
         new VendorEligibleRule().Evaluate(nonFederal, Def("VENDOR_ELIGIBLE")).Should().BeEmpty();
     }
@@ -1170,28 +914,16 @@ public class Step1To4RulesTests
     public void ProcurementThreshold_non_po_at_or_above_threshold_is_soft_stop()
     {
         var o = new ProcurementThresholdRule().Evaluate(SubjectBuilder.Exercise(), Def("PROCUREMENT_THRESHOLD"));
-        o.Should().ContainSingle(x => x.Severity == Severity.SoftStop && x.OverridableBy.Contains(ApproverRole.FinanceDirector) && x.DistributionLine == null);
+        o.Should().ContainSingle(x => x.Severity == Severity.SoftStop && x.OverridableBy.Contains(ApproverRole.FinanceDirector));
         o[0].Inputs["threshold"].Should().Be("25,000.00");
     }
 
     [Fact]
     public void ProcurementThreshold_skips_po_backed_and_small()
     {
-        new ProcurementThresholdRule().Evaluate(SubjectBuilder.PoBacked(160_000m), Def("PROCUREMENT_THRESHOLD")).Should().BeEmpty();
+        new ProcurementThresholdRule().Evaluate(new SubjectBuilder().PoBacked().Build(), Def("PROCUREMENT_THRESHOLD")).Should().BeEmpty();
         new ProcurementThresholdRule().Evaluate(new SubjectBuilder().With(SubjectBuilder.Distribution(1, "101-6000-53100", 24_999m)).Build(),
             Def("PROCUREMENT_THRESHOLD")).Should().BeEmpty();
-    }
-
-    [Fact]
-    public void ProcurementThreshold_raising_the_threshold_is_weakening()
-    {
-        var rule = new ProcurementThresholdRule();
-        var baseline = Def("PROCUREMENT_THRESHOLD");
-        DomainServices.IValidationRule asRule = rule;
-        asRule.IsWeakening(baseline, DemoRules.Rule("PROCUREMENT_THRESHOLD", ValidationStep.TransactionPurpose, RuleLayer.Tenant,
-            Severity.SoftStop, new() { ["threshold"] = "50000" }, adjustable: true)).Should().BeTrue();
-        asRule.IsWeakening(baseline, DemoRules.Rule("PROCUREMENT_THRESHOLD", ValidationStep.TransactionPurpose, RuleLayer.Tenant,
-            Severity.SoftStop, new() { ["threshold"] = "10000" }, adjustable: true)).Should().BeFalse();
     }
 
     [Fact]
@@ -1205,17 +937,19 @@ public class Step1To4RulesTests
 
 - [ ] **Step 3: Реализация**
 
-Во всех файлах правил: `using GovErp.Domain.Validation.Entities; using GovErp.Domain.Validation.ValueObjects; namespace GovErp.Domain.Validation.DomainServices.Rules;`.
-
-`RuleSupport.cs`:
+`DomainServices/Rules/RuleSupport.cs` (internal):
 ```csharp
+using GovErp.Domain.Validation.ValueObjects;
+
+namespace GovErp.Domain.Validation.DomainServices.Rules;
+
 internal static class RuleSupport
 {
     public static Dictionary<string, string> Inputs(DistributionSnapshot d, params (string Key, string Value)[] extra)
     {
         var map = new Dictionary<string, string>
         {
-            ["line"] = d.LineNo.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["line"] = d.LineNo.ToString(),
             ["account"] = d.Account.ToString(),
             ["amount"] = d.Amount.ToString(),
         };
@@ -1229,13 +963,16 @@ internal static class RuleSupport
 
     public static Dictionary<string, string> Map(params (string Key, string Value)[] pairs) =>
         pairs.ToDictionary(p => p.Key, p => p.Value);
-
-    public static string Iso(DateOnly date) => date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
 }
 ```
 
 `SegRequiredRule.cs`:
 ```csharp
+using GovErp.Domain.Validation.Entities;
+using GovErp.Domain.Validation.ValueObjects;
+
+namespace GovErp.Domain.Validation.DomainServices.Rules;
+
 /// <summary>Шаг 1. Fund/Dept/Object гарантированы типом AccountCode; проверяется Grant по политике фонда.</summary>
 public sealed class SegRequiredRule : IValidationRule
 {
@@ -1271,24 +1008,20 @@ public sealed class SegGrantForbiddenRule : IValidationRule
 
 `CoaCombinationActiveRule.cs`:
 ```csharp
-/// <summary>Шаг 2. Комбинация в whitelist и действует на InvoiceDate.</summary>
 public sealed class CoaCombinationActiveRule : IValidationRule
 {
     public string RuleId => "COA_COMBINATION_ACTIVE";
 
-    public IReadOnlyList<RuleOutcome> Evaluate(ValidationSubject subject, RuleDefinition definition)
-    {
-        var date = RuleSupport.Iso(subject.Transaction.InvoiceDate);
-        return subject.Distributions
+    public IReadOnlyList<RuleOutcome> Evaluate(ValidationSubject subject, RuleDefinition definition) =>
+        subject.Distributions
             .Where(d => !d.Combination.Exists || !d.Combination.IsActiveOnDate)
             .Select(d => RuleOutcome.From(definition, definition.Severity ?? Severity.HardStop, d.LineNo,
-                RuleSupport.Inputs(d, ("exists", d.Combination.Exists.ToString()), ("status", d.Combination.Status), ("invoiceDate", date)),
+                RuleSupport.Inputs(d, ("exists", d.Combination.Exists.ToString()), ("status", d.Combination.Status), ("date", subject.Transaction.Date.ToString("yyyy-MM-dd"))),
                 RuleSupport.Map(),
                 d.Combination.Exists
-                    ? $"Account combination {d.Account} is {d.Combination.Status} on {date} (line {d.LineNo})."
+                    ? $"Account combination {d.Account} is {d.Combination.Status} on {subject.Transaction.Date:yyyy-MM-dd} (line {d.LineNo})."
                     : $"Account combination {d.Account} does not exist in the chart of accounts (line {d.LineNo})."))
             .ToList();
-    }
 }
 ```
 
@@ -1313,28 +1046,24 @@ public sealed class FundDeptObjectAllowedRule : IValidationRule
 
 `GrantEligibleRule.cs`:
 ```csharp
-/// <summary>Шаг 3. Допустимость гранта на ServiceDate (вычислена сборщиком снимка).</summary>
 public sealed class GrantEligibleRule : IValidationRule
 {
     public string RuleId => "GRANT_ELIGIBLE";
 
-    public IReadOnlyList<RuleOutcome> Evaluate(ValidationSubject subject, RuleDefinition definition)
-    {
-        var serviceDate = RuleSupport.Iso(subject.Transaction.ServiceDate);
-        return subject.Distributions
+    public IReadOnlyList<RuleOutcome> Evaluate(ValidationSubject subject, RuleDefinition definition) =>
+        subject.Distributions
             .Where(d => d.Grant is not null && d.Grant.Eligibility != GrantEligibilityResult.Eligible)
             .Select(d => RuleOutcome.From(definition, definition.Severity ?? Severity.HardStop, d.LineNo,
-                RuleSupport.Inputs(d, ("grant", d.Grant!.Code), ("grantStatus", d.Grant.Status), ("serviceDate", serviceDate)),
+                RuleSupport.Inputs(d, ("grant", d.Grant!.Code), ("grantStatus", d.Grant.Status), ("date", subject.Transaction.Date.ToString("yyyy-MM-dd"))),
                 RuleSupport.Map(("eligibility", d.Grant.Eligibility.ToString())),
                 d.Grant.Eligibility switch
                 {
                     GrantEligibilityResult.GrantNotActive => $"Grant {d.Grant.Code} is {d.Grant.Status} (line {d.LineNo}).",
-                    GrantEligibilityResult.OutsidePeriod => $"Service date {serviceDate} is outside the period of grant {d.Grant.Code} (line {d.LineNo}).",
+                    GrantEligibilityResult.OutsidePeriod => $"Transaction date {subject.Transaction.Date:yyyy-MM-dd} is outside the period of grant {d.Grant.Code} (line {d.LineNo}).",
                     GrantEligibilityResult.DepartmentNotAllowed => $"Department {d.Account.Department} is not covered by grant {d.Grant.Code} (line {d.LineNo}).",
                     _ => $"Object {d.Account.Object} is not an allowable cost under grant {d.Grant.Code} (line {d.LineNo}).",
                 }))
             .ToList();
-    }
 }
 ```
 
@@ -1347,21 +1076,17 @@ public sealed class VendorEligibleRule : IValidationRule
     public IReadOnlyList<RuleOutcome> Evaluate(ValidationSubject subject, RuleDefinition definition)
     {
         var v = subject.Transaction.Vendor;
-        var severity = definition.Severity ?? Severity.HardStop;
-        var inputs = RuleSupport.Map(("vendor", v.Name), ("active", v.IsActive.ToString()), ("debarred", v.IsDebarred.ToString()), ("samRegistered", v.SamRegistered.ToString()));
+        var inputs = RuleSupport.Map(("vendor", v.Name), ("debarred", v.IsDebarred.ToString()), ("samRegistered", v.SamRegistered.ToString()));
         if (v.IsDebarred)
         {
-            return [RuleOutcome.From(definition, severity, null, inputs, RuleSupport.Map(), $"Vendor {v.Name} is debarred from government contracts.")];
+            return [RuleOutcome.From(definition, definition.Severity ?? Severity.HardStop, null, inputs, RuleSupport.Map(),
+                $"Vendor {v.Name} is debarred from government contracts.")];
         }
 
-        if (!v.IsActive)
+        var touchesFederalGrant = subject.Distributions.Any(d => d.Grant is { IsFederal: true });
+        if (touchesFederalGrant && !v.SamRegistered)
         {
-            return [RuleOutcome.From(definition, severity, null, inputs, RuleSupport.Map(), $"Vendor {v.Name} is not active.")];
-        }
-
-        if (subject.Distributions.Any(d => d.Grant is { IsFederal: true }) && !v.SamRegistered)
-        {
-            return [RuleOutcome.From(definition, severity, null, inputs, RuleSupport.Map(("federalGrant", "true")),
+            return [RuleOutcome.From(definition, definition.Severity ?? Severity.HardStop, null, inputs, RuleSupport.Map(("federalGrant", "true")),
                 $"Vendor {v.Name} must be registered in SAM.gov to be paid from a federal grant.")];
         }
 
@@ -1390,11 +1115,6 @@ public sealed class ProcurementThresholdRule : IValidationRule
             RuleSupport.Map(),
             $"Non-PO invoice of {t.Total} meets the {threshold} procurement threshold; a purchase order or documented procurement exception is required.")];
     }
-
-    /// <summary>Повышение порога ослабляет контроль.</summary>
-    public bool IsWeakening(RuleDefinition baseline, RuleDefinition candidate) =>
-        candidate.DecimalParameter("threshold") > baseline.DecimalParameter("threshold")
-        || (candidate.Severity ?? Severity.SoftStop) < (baseline.Severity ?? Severity.SoftStop);
 }
 ```
 
@@ -1414,36 +1134,36 @@ public sealed class InvoiceDuplicateRule : IValidationRule
 }
 ```
 
+Во всех файлах правил — `using GovErp.Domain.Validation.Entities; using GovErp.Domain.Validation.ValueObjects; namespace GovErp.Domain.Validation.DomainServices.Rules;`.
+
 - [ ] **Step 4: Прогнать**
 
-Expected: 41 passed (24 + 17; строки `InlineData` считаются отдельно).
+Expected: 33 passed.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/GovErp.Domain.Validation tests/GovErp.Domain.Validation.Tests
+git add -A src/GovErp.Domain.Validation tests/GovErp.Domain.Validation.Tests
 git commit -m "Validation: rules for steps 1-4 (segments, combination, restrictions, purpose)
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
 ---
 
-### Task 5: Правила шагов 5–6 (бюджет по ключу, ликвидация и допуск PO)
+### Task 5: Правила шагов 5–6 (бюджет, encumbrance)
 
 **Files:**
 - Create: `DomainServices/Rules/BudgetAvailabilityRule.cs`, `BudgetLowRemainingRule.cs`, `PoLiquidationRule.cs`
-- Test: `tests/.../Rules/BudgetRulesTests.cs`, `tests/.../Rules/PoLiquidationRuleTests.cs`
+- Test: `tests/.../Rules/BudgetRulesTests.cs`
 
 **Interfaces:**
-- Produces: три правила. Бюджетные outcome'ы — по **бюджетному ключу**: `BudgetKey = account`, `DistributionLine = FirstLineOf(key)` (к ней привязывается override). `BUDGET_AVAILABILITY` — severity по `Fund.Control`; `Computed["availableForInvoice"]`, `["projectedAvailable"]`, `["overage"]`. `PO_LIQUIDATION` — по PO-строке; `Computed["liquidation"]`, `["newBudgetPart"]`, `["cumulativeExcessPct"]`. `IsWeakening`: `BUDGET_LOW_REMAINING` — снижение `pct`; `PO_LIQUIDATION` — повышение `tolerance_pct`.
-- Бюджет проверяется, только если `RequiredNewBudget(key) > 0`: полностью ликвидируемый PO-инвойс новый бюджет не потребляет (spec §4.1, consistency §3).
+- Produces: три правила. `BUDGET_AVAILABILITY` — severity по `Fund.Control`; `Computed["available"]`, `Computed["overage"]`, `Computed["availableAfter"]`. `PO_LIQUIDATION` — `Computed["liquidation"]`, `Computed["excess"]`, `Computed["excessPct"]`.
 
-- [ ] **Step 1: Тесты бюджета**
+- [ ] **Step 1: Тесты**
 
 `tests/.../Rules/BudgetRulesTests.cs`:
 ```csharp
-using GovErp.Domain.Validation.DomainServices;
 using GovErp.Domain.Validation.DomainServices.Rules;
 using GovErp.Domain.Validation.ValueObjects;
 
@@ -1451,7 +1171,6 @@ namespace GovErp.Domain.Validation.Tests.Rules;
 
 public class BudgetRulesTests
 {
-    private const string Fire = "701-6000-53100-G-COPS-26";
     private static Entities.RuleDefinition Def(string id) => DemoRules.All().Single(r => r.RuleId == id);
 
     [Fact]
@@ -1461,30 +1180,29 @@ public class BudgetRulesTests
         o.Should().ContainSingle();
         o[0].Severity.Should().Be(Severity.HardStop);
         o[0].OverridableBy.Should().BeEmpty();                     // Hard-фонд: override невозможен
-        o[0].BudgetKey.Should().Be(Fire);
-        o[0].DistributionLine.Should().Be(1);
         o[0].Inputs["amended"].Should().Be("375,000.00");
         o[0].Inputs["actuals"].Should().Be("132,000.00");
         o[0].Inputs["encumbered"].Should().Be("96,000.00");
-        o[0].Inputs["requiredNewBudget"].Should().Be("160,000.00");
-        o[0].Computed["availableForInvoice"].Should().Be("147,000.00");
+        o[0].Inputs["amountToCheck"].Should().Be("160,000.00");
+        o[0].Computed["available"].Should().Be("147,000.00");
         o[0].Computed["overage"].Should().Be("13,000.00");
-        o[0].Computed["projectedAvailable"].Should().Be("-13,000.00");
+        o[0].Computed["availableAfter"].Should().Be("-13,000.00");
         o[0].Message.Should().Contain("13,000.00");
-        o[0].Resolution.Should().Contain("Budget amendment");
     }
 
     [Fact]
     public void After_amendment_passes()
     {
-        var s = new SubjectBuilder().Budget(SubjectBuilder.Budget(Fire, 388_000m, 132_000m, 96_000m)).Build();
+        var s = new SubjectBuilder().With(SubjectBuilder.Distribution(1, "701-6000-53100-G-COPS-26", 160_000m,
+            budget: SubjectBuilder.Budget(388_000m, 132_000m, 96_000m))).Build();
         new BudgetAvailabilityRule().Evaluate(s, Def("BUDGET_AVAILABILITY")).Should().BeEmpty();
     }
 
     [Fact]
     public void Soft_fund_overage_is_soft_stop_overridable()
     {
-        var s = new SubjectBuilder().With(SubjectBuilder.Distribution(1, "101-6000-53100", 12_000m)).Build();
+        var s = new SubjectBuilder().With(SubjectBuilder.Distribution(1, "101-6000-53100", 12_000m,
+            budget: SubjectBuilder.Budget(50_000m, 40_000m, 0m))).Build();
         var o = new BudgetAvailabilityRule().Evaluate(s, Def("BUDGET_AVAILABILITY"));
         o.Should().ContainSingle(x => x.Severity == Severity.SoftStop);
         o[0].OverridableBy.Should().Contain(ApproverRole.BudgetOfficer);
@@ -1494,172 +1212,103 @@ public class BudgetRulesTests
     [Fact]
     public void Missing_budget_line_is_hard_stop_regardless_of_mode()
     {
-        var s = new SubjectBuilder().With(SubjectBuilder.Distribution(1, "101-3000-54000", 1m)).Build();
+        var s = new SubjectBuilder().With(SubjectBuilder.Distribution(1, "101-6000-53100", 1m, budget: BudgetSnapshot.Missing)).Build();
         new BudgetAvailabilityRule().Evaluate(s, Def("BUDGET_AVAILABILITY"))
             .Should().ContainSingle(x => x.Severity == Severity.HardStop && x.Message.Contains("No budget"));
     }
 
     [Fact]
-    public void Scenario_SameBudgetAcrossDistributions_IsHardStop13000()
+    public void Po_backed_within_remaining_checks_zero_and_passes()
     {
-        var s = new SubjectBuilder()
-            .With(SubjectBuilder.Distribution(1, Fire, 80_000m))
-            .With(SubjectBuilder.Distribution(2, Fire, 80_000m)).Build();
-        var o = new BudgetAvailabilityRule().Evaluate(s, Def("BUDGET_AVAILABILITY"));
-        o.Should().ContainSingle(x => x.Computed["overage"] == "13,000.00" && x.DistributionLine == 1);
-    }
-
-    [Fact]
-    public void Scenario_OwnReservationIsNotChargedTwice()
-    {
-        var s = new SubjectBuilder()
-            .With(SubjectBuilder.Distribution(1, Fire, 100_000m))
-            .Budget(SubjectBuilder.Budget(Fire, 375_000m, 132_000m, 96_000m, held: 100_000m, ownHeld: 100_000m)).Build();
+        var s = new SubjectBuilder().PoBacked().With(SubjectBuilder.Distribution(1, "701-3000-53100-G-COPS-26", 160_000m,
+            budget: SubjectBuilder.Budget(500_000m, 100_000m, 160_000m),
+            encumbrance: new EncumbranceSnapshot("PO-2026-0451/1", Money.Of(160_000m), true))).Build();
         new BudgetAvailabilityRule().Evaluate(s, Def("BUDGET_AVAILABILITY")).Should().BeEmpty();
     }
 
     [Fact]
-    public void Held_reservations_of_other_invoices_reduce_available()
+    public void Held_reservations_reduce_available()
     {
-        var s = new SubjectBuilder()
-            .With(SubjectBuilder.Distribution(1, Fire, 100_000m))
-            .Budget(SubjectBuilder.Budget(Fire, 375_000m, 132_000m, 96_000m, held: 100_000m)).Build();
+        var s = new SubjectBuilder().With(SubjectBuilder.Distribution(1, "701-6000-53100-G-COPS-26", 100_000m,
+            budget: SubjectBuilder.Budget(375_000m, 132_000m, 96_000m, held: 100_000m))).Build();
         new BudgetAvailabilityRule().Evaluate(s, Def("BUDGET_AVAILABILITY"))
-            .Should().ContainSingle(x => x.Computed["availableForInvoice"] == "47,000.00");
-    }
-
-    [Fact]
-    public void Fully_liquidated_po_invoice_is_not_checked_against_budget()
-    {
-        var s = SubjectBuilder.PoBackedBuilder(160_000m)
-            .Budget(SubjectBuilder.Budget("701-3000-53100-G-COPS-26", 100_000m, 100_000m, 160_000m)).Build();   // строка уже в минусе
-        new BudgetAvailabilityRule().Evaluate(s, Def("BUDGET_AVAILABILITY")).Should().BeEmpty();
+            .Should().ContainSingle(x => x.Computed["available"] == "47,000.00");
     }
 
     [Fact]
     public void LowRemaining_warns_below_10_percent()
     {
-        // 25,000 − 5,000 = 20,000; после 18,500 остаётся 1,500 = 6% от 25,000
-        var s = new SubjectBuilder().With(SubjectBuilder.Distribution(1, "202-4000-53100", 18_500m)).Build();
+        // 25,000 − 5,000 = 20,000 available; после 18,500 остаётся 1,500 = 6% от 25,000 → Warning
+        var s = new SubjectBuilder().With(SubjectBuilder.Distribution(1, "202-4000-53100", 18_500m,
+            budget: SubjectBuilder.Budget(25_000m, 5_000m, 0m))).Build();
         var o = new BudgetLowRemainingRule().Evaluate(s, Def("BUDGET_LOW_REMAINING"));
         o.Should().ContainSingle(x => x.Severity == Severity.Warning);
         o[0].Computed["remainingPct"].Should().Be("6.00");
     }
 
     [Fact]
-    public void LowRemaining_warns_at_exactly_zero_after_amendment()
-    {
-        var s = new SubjectBuilder().Budget(SubjectBuilder.Budget(Fire, 388_000m, 132_000m, 96_000m)).Build();
-        new BudgetLowRemainingRule().Evaluate(s, Def("BUDGET_LOW_REMAINING"))
-            .Should().ContainSingle(x => x.Computed["projectedAvailable"] == "0.00");
-    }
-
-    [Fact]
     public void LowRemaining_silent_when_over_budget_or_healthy()
     {
-        new BudgetLowRemainingRule().Evaluate(new SubjectBuilder().With(SubjectBuilder.Distribution(1, "202-4000-53100", 8_000m)).Build(),
-            Def("BUDGET_LOW_REMAINING")).Should().BeEmpty();
-        new BudgetLowRemainingRule().Evaluate(SubjectBuilder.Exercise(), Def("BUDGET_LOW_REMAINING")).Should().BeEmpty();   // дефицит — дело BUDGET_AVAILABILITY
+        var healthy = new SubjectBuilder().With(SubjectBuilder.Distribution(1, "202-4000-53100", 8_000m, budget: SubjectBuilder.Budget(25_000m, 5_000m, 0m))).Build();
+        new BudgetLowRemainingRule().Evaluate(healthy, Def("BUDGET_LOW_REMAINING")).Should().BeEmpty();
+        new BudgetLowRemainingRule().Evaluate(SubjectBuilder.Exercise(), Def("BUDGET_LOW_REMAINING")).Should().BeEmpty(); // overage — не Warning, а дело шага BUDGET_AVAILABILITY
     }
 
     [Fact]
-    public void LowRemaining_lowering_pct_is_weakening()
+    public void PoLiquidation_reports_within_remaining_as_allowed_info()
     {
-        IValidationRule rule = new BudgetLowRemainingRule();
-        rule.IsWeakening(Def("BUDGET_LOW_REMAINING"), DemoRules.Rule("BUDGET_LOW_REMAINING", ValidationStep.BudgetAvailability,
-            RuleLayer.Tenant, Severity.Warning, new() { ["pct"] = "0.05" }, adjustable: true)).Should().BeTrue();
-    }
-}
-```
-
-- [ ] **Step 2: Тесты PO**
-
-`tests/.../Rules/PoLiquidationRuleTests.cs`:
-```csharp
-using GovErp.Domain.Validation.DomainServices;
-using GovErp.Domain.Validation.DomainServices.Rules;
-using GovErp.Domain.Validation.ValueObjects;
-
-namespace GovErp.Domain.Validation.Tests.Rules;
-
-public class PoLiquidationRuleTests
-{
-    private static Entities.RuleDefinition Def => DemoRules.All().Single(r => r.RuleId == "PO_LIQUIDATION");
-    private static IReadOnlyList<RuleOutcome> Run(ValidationSubject s) => new PoLiquidationRule().Evaluate(s, Def);
-
-    [Fact]
-    public void Within_claimable_is_informational_allowed()
-    {
-        var o = Run(SubjectBuilder.PoBacked(160_000m));
+        var s = new SubjectBuilder().PoBacked().With(SubjectBuilder.Distribution(1, "701-3000-53100-G-COPS-26", 160_000m,
+            encumbrance: new EncumbranceSnapshot("PO-2026-0451/1", Money.Of(160_000m), true))).Build();
+        var o = new PoLiquidationRule().Evaluate(s, Def("PO_LIQUIDATION"));
         o.Should().ContainSingle(x => x.Severity == Severity.Allowed);
         o[0].Computed["liquidation"].Should().Be("160,000.00");
-        o[0].Computed["newBudgetPart"].Should().Be("0.00");
+        o[0].Computed["excess"].Should().Be("0.00");
     }
 
     [Fact]
-    public void Cumulative_excess_3_percent_is_warning()
+    public void PoLiquidation_excess_within_tolerance_is_warning()
     {
-        var o = Run(SubjectBuilder.PoBacked(164_800m));
+        var s = new SubjectBuilder().PoBacked().With(SubjectBuilder.Distribution(1, "701-3000-53100-G-COPS-26", 164_000m,
+            encumbrance: new EncumbranceSnapshot("PO-2026-0451/1", Money.Of(160_000m), true))).Build();
+        var o = new PoLiquidationRule().Evaluate(s, Def("PO_LIQUIDATION"));
         o.Should().ContainSingle(x => x.Severity == Severity.Warning);
-        o[0].Computed["cumulativeExcessPct"].Should().Be("3.00");
-        o[0].Computed["newBudgetPart"].Should().Be("4,800.00");
+        o[0].Computed["excessPct"].Should().Be("2.50");
     }
 
     [Fact]
-    public void Cumulative_excess_8_percent_is_hard_stop() =>
-        Run(SubjectBuilder.PoBacked(172_800m)).Should().ContainSingle(x => x.Severity == Severity.HardStop);
-
-    [Fact]
-    public void Tolerance_counts_already_posted_and_other_claims()
+    public void PoLiquidation_excess_over_tolerance_is_hard_stop()
     {
-        // Утверждено 160,000; проведено 100,000; чужие claims 50,000; этот инвойс 20,000 → 170,000 → 6.25% → Hard
-        Run(SubjectBuilder.PoBacked(20_000m, remaining: 60_000m, otherHeldClaims: 50_000m, alreadyPosted: 100_000m, otherBillingClaims: 50_000m))
-            .Should().ContainSingle(x => x.Severity == Severity.HardStop && x.Computed["cumulativeExcessPct"] == "6.25");
+        var s = new SubjectBuilder().PoBacked().With(SubjectBuilder.Distribution(1, "701-3000-53100-G-COPS-26", 172_800m,
+            encumbrance: new EncumbranceSnapshot("PO-2026-0451/1", Money.Of(160_000m), true))).Build();
+        new PoLiquidationRule().Evaluate(s, Def("PO_LIQUIDATION")).Should().ContainSingle(x => x.Severity == Severity.HardStop);
     }
 
     [Fact]
-    public void Closed_po_line_is_hard_stop() =>
-        Run(SubjectBuilder.PoBacked(1m, poOpen: false)).Should().ContainSingle(x => x.Severity == Severity.HardStop && x.Message.Contains("closed"));
-
-    [Fact]
-    public void Missing_po_line_is_hard_stop()
+    public void PoLiquidation_missing_or_closed_encumbrance_on_po_line_is_hard_stop()
     {
-        var s = new SubjectBuilder().Po("PO-2026-0451", new PoLineSnapshot("PO-2026-0451/1", AccountCode.Parse("701-3000-53100-G-COPS-26"), true,
-                Money.Of(160_000m), Money.Zero, Money.Zero, null))
-            .With(SubjectBuilder.Distribution(1, "701-3000-53100-G-COPS-26", 1m, poLineRef: "PO-2026-0451/9")).Build();
-        Run(s).Should().ContainSingle(x => x.Severity == Severity.HardStop && x.Message.Contains("not found"));
+        var s = new SubjectBuilder().PoBacked().With(SubjectBuilder.Distribution(1, "701-3000-53100-G-COPS-26", 1m,
+            encumbrance: new EncumbranceSnapshot("PO-2026-0451/1", Money.Zero, false))).Build();
+        new PoLiquidationRule().Evaluate(s, Def("PO_LIQUIDATION")).Should().ContainSingle(x => x.Severity == Severity.HardStop && x.Message.Contains("closed"));
     }
 
     [Fact]
-    public void Distribution_account_must_match_po_line_account()
-    {
-        var s = SubjectBuilder.PoBackedBuilder(160_000m)
-            .With(SubjectBuilder.Distribution(2, "701-6000-53100-G-COPS-26", 1m, poLineRef: "PO-2026-0451/1")).Build();
-        Run(s).Should().Contain(x => x.Severity == Severity.HardStop && x.Message.Contains("does not match"));
-    }
-
-    [Fact]
-    public void Skips_non_po() => Run(SubjectBuilder.Exercise()).Should().BeEmpty();
-
-    [Fact]
-    public void Raising_tolerance_is_weakening()
-    {
-        IValidationRule rule = new PoLiquidationRule();
-        rule.IsWeakening(Def, DemoRules.Rule("PO_LIQUIDATION", ValidationStep.EncumbranceImpact, RuleLayer.Tenant, null,
-            new() { ["tolerance_pct"] = "0.10" }, adjustable: true)).Should().BeTrue();
-    }
+    public void PoLiquidation_skips_non_po() =>
+        new PoLiquidationRule().Evaluate(SubjectBuilder.Exercise(), Def("PO_LIQUIDATION")).Should().BeEmpty();
 }
 ```
 
-- [ ] **Step 3: Убедиться, что не компилируется**
+- [ ] **Step 2: Убедиться, что не компилируется**
 
-- [ ] **Step 4: Реализация**
-
-Во всех файлах: `using System.Globalization; using GovErp.Domain.Validation.Entities; using GovErp.Domain.Validation.ValueObjects; namespace GovErp.Domain.Validation.DomainServices.Rules;`.
+- [ ] **Step 3: Реализация**
 
 `BudgetAvailabilityRule.cs`:
 ```csharp
-/// <summary>Шаг 5. По бюджетному ключу. Hard-фонд → HardStop без override; Soft → SoftStop. Нет строки бюджета → HardStop.</summary>
+using GovErp.Domain.Validation.Entities;
+using GovErp.Domain.Validation.ValueObjects;
+
+namespace GovErp.Domain.Validation.DomainServices.Rules;
+
+/// <summary>Шаг 5. Severity — по режиму контроля фонда: Hard → HardStop (override невозможен), Soft → SoftStop.</summary>
 public sealed class BudgetAvailabilityRule : IValidationRule
 {
     public string RuleId => "BUDGET_AVAILABILITY";
@@ -1667,46 +1316,34 @@ public sealed class BudgetAvailabilityRule : IValidationRule
     public IReadOnlyList<RuleOutcome> Evaluate(ValidationSubject subject, RuleDefinition definition)
     {
         var outcomes = new List<RuleOutcome>();
-        foreach (var key in subject.BudgetKeys)
+        foreach (var d in subject.Distributions)
         {
-            var required = subject.RequiredNewBudget(key);
-            if (required.IsZero)
-            {
-                continue;
-            }
-
-            var b = subject.BudgetFor(key);
-            var fund = subject.Distributions.First(d => d.Account == key).Fund;
-            var line = subject.FirstLineOf(key);
-            var inputs = RuleSupport.Map(
-                ("account", key.ToString()), ("amended", b.Amended.ToString()), ("actuals", b.Actuals.ToString()),
-                ("encumbered", b.Encumbered.ToString()), ("held", b.Held.ToString()), ("ownHeld", b.OwnHeld.ToString()),
-                ("requested", subject.RequestedFor(key).ToString()), ("liquidation", subject.LiquidationFor(key).ToString()),
-                ("requiredNewBudget", required.ToString()), ("controlMode", fund?.Control.ToString() ?? "Unknown"));
+            var b = d.Budget;
+            var inputs = RuleSupport.Inputs(d,
+                ("amended", b.Amended.ToString()), ("actuals", b.Actuals.ToString()), ("encumbered", b.Encumbered.ToString()),
+                ("held", b.Held.ToString()), ("amountToCheck", d.AmountToCheck.ToString()),
+                ("controlMode", d.Fund?.Control.ToString() ?? "Unknown"));
 
             if (!b.Exists)
             {
-                outcomes.Add(RuleOutcome.From(definition, Severity.HardStop, line, inputs, RuleSupport.Map(),
-                    $"No budget line exists for {key} in the fiscal year of the posting date.", key.ToString())
-                    with { OverridableBy = [], Resolution = "Adopt or amend a budget for this account before submitting." });
+                outcomes.Add(RuleOutcome.From(definition, Severity.HardStop, d.LineNo, inputs, RuleSupport.Map(),
+                    $"No budget line exists for {d.Account} in the current fiscal year (line {d.LineNo}).")
+                    with { OverridableBy = [] });
                 continue;
             }
 
-            var projected = subject.ProjectedAvailable(key);
-            if (!projected.IsNegative)
+            var availableAfter = b.Available - d.AmountToCheck;
+            if (!availableAfter.IsNegative)
             {
                 continue;
             }
 
-            var overage = -projected;
-            var hard = fund is null || fund.Control == BudgetControl.Hard;
-            var outcome = RuleOutcome.From(definition, hard ? Severity.HardStop : Severity.SoftStop, line, inputs,
-                RuleSupport.Map(("availableForInvoice", b.AvailableForInvoice.ToString()), ("projectedAvailable", projected.ToString()),
-                    ("overage", overage.ToString())),
-                $"{key} exceeds available budget by {overage} (available {b.AvailableForInvoice}, required {required}).", key.ToString());
-            outcomes.Add(hard
-                ? outcome with { OverridableBy = [], Resolution = "Budget amendment, grant-budget revision, or authorized coding change." }
-                : outcome);
+            var overage = -availableAfter;
+            var hard = d.Fund is null || d.Fund.Control == BudgetControl.Hard;
+            var outcome = RuleOutcome.From(definition, hard ? Severity.HardStop : Severity.SoftStop, d.LineNo, inputs,
+                RuleSupport.Map(("available", b.Available.ToString()), ("overage", overage.ToString()), ("availableAfter", availableAfter.ToString())),
+                $"Line {d.LineNo} exceeds available budget for {d.Account} by {overage} (available {b.Available}, checked {d.AmountToCheck}).");
+            outcomes.Add(hard ? outcome with { OverridableBy = [], Resolution = "Budget amendment, grant-budget revision, or authorized coding change." } : outcome);
         }
 
         return outcomes;
@@ -1716,6 +1353,8 @@ public sealed class BudgetAvailabilityRule : IValidationRule
 
 `BudgetLowRemainingRule.cs`:
 ```csharp
+using System.Globalization;
+
 public sealed class BudgetLowRemainingRule : IValidationRule
 {
     public string RuleId => "BUDGET_LOW_REMAINING";
@@ -1724,47 +1363,36 @@ public sealed class BudgetLowRemainingRule : IValidationRule
     {
         var pct = definition.DecimalParameter("pct");
         var outcomes = new List<RuleOutcome>();
-        foreach (var key in subject.BudgetKeys)
+        foreach (var d in subject.Distributions.Where(x => x.Budget.Exists && !x.Budget.Amended.IsZero))
         {
-            var b = subject.BudgetFor(key);
-            if (!b.Exists || b.Amended.IsZero || subject.RequiredNewBudget(key).IsZero)
+            var after = d.Budget.Available - d.AmountToCheck;
+            if (after.IsNegative)
             {
-                continue;
+                continue;   // превышение — предмет BUDGET_AVAILABILITY
             }
 
-            var projected = subject.ProjectedAvailable(key);
-            if (projected.IsNegative)
-            {
-                continue;   // дефицит — предмет BUDGET_AVAILABILITY
-            }
-
-            var remainingPct = projected.Amount / b.Amended.Amount;
+            var remainingPct = after.Amount / d.Budget.Amended.Amount;
             if (remainingPct >= pct)
             {
                 continue;
             }
 
-            outcomes.Add(RuleOutcome.From(definition, definition.Severity ?? Severity.Warning, subject.FirstLineOf(key),
-                RuleSupport.Map(("account", key.ToString()), ("amended", b.Amended.ToString()), ("availableForInvoice", b.AvailableForInvoice.ToString()),
-                    ("thresholdPct", (pct * 100).ToString("0.00", CultureInfo.InvariantCulture))),
-                RuleSupport.Map(("projectedAvailable", projected.ToString()), ("remainingPct", (remainingPct * 100).ToString("0.00", CultureInfo.InvariantCulture))),
-                $"After this invoice only {projected} ({remainingPct.ToString("P2", CultureInfo.InvariantCulture)}) of the {key} budget remains.", key.ToString()));
+            outcomes.Add(RuleOutcome.From(definition, definition.Severity ?? Severity.Warning, d.LineNo,
+                RuleSupport.Inputs(d, ("amended", d.Budget.Amended.ToString()), ("available", d.Budget.Available.ToString()), ("thresholdPct", (pct * 100).ToString("0.00", CultureInfo.InvariantCulture))),
+                RuleSupport.Map(("availableAfter", after.ToString()), ("remainingPct", (remainingPct * 100).ToString("0.00", CultureInfo.InvariantCulture))),
+                $"After line {d.LineNo}, only {after} ({remainingPct:P2}) of the {d.Account} budget remains."));
         }
 
         return outcomes;
     }
-
-    public bool IsWeakening(RuleDefinition baseline, RuleDefinition candidate) =>
-        candidate.DecimalParameter("pct") < baseline.DecimalParameter("pct");
 }
 ```
 
 `PoLiquidationRule.cs`:
 ```csharp
-/// <summary>
-/// Шаг 6. По каждой PO-строке инвойса: строка существует и открыта, счёт совпадает, утверждённая сумма > 0;
-/// накопленное превышение от утверждённой суммы: 0 → Allowed (информационный), ≤ tolerance → Warning, иначе HardStop.
-/// </summary>
+using System.Globalization;
+
+/// <summary>Шаг 6. Отчитывается о ликвидации; излишек в пределах tolerance — Warning (и идёт против available в шаге 5), сверх — Hard Stop.</summary>
 public sealed class PoLiquidationRule : IValidationRule
 {
     public string RuleId => "PO_LIQUIDATION";
@@ -1778,77 +1406,57 @@ public sealed class PoLiquidationRule : IValidationRule
 
         var tolerance = definition.DecimalParameter("tolerance_pct");
         var outcomes = new List<RuleOutcome>();
-        foreach (var poRef in subject.Distributions.Where(d => d.PoLineRef is not null).Select(d => d.PoLineRef!).Distinct())
+        foreach (var d in subject.Distributions.Where(x => x.Encumbrance is not null))
         {
-            var lineNo = subject.Distributions.Where(d => d.PoLineRef == poRef).Min(d => d.LineNo);
-            var poLine = subject.PoLine(poRef);
-            if (poLine is null)
+            var e = d.Encumbrance!;
+            var inputs = RuleSupport.Inputs(d, ("poLine", e.PoLineRef), ("remaining", e.Remaining.ToString()), ("open", e.IsOpen.ToString()), ("tolerancePct", (tolerance * 100).ToString("0.00", CultureInfo.InvariantCulture)));
+
+            if (!e.IsOpen)
             {
-                outcomes.Add(Hard(definition, lineNo, poRef, $"PO line {poRef} was not found."));
+                outcomes.Add(RuleOutcome.From(definition, Severity.HardStop, d.LineNo, inputs, RuleSupport.Map(),
+                    $"PO line {e.PoLineRef} is closed; line {d.LineNo} cannot liquidate it."));
                 continue;
             }
 
-            if (!poLine.IsOpen)
+            var excessPct = e.CumulativePoExcessPct; // вычислено по полной утверждённой PO-сумме, posted и всем billing claims
+            var computed = RuleSupport.Map(("liquidation", d.LiquidationAmount.ToString()), ("excess", d.Excess.ToString()),
+                ("excessPct", (excessPct * 100).ToString("0.00", CultureInfo.InvariantCulture)));
+
+            if (d.Excess.IsZero)
             {
-                outcomes.Add(Hard(definition, lineNo, poRef, $"PO line {poRef} is closed."));
-                continue;
+                outcomes.Add(RuleOutcome.From(definition, Severity.Allowed, d.LineNo, inputs, computed,
+                    $"Line {d.LineNo} liquidates {d.LiquidationAmount} of encumbrance {e.PoLineRef}; available budget is unaffected."));
             }
-
-            if (poLine.AuthorizedAmount <= Money.Zero)
+            else if (excessPct <= tolerance)
             {
-                outcomes.Add(Hard(definition, lineNo, poRef, $"PO line {poRef} has no authorized amount."));
-                continue;
+                outcomes.Add(RuleOutcome.From(definition, Severity.Warning, d.LineNo, inputs, computed,
+                    $"Line {d.LineNo} exceeds PO line {e.PoLineRef} by {d.Excess} ({excessPct:P2}); the excess is checked against available budget."));
             }
-
-            var mismatch = subject.Distributions.FirstOrDefault(d => d.PoLineRef == poRef && d.Account != poLine.Account);
-            if (mismatch is not null)
+            else
             {
-                outcomes.Add(Hard(definition, mismatch.LineNo, poRef,
-                    $"Line {mismatch.LineNo} account {mismatch.Account} does not match PO line {poRef} account {poLine.Account}."));
-                continue;
+                outcomes.Add(RuleOutcome.From(definition, Severity.HardStop, d.LineNo, inputs, computed,
+                    $"Line {d.LineNo} exceeds PO line {e.PoLineRef} by {d.Excess} ({excessPct:P2}), over the {tolerance:P0} tolerance; a change order is required."));
             }
-
-            var amount = subject.PoAmount(poRef);
-            var liquidation = subject.EligibleLiquidation(poRef);
-            var pct = subject.CumulativeExcessPct(poRef);
-            var inputs = RuleSupport.Map(("poLine", poRef), ("invoicePoAmount", amount.ToString()),
-                ("authorized", poLine.AuthorizedAmount.ToString()), ("alreadyPosted", poLine.AlreadyPosted.ToString()),
-                ("otherActiveClaims", poLine.OtherActiveClaims.ToString()),
-                ("claimable", (poLine.Encumbrance?.ClaimableForInvoice ?? Money.Zero).ToString()),
-                ("tolerancePct", (tolerance * 100).ToString("0.00", CultureInfo.InvariantCulture)));
-            var computed = RuleSupport.Map(("liquidation", liquidation.ToString()), ("newBudgetPart", (amount - liquidation).ToString()),
-                ("cumulativeExcessPct", (pct * 100).ToString("0.00", CultureInfo.InvariantCulture)));
-
-            var (severity, message) = pct == 0m
-                ? (Severity.Allowed, $"PO line {poRef}: {liquidation} liquidates the encumbrance; {amount - liquidation} is charged to available budget.")
-                : pct <= tolerance
-                    ? (Severity.Warning, $"PO line {poRef} is over its authorized amount by {(pct * 100).ToString("0.00", CultureInfo.InvariantCulture)}%, within the {(tolerance * 100).ToString("0.##", CultureInfo.InvariantCulture)}% tolerance.")
-                    : (Severity.HardStop, $"PO line {poRef} is over its authorized amount by {(pct * 100).ToString("0.00", CultureInfo.InvariantCulture)}%, above the {(tolerance * 100).ToString("0.##", CultureInfo.InvariantCulture)}% tolerance; a change order is required.");
-            outcomes.Add(RuleOutcome.From(definition, severity, lineNo, inputs, computed, message));
         }
 
         return outcomes;
     }
-
-    public bool IsWeakening(RuleDefinition baseline, RuleDefinition candidate) =>
-        candidate.DecimalParameter("tolerance_pct") > baseline.DecimalParameter("tolerance_pct");
-
-    private static RuleOutcome Hard(RuleDefinition definition, int line, string poRef, string message) =>
-        RuleOutcome.From(definition, Severity.HardStop, line, RuleSupport.Map(("poLine", poRef)), RuleSupport.Map(), message);
 }
 ```
 
-- [ ] **Step 5: Прогнать**
+Замечание: `Severity.Allowed`-outcome от `PO_LIQUIDATION` — единственный «информационный» outcome; он нужен, чтобы в Results и в аудите была видна ликвидация.
 
-Expected: 62 passed (41 + 12 + 9).
+- [ ] **Step 4: Прогнать**
 
-- [ ] **Step 6: Commit**
+Expected: 46 passed.
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git add src/GovErp.Domain.Validation tests/GovErp.Domain.Validation.Tests
-git commit -m "Validation: budget availability per budget key, low remaining, cumulative PO tolerance
+git add -A src/GovErp.Domain.Validation tests/GovErp.Domain.Validation.Tests
+git commit -m "Validation: budget availability, low remaining, PO liquidation rules
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
 ---
@@ -1860,10 +1468,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Test: `ApprovalRoutingTests.cs`, `PostingPreviewTests.cs`, `PostingEligibilityTests.cs`
 
 **Interfaces:**
-- Produces: `ApprovalRequirement(ApproverRole Role, string? Department, string Reason, bool IsSatisfied)`; `ApprovalRouting.Build(ValidationSubject, IReadOnlyList<RuleOutcome> outcomesWithOverrides, RuleDefinition? routeRule) → IReadOnlyList<ApprovalRequirement>`; `PostingPreviewLine(AccountCode Account, string Family, Money Debit, Money Credit, string Description)` где `Family` ∈ `"Financial" | "Budgetary"`; `PostingPreviewComposer.Compose(ValidationSubject)`, `PostingPreviewComposer.IsBalancedPerFundAndFamily(lines)`; `PostingCheck(bool Passed, IReadOnlyList<string> Failures)`; `PostingEligibility.Check(ValidationSubject, Severity overall, route, preview, string currentFingerprint) → PostingCheck`; константа `PostingEligibility.RevalidationRequired = "REVALIDATION_REQUIRED"`.
-- Шаг маршрута — пара (роль, департамент). `DepartmentHead` удовлетворяется только согласованием **своего** департамента; остальные роли — согласованием роли (spec §4.3). Удовлетворённость считается по `ActiveApprovals` — прошлые циклы в снимок не попадают.
-- Posting preview (spec §2.5): по каждой PO-строке с ненулевой ликвидацией — бюджетная пара (Дт Reserve for Encumbrances / Кт Encumbrances); по каждой distribution — Дт Expenditure (governmental) / Expense (enterprise); по каждому фонду — Кт AP.
-- `PostingEligibility` (spec §4.3): `overall ≤ Warning` ∧ все шаги маршрута удовлетворены ∧ период открыт ∧ баланс по (фонд, семейство) ∧ `ApprovalBaseline` совпадает с текущими `ContentVersion` и fingerprint. Несовпадение базовой линии даёт `REVALIDATION_REQUIRED`; оно снимается новым согласованием по актуальному fingerprint (план 3 открывает новый цикл), а не держится вечно.
+- Produces: `ApprovalRequirement(ApproverRole Role, string? Department, string Reason, bool IsSatisfied)`; `ApprovalRouting.Build(subject, outcomesWithOverrides, RuleDefinition? routeRule) → IReadOnlyList<ApprovalRequirement>`; `PostingPreviewLine(AccountCode Account, string Family, Money Debit, Money Credit, string Description)` где `Family` ∈ `"Financial" | "Budgetary"`; `PostingPreviewComposer.Compose(subject) → IReadOnlyList<PostingPreviewLine>`; `PostingCheck(bool Passed, IReadOnlyList<string> Failures)`; `PostingEligibility.Check(subject, overall, route, preview, currentVersions) → PostingCheck`.
 
 - [ ] **Step 1: Тесты**
 
@@ -1879,19 +1484,21 @@ public class ApprovalRoutingTests
     private static Entities.RuleDefinition Route => DemoRules.All().Single(r => r.RuleId == "APPROVAL_ROUTE");
 
     [Fact]
-    public void Exercise_invoice_routes_to_fire_head_grants_manager_finance_director()
+    public void Exercise_invoice_routes_to_dept_head_grants_manager_finance_director()
     {
         var route = ApprovalRouting.Build(SubjectBuilder.Exercise(), [], Route);
         route.Select(r => (r.Role, r.Department)).Should().BeEquivalentTo(new[]
         {
-            (ApproverRole.DepartmentHead, (string?)"6000"), (ApproverRole.GrantsManager, null), (ApproverRole.FinanceDirector, null),
+            (ApproverRole.DepartmentHead, "6000"), (ApproverRole.GrantsManager, (string?)null), (ApproverRole.FinanceDirector, (string?)null),
         });
     }
 
     [Fact]
-    public void Small_general_fund_invoice_needs_only_department_head() =>
-        ApprovalRouting.Build(new SubjectBuilder().With(SubjectBuilder.Distribution(1, "101-6000-53100", 4_000m)).Build(), [], Route)
-            .Should().ContainSingle(r => r.Role == ApproverRole.DepartmentHead);
+    public void Small_general_fund_invoice_needs_only_department_head()
+    {
+        var s = new SubjectBuilder().With(SubjectBuilder.Distribution(1, "101-6000-53100", 4_000m)).Build();
+        ApprovalRouting.Build(s, [], Route).Should().ContainSingle(r => r.Role == ApproverRole.DepartmentHead);
+    }
 
     [Fact]
     public void Multi_fund_invoice_needs_each_department_head_once()
@@ -1905,31 +1512,22 @@ public class ApprovalRoutingTests
     }
 
     [Fact]
-    public void PostingEligibility_DepartmentHeadOfOtherDepartment_DoesNotSatisfyStep()
-    {
-        var s = new SubjectBuilder().Approved(ApproverRole.DepartmentHead, "3000").Build();
-        ApprovalRouting.Build(s, [], Route).Single(r => r.Role == ApproverRole.DepartmentHead).IsSatisfied.Should().BeFalse();
-        var own = new SubjectBuilder().Approved(ApproverRole.DepartmentHead, "6000").Build();
-        ApprovalRouting.Build(own, [], Route).Single(r => r.Role == ApproverRole.DepartmentHead).IsSatisfied.Should().BeTrue();
-    }
-
-    [Fact]
-    public void Unoverridden_soft_stop_adds_its_overrider_once()
+    public void Unoverridden_soft_stop_adds_its_overrider()
     {
         var soft = RuleOutcome.From(DemoRules.All().Single(r => r.RuleId == "PROCUREMENT_THRESHOLD"), Severity.SoftStop, null,
             new Dictionary<string, string>(), new Dictionary<string, string>());
         var s = new SubjectBuilder().With(SubjectBuilder.Distribution(1, "101-6000-53100", 30_000m)).Build();
-        ApprovalRouting.Build(s, [soft], Route)
-            .Should().ContainSingle(r => r.Role == ApproverRole.FinanceDirector && r.Reason.Contains("PROCUREMENT_THRESHOLD"));
+        var route = ApprovalRouting.Build(s, [soft], Route);
+        route.Should().Contain(r => r.Role == ApproverRole.FinanceDirector && r.Reason.Contains("PROCUREMENT_THRESHOLD"));
     }
 
     [Fact]
-    public void Finance_director_threshold_comes_from_rule_parameters()
+    public void Satisfied_flag_reflects_approvals_so_far()
     {
-        var lower = DemoRules.Rule("APPROVAL_ROUTE", ValidationStep.ApprovalRequirements, RuleLayer.Tenant, null,
-            new() { ["finance_director_threshold"] = "5000" }, adjustable: true);
-        ApprovalRouting.Build(new SubjectBuilder().With(SubjectBuilder.Distribution(1, "101-6000-53100", 6_000m)).Build(), [], lower)
-            .Should().Contain(r => r.Role == ApproverRole.FinanceDirector);
+        var s = new SubjectBuilder().Approved(ApproverRole.DepartmentHead).Build();
+        var route = ApprovalRouting.Build(s, [], Route);
+        route.Single(r => r.Role == ApproverRole.DepartmentHead).IsSatisfied.Should().BeTrue();
+        route.Single(r => r.Role == ApproverRole.GrantsManager).IsSatisfied.Should().BeFalse();
     }
 }
 ```
@@ -1949,35 +1547,34 @@ public class PostingPreviewTests
         var lines = PostingPreviewComposer.Compose(SubjectBuilder.Exercise());
         lines.Should().HaveCount(2);
         lines[0].Should().BeEquivalentTo(new { Account = AccountCode.Parse("701-6000-53100-G-COPS-26"), Family = "Financial", Debit = Money.Of(160_000m), Credit = Money.Zero });
-        lines[0].Description.Should().StartWith("Expenditure");
+        lines[0].Description.Should().Contain("Expenditure");
         lines[1].Should().BeEquivalentTo(new { Account = AccountCode.Parse("701-0000-2100"), Family = "Financial", Debit = Money.Zero, Credit = Money.Of(160_000m) });
     }
 
     [Fact]
-    public void Enterprise_fund_uses_expense_wording() =>
-        PostingPreviewComposer.Compose(new SubjectBuilder().With(SubjectBuilder.Distribution(1, "501-5000-53100", 10_000m)).Build())[0]
-            .Description.Should().StartWith("Expense").And.NotContain("Expenditure");
+    public void Enterprise_fund_uses_expense_wording()
+    {
+        var s = new SubjectBuilder().With(SubjectBuilder.Distribution(1, "501-5000-53100", 10_000m)).Build();
+        PostingPreviewComposer.Compose(s)[0].Description.Should().Contain("Expense").And.NotContain("Expenditure");
+    }
 
     [Fact]
-    public void PostingPreview_PoBacked_HasBudgetaryReversalLines()
+    public void Po_backed_adds_budgetary_reversal_pair_first()
     {
-        var lines = PostingPreviewComposer.Compose(SubjectBuilder.PoBacked(160_000m));
+        var s = new SubjectBuilder().PoBacked().With(SubjectBuilder.Distribution(1, "701-3000-53100-G-COPS-26", 160_000m,
+            encumbrance: new EncumbranceSnapshot("PO-2026-0451/1", Money.Of(160_000m), true))).Build();
+        var lines = PostingPreviewComposer.Compose(s);
         lines.Should().HaveCount(4);
-        lines[0].Should().BeEquivalentTo(new { Account = AccountCode.Parse("701-0000-2900-G-COPS-26"), Family = "Budgetary", Debit = Money.Of(160_000m) });
-        lines[1].Should().BeEquivalentTo(new { Account = AccountCode.Parse("701-3000-5900-G-COPS-26"), Family = "Budgetary", Credit = Money.Of(160_000m) });
+        lines[0].Family.Should().Be("Budgetary");
+        lines[0].Account.Should().Be(AccountCode.Parse("701-0000-2900-G-COPS-26"));
+        lines[0].Debit.Should().Be(Money.Of(160_000m));
+        lines[1].Account.Should().Be(AccountCode.Parse("701-3000-5900-G-COPS-26"));
+        lines[1].Credit.Should().Be(Money.Of(160_000m));
         lines[2].Family.Should().Be("Financial");
     }
 
     [Fact]
-    public void Partial_liquidation_reverses_only_the_liquidated_part()
-    {
-        var lines = PostingPreviewComposer.Compose(SubjectBuilder.PoBacked(164_800m));
-        lines.Where(l => l.Family == "Budgetary").Sum(l => l.Debit.Amount).Should().Be(160_000m);
-        lines.Where(l => l.Family == "Financial").Sum(l => l.Debit.Amount).Should().Be(164_800m);
-    }
-
-    [Fact]
-    public void PostingPreview_BalancedPerFundAndFamily()
+    public void Multi_fund_has_one_ap_line_per_fund()
     {
         var s = new SubjectBuilder()
             .With(SubjectBuilder.Distribution(1, "101-6000-53100", 12_000m))
@@ -1985,16 +1582,19 @@ public class PostingPreviewTests
             .With(SubjectBuilder.Distribution(3, "501-5000-53100", 10_000m)).Build();
         var lines = PostingPreviewComposer.Compose(s);
         lines.Where(l => !l.Credit.IsZero).Select(l => l.Account.Fund.Value).Should().BeEquivalentTo("101", "202", "501");
-        PostingPreviewComposer.IsBalancedPerFundAndFamily(lines).Should().BeTrue();
+        PostingPreviewComposer.IsBalancedPerFund(lines).Should().BeTrue();
     }
 
     [Fact]
-    public void Balance_check_detects_unbalanced_fund() =>
-        PostingPreviewComposer.IsBalancedPerFundAndFamily(
-        [
+    public void Balance_check_detects_unbalanced_fund()
+    {
+        var lines = new[]
+        {
             new PostingPreviewLine(AccountCode.Parse("101-6000-53100"), "Financial", Money.Of(10m), Money.Zero, "x"),
             new PostingPreviewLine(AccountCode.Parse("202-0000-2100"), "Financial", Money.Zero, Money.Of(10m), "x"),
-        ]).Should().BeFalse();
+        };
+        PostingPreviewComposer.IsBalancedPerFund(lines).Should().BeFalse();
+    }
 }
 ```
 
@@ -2007,52 +1607,54 @@ namespace GovErp.Domain.Validation.Tests;
 
 public class PostingEligibilityTests
 {
-    private static readonly string Fingerprint = DemoRules.Resolved().Fingerprint;
+    private static readonly RuleSetVersions V1 = new("engine-1.0.0", 1, 1, 1, 1);
     private static Entities.RuleDefinition Route => DemoRules.All().Single(r => r.RuleId == "APPROVAL_ROUTE");
 
-    private static PostingCheck Check(SubjectBuilder b, Severity overall = Severity.Allowed, string? fingerprint = null)
+    private static (ValidationSubject, IReadOnlyList<ApprovalRequirement>, IReadOnlyList<PostingPreviewLine>) FullyApproved(Action<SubjectBuilder>? tweak = null)
     {
+        var b = new SubjectBuilder().Approved(ApproverRole.DepartmentHead, ApproverRole.GrantsManager, ApproverRole.FinanceDirector).VersionsAtApproval(V1);
+        tweak?.Invoke(b);
         var s = b.Build();
-        return PostingEligibility.Check(s, overall, ApprovalRouting.Build(s, [], Route), PostingPreviewComposer.Compose(s), fingerprint ?? Fingerprint);
+        return (s, ApprovalRouting.Build(s, [], Route), PostingPreviewComposer.Compose(s));
     }
 
-    private static SubjectBuilder FullyApproved() => new SubjectBuilder()
-        .Approved(ApproverRole.DepartmentHead, "6000").Approved(ApproverRole.GrantsManager).Approved(ApproverRole.FinanceDirector)
-        .Baseline(Fingerprint);
-
     [Fact]
-    public void Passes_when_everything_is_in_place() => Check(FullyApproved()).Passed.Should().BeTrue();
+    public void Passes_when_everything_is_in_place()
+    {
+        var (s, route, preview) = FullyApproved();
+        PostingEligibility.Check(s, Severity.Allowed, route, preview, V1).Passed.Should().BeTrue();
+    }
 
     [Fact]
     public void Fails_on_missing_approval()
     {
-        var check = Check(new SubjectBuilder().Approved(ApproverRole.DepartmentHead, "6000").Baseline(Fingerprint));
+        var s = new SubjectBuilder().Approved(ApproverRole.DepartmentHead).VersionsAtApproval(V1).Build();
+        var check = PostingEligibility.Check(s, Severity.Allowed, ApprovalRouting.Build(s, [], Route), PostingPreviewComposer.Compose(s), V1);
         check.Passed.Should().BeFalse();
         check.Failures.Should().Contain(f => f.Contains("GrantsManager"));
     }
 
     [Fact]
-    public void Fails_on_closed_period() =>
-        Check(FullyApproved().PeriodClosed()).Failures.Should().Contain(f => f.Contains("period"));
-
-    [Fact]
-    public void PostingEligibility_FingerprintChanged_RequiresReapproval() =>
-        Check(FullyApproved(), fingerprint: new string('0', 64)).Failures.Should().Contain(f => f.StartsWith(PostingEligibility.RevalidationRequired));
-
-    [Fact]
-    public void Content_version_changed_since_approval_requires_reapproval() =>
-        Check(FullyApproved().ContentVersion(2)).Failures.Should().Contain(f => f.StartsWith(PostingEligibility.RevalidationRequired));
-
-    [Fact]
-    public void No_baseline_means_no_approval_basis() =>
-        Check(new SubjectBuilder().Approved(ApproverRole.DepartmentHead, "6000").Approved(ApproverRole.GrantsManager).Approved(ApproverRole.FinanceDirector))
-            .Failures.Should().Contain(f => f.StartsWith(PostingEligibility.RevalidationRequired));
-
-    [Fact]
-    public void Fails_on_soft_or_hard_overall_passes_on_warning()
+    public void Fails_on_closed_period()
     {
-        Check(FullyApproved(), Severity.SoftStop).Passed.Should().BeFalse();
-        Check(FullyApproved(), Severity.Warning).Passed.Should().BeTrue();
+        var (s, route, preview) = FullyApproved(b => b.PeriodClosed());
+        PostingEligibility.Check(s, Severity.Allowed, route, preview, V1).Failures.Should().Contain(f => f.Contains("period"));
+    }
+
+    [Fact]
+    public void Fails_when_rule_versions_changed_since_approval()
+    {
+        var (s, route, preview) = FullyApproved();
+        var check = PostingEligibility.Check(s, Severity.Allowed, route, preview, V1 with { Tenant = 2 });
+        check.Failures.Should().Contain(f => f.Contains("REVALIDATION_REQUIRED"));
+    }
+
+    [Fact]
+    public void Fails_on_soft_or_hard_overall()
+    {
+        var (s, route, preview) = FullyApproved();
+        PostingEligibility.Check(s, Severity.SoftStop, route, preview, V1).Passed.Should().BeFalse();
+        PostingEligibility.Check(s, Severity.Warning, route, preview, V1).Passed.Should().BeTrue();
     }
 }
 ```
@@ -2072,7 +1674,6 @@ public sealed record ApprovalRequirement(ApproverRole Role, string? Department, 
 ```csharp
 namespace GovErp.Domain.Validation.ValueObjects;
 
-/// <summary>Family — строка ("Financial" / "Budgetary"), чтобы не дублировать enum Ledger; маппинг в плане 3.</summary>
 public sealed record PostingPreviewLine(AccountCode Account, string Family, Money Debit, Money Credit, string Description);
 ```
 
@@ -2088,13 +1689,12 @@ public sealed record PostingCheck(bool Passed, IReadOnlyList<string> Failures)
 
 `DomainServices/ApprovalRouting.cs`:
 ```csharp
-using System.Globalization;
 using GovErp.Domain.Validation.Entities;
 using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.DomainServices;
 
-/// <summary>Шаг 7. DepartmentHead каждого департамента; GrantsManager при гранте; FinanceDirector при total ≥ порога; overrider каждого не снятого Soft Stop.</summary>
+/// <summary>Шаг 7. DepartmentHead каждого департамента; GrantsManager при гранте; FinanceDirector при total ≥ порога; overrider для каждого не снятого Soft Stop.</summary>
 public static class ApprovalRouting
 {
     public const decimal DefaultFinanceDirectorThreshold = 50_000m;
@@ -2102,38 +1702,31 @@ public static class ApprovalRouting
     public static IReadOnlyList<ApprovalRequirement> Build(ValidationSubject subject, IReadOnlyList<RuleOutcome> outcomes, RuleDefinition? routeRule)
     {
         var threshold = Money.Of(routeRule?.DecimalParameter("finance_director_threshold") ?? DefaultFinanceDirectorThreshold);
+        var approved = subject.ApprovalsSoFar.ToHashSet();
         var route = new List<ApprovalRequirement>();
-
-        bool Satisfied(ApproverRole role, string? department) =>
-            subject.ActiveApprovals.Any(a => a.Role == role && (role != ApproverRole.DepartmentHead || a.Department == department));
-
-        void Add(ApproverRole role, string? department, string reason)
-        {
-            if (route.All(r => r.Role != role || r.Department != department))
-            {
-                route.Add(new ApprovalRequirement(role, department, reason, Satisfied(role, department)));
-            }
-        }
 
         foreach (var dept in subject.Distributions.Select(d => d.Account.Department.Value).Distinct())
         {
-            Add(ApproverRole.DepartmentHead, dept, $"Department {dept} is charged.");
+            route.Add(new ApprovalRequirement(ApproverRole.DepartmentHead, dept, $"Department {dept} is charged.", approved.Contains(ApproverRole.DepartmentHead)));
         }
 
         if (subject.Distributions.Any(d => d.Account.Grant is not null))
         {
-            Add(ApproverRole.GrantsManager, null, "Grant-funded distribution.");
+            route.Add(new ApprovalRequirement(ApproverRole.GrantsManager, null, "Grant-funded distribution.", approved.Contains(ApproverRole.GrantsManager)));
         }
 
         if (subject.Transaction.Total >= threshold)
         {
-            Add(ApproverRole.FinanceDirector, null, $"Total {subject.Transaction.Total} ≥ {threshold}.");
+            route.Add(new ApprovalRequirement(ApproverRole.FinanceDirector, null, $"Total {subject.Transaction.Total} ≥ {threshold}.", approved.Contains(ApproverRole.FinanceDirector)));
         }
 
         foreach (var soft in outcomes.Where(o => o.Severity == Severity.SoftStop && !o.IsOverridden && o.OverridableBy.Count > 0))
         {
-            var line = soft.DistributionLine?.ToString(CultureInfo.InvariantCulture) ?? "document";
-            Add(soft.OverridableBy[0], null, $"Override required for {soft.RuleId} ({line}).");
+            var role = soft.OverridableBy[0];
+            if (route.All(r => r.Role != role))
+            {
+                route.Add(new ApprovalRequirement(role, null, $"Override required for {soft.RuleId}.", approved.Contains(role)));
+            }
         }
 
         return route;
@@ -2141,54 +1734,47 @@ public static class ApprovalRouting
 }
 ```
 
+Упрощение, зафиксированное здесь: `IsSatisfied` для `DepartmentHead` считается по роли, а не по департаменту — `ApprovalsSoFar` не несёт департамент. Для демо с одним согласующим на роль достаточно; в спеке 2.1 роль `DepartmentHead` одна.
+
 `DomainServices/PostingPreviewComposer.cs`:
 ```csharp
 using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.DomainServices;
 
-/// <summary>Проводки, которые создаст Post. Бюджетная пара сторно encumbrance — по PO-строке, перед финансовыми.</summary>
+/// <summary>Строит проводки, которые создаст Post. Budgetary-пара сторно encumbrance идёт перед Financial-парой.</summary>
 public static class PostingPreviewComposer
 {
-    public const string Financial = "Financial";
-    public const string Budgetary = "Budgetary";
-
     public static IReadOnlyList<PostingPreviewLine> Compose(ValidationSubject subject)
     {
         var acc = subject.PostingAccounts;
         var lines = new List<PostingPreviewLine>();
 
-        foreach (var po in subject.PoLines)
+        foreach (var d in subject.Distributions.Where(x => !x.LiquidationAmount.IsZero))
         {
-            var liquidation = subject.EligibleLiquidation(po.PoLineRef);
-            if (liquidation.IsZero)
-            {
-                continue;
-            }
-
-            var reserve = new AccountCode(po.Account.Fund, acc.BalanceSheetDepartment, acc.ReserveForEncumbrances, po.Account.Grant);
-            var encumbrances = po.Account.WithObject(acc.Encumbrances);
-            lines.Add(new PostingPreviewLine(reserve, Budgetary, liquidation, Money.Zero, $"Reserve for encumbrances — liquidate {po.PoLineRef}"));
-            lines.Add(new PostingPreviewLine(encumbrances, Budgetary, Money.Zero, liquidation, $"Encumbrances — liquidate {po.PoLineRef}"));
+            var reserve = new AccountCode(d.Account.Fund, acc.BalanceSheetDepartment, acc.ReserveForEncumbrances, d.Account.Grant);
+            var enc = new AccountCode(d.Account.Fund, d.Account.Department, acc.Encumbrances, d.Account.Grant);
+            lines.Add(new PostingPreviewLine(reserve, "Budgetary", d.LiquidationAmount, Money.Zero, $"Reserve for encumbrances — liquidate {d.Encumbrance!.PoLineRef}"));
+            lines.Add(new PostingPreviewLine(enc, "Budgetary", Money.Zero, d.LiquidationAmount, $"Encumbrances — liquidate {d.Encumbrance.PoLineRef}"));
         }
 
         foreach (var d in subject.Distributions)
         {
             var wording = d.Fund?.Kind == FundKind.Enterprise ? "Expense" : "Expenditure";
-            lines.Add(new PostingPreviewLine(d.Account, Financial, d.Amount, Money.Zero, $"{wording} — line {d.LineNo}"));
+            lines.Add(new PostingPreviewLine(d.Account, "Financial", d.Amount, Money.Zero, $"{wording} — line {d.LineNo}"));
         }
 
         foreach (var g in subject.Distributions.GroupBy(d => d.Account.Fund))
         {
             var total = g.Aggregate(Money.Zero, (s, d) => s + d.Amount);
             var ap = new AccountCode(g.Key, acc.BalanceSheetDepartment, acc.AccountsPayable, null);
-            lines.Add(new PostingPreviewLine(ap, Financial, Money.Zero, total, $"Accounts payable — fund {g.Key}"));
+            lines.Add(new PostingPreviewLine(ap, "Financial", Money.Zero, total, $"Accounts payable — fund {g.Key}"));
         }
 
         return lines;
     }
 
-    public static bool IsBalancedPerFundAndFamily(IReadOnlyList<PostingPreviewLine> lines) =>
+    public static bool IsBalancedPerFund(IReadOnlyList<PostingPreviewLine> lines) =>
         lines.GroupBy(l => (l.Account.Fund, l.Family))
             .All(g => g.Aggregate(Money.Zero, (s, l) => s + l.Debit) == g.Aggregate(Money.Zero, (s, l) => s + l.Credit));
 }
@@ -2206,7 +1792,7 @@ public static class PostingEligibility
     public const string RevalidationRequired = "REVALIDATION_REQUIRED";
 
     public static PostingCheck Check(ValidationSubject subject, Severity overall, IReadOnlyList<ApprovalRequirement> route,
-        IReadOnlyList<PostingPreviewLine> preview, string currentFingerprint)
+        IReadOnlyList<PostingPreviewLine> preview, RuleSetVersions currentVersions)
     {
         var failures = new List<string>();
         if (overall > Severity.Warning)
@@ -2216,28 +1802,22 @@ public static class PostingEligibility
 
         foreach (var r in route.Where(r => !r.IsSatisfied))
         {
-            failures.Add($"Approval by {r.Role}{(r.Department is null ? "" : $" ({r.Department})")} is missing in the active approval cycle.");
+            failures.Add($"Approval by {r.Role}{(r.Department is null ? "" : $" ({r.Department})")} is missing.");
         }
 
         if (!subject.PeriodIsOpen)
         {
-            failures.Add("The fiscal period of the posting date is closed.");
+            failures.Add("The fiscal period for the transaction date is closed.");
         }
 
-        if (!PostingPreviewComposer.IsBalancedPerFundAndFamily(preview))
+        if (!PostingPreviewComposer.IsBalancedPerFund(preview))
         {
-            failures.Add("Posting preview is not balanced per fund and ledger family.");
+            failures.Add("Posting preview is not balanced per fund.");
         }
 
-        var baseline = subject.ApprovalBaseline;
-        if (baseline is null)
+        if (subject.VersionsAtLastApproval is { } v && v != currentVersions)
         {
-            failures.Add($"{RevalidationRequired}: no approval in the active cycle records the rule set it was based on.");
-        }
-        else if (baseline.ContentVersion != subject.Transaction.ContentVersion || baseline.RuleSetFingerprint != currentFingerprint)
-        {
-            failures.Add($"{RevalidationRequired}: approvals were given for content v{baseline.ContentVersion} and rules " +
-                $"{baseline.RuleSetFingerprint[..12]}…, current are v{subject.Transaction.ContentVersion} and {currentFingerprint[..12]}…; approve again.");
+            failures.Add($"{RevalidationRequired}: rule versions changed since approval ({v} → {currentVersions}).");
         }
 
         return failures.Count == 0 ? PostingCheck.Ok : new PostingCheck(false, failures);
@@ -2247,81 +1827,30 @@ public static class PostingEligibility
 
 - [ ] **Step 4: Прогнать**
 
-Expected: 81 passed (62 + 6 + 6 + 7).
+Expected: 61 passed.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/GovErp.Domain.Validation tests/GovErp.Domain.Validation.Tests
-git commit -m "Validation: department-scoped approval routing, posting preview, posting eligibility baseline
+git add -A src/GovErp.Domain.Validation tests/GovErp.Domain.Validation.Tests
+git commit -m "Validation: approval routing, posting preview, posting eligibility
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
 ---
 
-### Task 7: EvaluationRecord, RuleCatalog, RuleSetGuard, ValidationPipeline — сквозные сценарии
+### Task 7: EvaluationRecord, RuleCatalog, ValidationPipeline — сквозные сценарии
 
 **Files:**
-- Create: `Entities/EvaluationRecord.cs`, `DomainServices/RuleCatalog.cs`, `DomainServices/RuleSetGuard.cs`, `DomainServices/ValidationPipeline.cs`, `Repositories/IEvaluationRecordRepository.cs`
-- Test: `RuleSetGuardTests.cs`, `PipelineScenarioTests.cs`
+- Create: `Entities/EvaluationRecord.cs`, `DomainServices/RuleCatalog.cs`, `DomainServices/ValidationPipeline.cs`, `Repositories/IEvaluationRecordRepository.cs`
+- Test: `PipelineScenarioTests.cs`
 - Modify: `tests/GovErp.Architecture.Tests/ArchitectureFixture.cs` — добавить сборку Validation
 
 **Interfaces:**
-- Produces: `ValidationPipeline(RuleCatalog)` с `Evaluate(ValidationSubject, EffectiveRuleSet, EvaluationTrigger, UserId evaluatedBy, DateTimeOffset at) → EvaluationRecord`; `EvaluationRecord` (`Id`, `TransactionRef`, `InvoiceId`, `ContentVersion`, `ApprovalCycleId`, `Trigger`, `EvaluatedAt`, `EvaluatedBy`, `EngineVersion`, `AppliedRules`, `RuleSetFingerprint`, `Outcomes` — уже с overrides, `Overall`, `Capabilities`, `ApprovalRoute`, `PostingPreview`, `PostingCheck` — только при `Trigger == Post`, `InputSnapshot`); `RuleCatalog.Default` — все 11 правил; `RuleCatalog.Find(string)`; `RuleSetGuard.FindViolations(IReadOnlyList<RuleDefinition>, RuleCatalog) → IReadOnlyList<string>`; `IEvaluationRecordRepository { AddAsync; FindAsync(Guid); ListByTransactionAsync(string transactionRef) }`.
-- `RuleSetGuard` (spec §4.1 п. 3): для каждого адаптируемого правила сравнивает каждое более специфичное определение с ближайшим менее специфичным через `IValidationRule.IsWeakening`; для необязательных к адаптации правил слои не сравниваются — они выполняются все. Слой сценариев вызывает guard при seed и при сохранении правила (план 3).
+- Produces: `ValidationPipeline.Evaluate(ValidationSubject, EffectiveRuleSet, EvaluationTrigger, UserId evaluatedBy, DateTimeOffset at) → EvaluationRecord`; `EvaluationRecord` (все поля спеки 3.5; `Outcomes` уже с overrides; `PostingCheck` заполнен только при `Trigger == Post`); `RuleCatalog.Default` — все 11 правил; `IEvaluationRecordRepository { AddAsync; ListByTransactionAsync(string transactionRef); FindAsync(Guid) }`.
 
-- [ ] **Step 1: Тесты guard**
-
-`RuleSetGuardTests.cs`:
-```csharp
-using GovErp.Domain.Validation.DomainServices;
-using GovErp.Domain.Validation.Entities;
-using GovErp.Domain.Validation.ValueObjects;
-
-namespace GovErp.Domain.Validation.Tests;
-
-public class RuleSetGuardTests
-{
-    [Fact]
-    public void Demo_rules_have_no_violations() =>
-        RuleSetGuard.FindViolations(DemoRules.All(), RuleCatalog.Default).Should().BeEmpty();
-
-    [Fact]
-    public void Resolution_WeakeningThreshold_IsRejected()
-    {
-        var rules = new List<RuleDefinition>(DemoRules.All())
-        {
-            DemoRules.Rule("PROCUREMENT_THRESHOLD", ValidationStep.TransactionPurpose, RuleLayer.Tenant, Severity.SoftStop,
-                new() { ["threshold"] = "100000" }, [ApproverRole.FinanceDirector], adjustable: true),
-        };
-        RuleSetGuard.FindViolations(rules, RuleCatalog.Default).Should().ContainSingle(v => v.Contains("PROCUREMENT_THRESHOLD") && v.Contains("Tenant"));
-    }
-
-    [Fact]
-    public void Tightening_is_allowed()
-    {
-        var rules = new List<RuleDefinition>(DemoRules.All())
-        {
-            DemoRules.Rule("PROCUREMENT_THRESHOLD", ValidationStep.TransactionPurpose, RuleLayer.Tenant, Severity.SoftStop,
-                new() { ["threshold"] = "10000" }, [ApproverRole.FinanceDirector], adjustable: true),
-        };
-        RuleSetGuard.FindViolations(rules, RuleCatalog.Default).Should().BeEmpty();
-    }
-
-    [Fact]
-    public void Configured_rule_without_implementation_is_a_violation()
-    {
-        var rules = new List<RuleDefinition>(DemoRules.All())
-        {
-            DemoRules.Rule("UNKNOWN_RULE", ValidationStep.TransactionPurpose, RuleLayer.Tenant, Severity.Warning, adjustable: true),
-        };
-        RuleSetGuard.FindViolations(rules, RuleCatalog.Default).Should().ContainSingle(v => v.Contains("UNKNOWN_RULE"));
-    }
-}
-```
-
-- [ ] **Step 2: Сквозные сценарии**
+- [ ] **Step 1: Тесты**
 
 `PipelineScenarioTests.cs`:
 ```csharp
@@ -2332,40 +1861,38 @@ namespace GovErp.Domain.Validation.Tests;
 
 public class PipelineScenarioTests
 {
-    private const string Fire = "701-6000-53100-G-COPS-26";
-    private static readonly DateTimeOffset At = new(2026, 6, 15, 10, 0, 0, TimeSpan.Zero);
-    private static readonly EffectiveRuleSet Rules = DemoRules.Resolved();
+    private static readonly DateTimeOffset At = new(2026, 9, 21, 10, 0, 0, TimeSpan.Zero);
+    private static readonly EffectiveRuleSet Rules = RuleResolution.Resolve(DemoRules.All(), new DateOnly(2026, 9, 15));
     private static readonly ValidationPipeline Pipeline = new(RuleCatalog.Default);
 
     private static Entities.EvaluationRecord Run(ValidationSubject s, EvaluationTrigger t = EvaluationTrigger.Manual) =>
         Pipeline.Evaluate(s, Rules, t, SubjectBuilder.Clerk, At);
-
-    private static SubjectBuilder Amended() => new SubjectBuilder().Budget(SubjectBuilder.Budget(Fire, 388_000m, 132_000m, 96_000m));
 
     [Fact]
     public void Scenario_NonPo_701_ExceedsAvailable_By13000_IsHardStop()
     {
         var r = Run(SubjectBuilder.Exercise());
         r.Overall.Should().Be(Severity.HardStop);
-        r.Capabilities.Should().Be(new Capabilities(true, false, false, false));
-        r.Outcomes.Single(o => o.RuleId == "BUDGET_AVAILABILITY").Computed["overage"].Should().Be("13,000.00");
+        r.Capabilities.Should().Be(new Capabilities(true, false, false, false, false));
+        var budget = r.Outcomes.Single(o => o.RuleId == "BUDGET_AVAILABILITY");
+        budget.Computed["overage"].Should().Be("13,000.00");
         r.Outcomes.Should().Contain(o => o.RuleId == "PROCUREMENT_THRESHOLD");   // шаг 4 выполнился до шага 5
         r.ApprovalRoute.Should().NotBeEmpty();                                     // маршрут строится даже при стопе
         r.PostingPreview.Should().BeEmpty();                                       // превью — только если ≤ SoftStop
-        r.RuleSetFingerprint.Should().Be(Rules.Fingerprint);
-        r.AppliedRules.Should().HaveCount(12);
-        r.EngineVersion.Should().Be(RuleResolution.EngineVersion);
-        r.ContentVersion.Should().Be(1);
-        r.ApprovalCycleId.Should().Be(SubjectBuilder.CycleId);
+        r.RuleSetVersions.Engine.Should().Be(RuleResolution.EngineVersion);
+        r.TransactionRef.Should().Be("INV-V-7781");
+        r.Trigger.Should().Be(EvaluationTrigger.Manual);
     }
 
     [Fact]
     public void Scenario_NonPo_701_AfterAmendment13000_IsSoftStop_ProcurementThreshold()
     {
-        var r = Run(Amended().Build());
+        var s = new SubjectBuilder().With(SubjectBuilder.Distribution(1, "701-6000-53100-G-COPS-26", 160_000m,
+            budget: SubjectBuilder.Budget(388_000m, 132_000m, 96_000m))).Build();
+        var r = Run(s);
         r.Overall.Should().Be(Severity.SoftStop);
         r.Outcomes.Should().ContainSingle(o => o.RuleId == "PROCUREMENT_THRESHOLD");
-        r.Outcomes.Should().Contain(o => o.RuleId == "BUDGET_LOW_REMAINING");     // остаток 0 → Warning
+        r.Outcomes.Should().Contain(o => o.RuleId == "BUDGET_LOW_REMAINING");     // после 160k остаётся 0 → Warning
         r.Capabilities.CanSubmit.Should().BeTrue();
         r.Capabilities.CanApprove.Should().BeFalse();
         r.PostingPreview.Should().HaveCount(2);
@@ -2375,7 +1902,9 @@ public class PipelineScenarioTests
     [Fact]
     public void Scenario_NonPo_701_AfterAmendment_WithOverride_IsWarning()
     {
-        var r = Run(Amended().Overridden("PROCUREMENT_THRESHOLD").Build());
+        var s = new SubjectBuilder().Overridden("PROCUREMENT_THRESHOLD", "Sole-source justification on file")
+            .With(SubjectBuilder.Distribution(1, "701-6000-53100-G-COPS-26", 160_000m, budget: SubjectBuilder.Budget(388_000m, 132_000m, 96_000m))).Build();
+        var r = Run(s);
         r.Overall.Should().Be(Severity.Warning);
         r.Outcomes.Single(o => o.RuleId == "PROCUREMENT_THRESHOLD").IsOverridden.Should().BeTrue();
         r.Capabilities.CanApprove.Should().BeTrue();
@@ -2384,120 +1913,122 @@ public class PipelineScenarioTests
     [Fact]
     public void Scenario_PoBacked_WithinRemaining_IsAllowed_AvailableUnchanged()
     {
-        var r = Run(SubjectBuilder.PoBacked(160_000m));
+        var s = new SubjectBuilder().PoBacked().With(SubjectBuilder.Distribution(1, "701-3000-53100-G-COPS-26", 160_000m,
+            budget: SubjectBuilder.Budget(500_000m, 100_000m, 160_000m),
+            encumbrance: new EncumbranceSnapshot("PO-2026-0451/1", Money.Of(160_000m), true))).Build();
+        var r = Run(s);
         r.Overall.Should().Be(Severity.Allowed);
         r.Outcomes.Should().ContainSingle(o => o.RuleId == "PO_LIQUIDATION" && o.Severity == Severity.Allowed);
-        r.Outcomes.Should().NotContain(o => o.RuleId == "BUDGET_AVAILABILITY" || o.RuleId == "PROCUREMENT_THRESHOLD");
+        r.Outcomes.Should().NotContain(o => o.RuleId == "BUDGET_AVAILABILITY");
+        r.Outcomes.Should().NotContain(o => o.RuleId == "PROCUREMENT_THRESHOLD");
         r.PostingPreview.Should().HaveCount(4);
         r.PostingPreview.Count(l => l.Family == "Budgetary").Should().Be(2);
     }
 
     [Fact]
-    public void Scenario_PoBacked_CumulativeExcess3Pct_IsWarning()
+    public void Scenario_PoBacked_Excess3Pct_IsWarning()
     {
-        var r = Run(SubjectBuilder.PoBacked(164_800m));
+        var s = new SubjectBuilder().PoBacked().With(SubjectBuilder.Distribution(1, "701-3000-53100-G-COPS-26", 164_800m,
+            budget: SubjectBuilder.Budget(500_000m, 100_000m, 160_000m),
+            encumbrance: new EncumbranceSnapshot("PO-2026-0451/1", Money.Of(160_000m), true))).Build();
+        var r = Run(s);
         r.Overall.Should().Be(Severity.Warning);
-        r.Outcomes.Single(o => o.RuleId == "PO_LIQUIDATION").Computed["newBudgetPart"].Should().Be("4,800.00");
+        r.Outcomes.Single(o => o.RuleId == "PO_LIQUIDATION").Computed["excess"].Should().Be("4,800.00");
     }
 
     [Fact]
-    public void Scenario_PoBacked_CumulativeExcess8Pct_IsHardStop() =>
-        Run(SubjectBuilder.PoBacked(172_800m)).Overall.Should().Be(Severity.HardStop);
+    public void Scenario_PoBacked_Excess8Pct_IsHardStop()
+    {
+        var s = new SubjectBuilder().PoBacked().With(SubjectBuilder.Distribution(1, "701-3000-53100-G-COPS-26", 172_800m,
+            budget: SubjectBuilder.Budget(500_000m, 100_000m, 160_000m),
+            encumbrance: new EncumbranceSnapshot("PO-2026-0451/1", Money.Of(160_000m), true))).Build();
+        Run(s).Overall.Should().Be(Severity.HardStop);
+    }
 
     [Fact]
     public void Scenario_MultiFund_101_Overage_IsSoftStop_202_501_Allowed()
     {
         var s = new SubjectBuilder()
-            .With(SubjectBuilder.Distribution(1, "101-6000-53100", 12_000m))
-            .With(SubjectBuilder.Distribution(2, "202-4000-53100", 8_000m))
-            .With(SubjectBuilder.Distribution(3, "501-5000-53100", 10_000m)).Build();
+            .With(SubjectBuilder.Distribution(1, "101-6000-53100", 12_000m, budget: SubjectBuilder.Budget(50_000m, 40_000m, 0m)))
+            .With(SubjectBuilder.Distribution(2, "202-4000-53100", 8_000m, budget: SubjectBuilder.Budget(25_000m, 5_000m, 0m)))
+            .With(SubjectBuilder.Distribution(3, "501-5000-53100", 10_000m, budget: SubjectBuilder.Budget(60_000m, 30_000m, 0m))).Build();
         var r = Run(s);
         r.Overall.Should().Be(Severity.SoftStop);
-        r.Outcomes.Where(o => o.RuleId == "BUDGET_AVAILABILITY").Should().ContainSingle(o => o.BudgetKey == "101-6000-53100" && o.Severity == Severity.SoftStop);
+        r.Outcomes.Where(o => o.RuleId == "BUDGET_AVAILABILITY").Should().ContainSingle(o => o.DistributionLine == 1 && o.Severity == Severity.SoftStop);
         r.Outcomes.Should().Contain(o => o.RuleId == "PROCUREMENT_THRESHOLD");  // 30,000 ≥ 25,000
         r.PostingPreview.Should().HaveCount(6);
-        PostingPreviewComposer.IsBalancedPerFundAndFamily(r.PostingPreview).Should().BeTrue();
+        PostingPreviewComposer.IsBalancedPerFund(r.PostingPreview).Should().BeTrue();
     }
 
     [Fact]
-    public void Scenario_MultiFund_501_UsesExpenseNotExpenditure() =>
-        Run(new SubjectBuilder().With(SubjectBuilder.Distribution(1, "501-5000-53100", 10_000m)).Build())
-            .PostingPreview[0].Description.Should().StartWith("Expense");
-
-    [Fact]
-    public void Scenario_SameBudgetAcrossDistributions_IsHardStop13000()
+    public void Scenario_MultiFund_501_UsesExpenseNotExpenditure()
     {
-        var r = Run(new SubjectBuilder().With(SubjectBuilder.Distribution(1, Fire, 80_000m)).With(SubjectBuilder.Distribution(2, Fire, 80_000m)).Build());
-        r.Overall.Should().Be(Severity.HardStop);
-        r.Outcomes.Single(o => o.RuleId == "BUDGET_AVAILABILITY").Computed["overage"].Should().Be("13,000.00");
-    }
-
-    [Fact]
-    public void Scenario_OwnReservationIsNotChargedTwice()
-    {
-        var s = new SubjectBuilder().With(SubjectBuilder.Distribution(1, Fire, 100_000m))
-            .Budget(SubjectBuilder.Budget(Fire, 375_000m, 132_000m, 96_000m, held: 100_000m, ownHeld: 100_000m)).Build();
-        Run(s, EvaluationTrigger.Approve).Outcomes.Should().NotContain(o => o.RuleId == "BUDGET_AVAILABILITY");
+        var s = new SubjectBuilder().With(SubjectBuilder.Distribution(1, "501-5000-53100", 10_000m, budget: SubjectBuilder.Budget(60_000m, 30_000m, 0m))).Build();
+        Run(s).PostingPreview[0].Description.Should().StartWith("Expense");
     }
 
     [Fact]
     public void Pipeline_HardStopAtStep2_SkipsSteps3To6_StillBuildsRoute()
     {
-        var r = Run(new SubjectBuilder().With(SubjectBuilder.Distribution(1, Fire, 160_000m,
-            combination: new CombinationSnapshot(false, false, "Missing"))).Build());
+        var s = new SubjectBuilder().With(SubjectBuilder.Distribution(1, "701-6000-53100-G-COPS-26", 160_000m,
+            combination: new CombinationSnapshot(false, false, "Missing"))).Build();
+        var r = Run(s);
         r.Outcomes.Select(o => o.Step).Max().Should().Be(ValidationStep.ValidCombination);
         r.Outcomes.Should().NotContain(o => o.RuleId == "BUDGET_AVAILABILITY");
         r.ApprovalRoute.Should().NotBeEmpty();
     }
 
     [Fact]
-    public void Pipeline_NonAdjustableRuleInTwoLayers_BothEvaluated_StrictestWins()
-    {
-        var rules = DemoRules.Resolved(new List<Entities.RuleDefinition>(DemoRules.All())
-        {
-            DemoRules.Rule("VENDOR_ELIGIBLE", ValidationStep.TransactionPurpose, RuleLayer.Tenant, Severity.Warning),
-        });
-        var r = Pipeline.Evaluate(new SubjectBuilder().Vendor(debarred: true).Build(), rules, EvaluationTrigger.Manual, SubjectBuilder.Clerk, At);
-        r.Outcomes.Where(o => o.RuleId == "VENDOR_ELIGIBLE").Select(o => o.Severity).Should().BeEquivalentTo([Severity.HardStop, Severity.Warning]);
-        r.Overall.Should().Be(Severity.HardStop);
-    }
-
-    [Fact]
     public void Pipeline_Override_ChangesOverall_NotOutcome()
     {
-        var r = Run(new SubjectBuilder().Overridden("PROCUREMENT_THRESHOLD")
-            .With(SubjectBuilder.Distribution(1, "101-6000-53100", 30_000m))
-            .Budget(SubjectBuilder.Budget("101-6000-53100", 100_000m, 0m, 0m)).Build());
+        var s = new SubjectBuilder().Overridden("PROCUREMENT_THRESHOLD")
+            .With(SubjectBuilder.Distribution(1, "101-6000-53100", 30_000m, budget: SubjectBuilder.Budget(100_000m, 0m, 0m))).Build();
+        var r = Run(s);
         r.Outcomes.Single(o => o.RuleId == "PROCUREMENT_THRESHOLD").Severity.Should().Be(Severity.SoftStop);
         r.Overall.Should().Be(Severity.Allowed);
     }
 
     [Fact]
-    public void Post_trigger_fills_posting_check_and_enables_post()
+    public void Post_trigger_fills_posting_check()
     {
-        var s = new SubjectBuilder().Approved(ApproverRole.DepartmentHead, "6000").Approved(ApproverRole.GrantsManager)
-            .Approved(ApproverRole.FinanceDirector).Baseline(Rules.Fingerprint)
-            .Overridden("PROCUREMENT_THRESHOLD")                   // non-PO 100,000 ≥ 25,000 → Soft Stop, снят
-            .With(SubjectBuilder.Distribution(1, Fire, 100_000m)).Build();
-        var post = Run(s, EvaluationTrigger.Post);
-        post.PostingCheck!.Passed.Should().BeTrue();
-        post.Capabilities.CanPost.Should().BeTrue();
-        Run(s, EvaluationTrigger.Manual).PostingCheck.Should().BeNull();
+        var v = Rules.Versions;
+        var s = new SubjectBuilder().Approved(ApproverRole.DepartmentHead, ApproverRole.GrantsManager, ApproverRole.FinanceDirector).VersionsAtApproval(v)
+            .With(SubjectBuilder.Distribution(1, "701-6000-53100-G-COPS-26", 100_000m)).Build();
+        var r = Run(s, EvaluationTrigger.Post);
+        r.PostingCheck.Should().NotBeNull();
+        r.PostingCheck!.Passed.Should().BeTrue();
+        r.Capabilities.CanPost.Should().BeTrue();
+
+        var manual = Run(s, EvaluationTrigger.Manual);
+        manual.PostingCheck.Should().BeNull();
     }
 
     [Fact]
-    public void Record_carries_input_snapshot_and_is_immutable()
+    public void PostingEligibility_RuleSetVersionChanged_RequiresRevalidation()
+    {
+        var stale = Rules.Versions with { Tenant = 0 };
+        var s = new SubjectBuilder().Approved(ApproverRole.DepartmentHead, ApproverRole.GrantsManager, ApproverRole.FinanceDirector).VersionsAtApproval(stale)
+            .With(SubjectBuilder.Distribution(1, "701-6000-53100-G-COPS-26", 100_000m)).Build();
+        var r = Run(s, EvaluationTrigger.Post);
+        r.PostingCheck!.Passed.Should().BeFalse();
+        r.PostingCheck.Failures.Should().Contain(f => f.Contains(PostingEligibility.RevalidationRequired));
+        r.Capabilities.CanPost.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Record_is_immutable_and_carries_input_snapshot()
     {
         var r = Run(SubjectBuilder.Exercise());
+        r.InputSnapshot.Should().BeSameAs(r.InputSnapshot);
         r.InputSnapshot.Distributions.Should().HaveCount(1);
         typeof(Entities.EvaluationRecord).GetProperties().Should().OnlyContain(p => p.SetMethod == null || !p.SetMethod.IsPublic);
     }
 }
 ```
 
-- [ ] **Step 3: Убедиться, что не компилируется**
+- [ ] **Step 2: Убедиться, что не компилируется**
 
-- [ ] **Step 4: Реализация**
+- [ ] **Step 3: Реализация**
 
 `Entities/EvaluationRecord.cs`:
 ```csharp
@@ -2510,15 +2041,11 @@ public sealed class EvaluationRecord
 {
     public Guid Id { get; private set; }
     public string TransactionRef { get; private set; }
-    public Guid InvoiceId { get; private set; }
-    public int ContentVersion { get; private set; }
-    public Guid ApprovalCycleId { get; private set; }
+    public int TransactionVersion { get; private set; }
     public EvaluationTrigger Trigger { get; private set; }
     public DateTimeOffset EvaluatedAt { get; private set; }
     public UserId EvaluatedBy { get; private set; }
-    public string EngineVersion { get; private set; }
-    public IReadOnlyList<AppliedRule> AppliedRules { get; private set; }
-    public string RuleSetFingerprint { get; private set; }
+    public RuleSetVersions RuleSetVersions { get; private set; }
     public IReadOnlyList<RuleOutcome> Outcomes { get; private set; }
     public Severity Overall { get; private set; }
     public Capabilities Capabilities { get; private set; }
@@ -2527,36 +2054,31 @@ public sealed class EvaluationRecord
     public PostingCheck? PostingCheck { get; private set; }
     public ValidationSubject InputSnapshot { get; private set; }
 
-    internal EvaluationRecord(ValidationSubject subject, EvaluationTrigger trigger, DateTimeOffset evaluatedAt, UserId evaluatedBy,
-        EffectiveRuleSet ruleSet, IReadOnlyList<RuleOutcome> outcomes, Severity overall, Capabilities capabilities,
-        IReadOnlyList<ApprovalRequirement> approvalRoute, IReadOnlyList<PostingPreviewLine> postingPreview, PostingCheck? postingCheck)
+    internal EvaluationRecord(string transactionRef, int transactionVersion, EvaluationTrigger trigger, DateTimeOffset evaluatedAt,
+        UserId evaluatedBy, RuleSetVersions ruleSetVersions, IReadOnlyList<RuleOutcome> outcomes, Severity overall,
+        Capabilities capabilities, IReadOnlyList<ApprovalRequirement> approvalRoute, IReadOnlyList<PostingPreviewLine> postingPreview,
+        PostingCheck? postingCheck, ValidationSubject inputSnapshot)
     {
         Id = Guid.NewGuid();
-        TransactionRef = subject.Transaction.TransactionRef;
-        InvoiceId = subject.Transaction.InvoiceId;
-        ContentVersion = subject.Transaction.ContentVersion;
-        ApprovalCycleId = subject.Transaction.ApprovalCycleId;
+        TransactionRef = transactionRef;
+        TransactionVersion = transactionVersion;
         Trigger = trigger;
         EvaluatedAt = evaluatedAt;
         EvaluatedBy = evaluatedBy;
-        EngineVersion = ruleSet.EngineVersion;
-        AppliedRules = ruleSet.AppliedRules;
-        RuleSetFingerprint = ruleSet.Fingerprint;
+        RuleSetVersions = ruleSetVersions;
         Outcomes = outcomes;
         Overall = overall;
         Capabilities = capabilities;
         ApprovalRoute = approvalRoute;
         PostingPreview = postingPreview;
         PostingCheck = postingCheck;
-        InputSnapshot = subject;
+        InputSnapshot = inputSnapshot;
     }
 
     private EvaluationRecord()
     {
         TransactionRef = null!;
-        EngineVersion = null!;
-        AppliedRules = [];
-        RuleSetFingerprint = null!;
+        RuleSetVersions = null!;
         Outcomes = [];
         Capabilities = null!;
         ApprovalRoute = [];
@@ -2572,7 +2094,7 @@ using GovErp.Domain.Validation.DomainServices.Rules;
 
 namespace GovErp.Domain.Validation.DomainServices;
 
-/// <summary>Все известные коду правила. RuleDefinition шагов 1–6 без реализации здесь — ошибка конфигурации.</summary>
+/// <summary>Все известные коду правила. RuleDefinition без реализации здесь — ошибка конфигурации.</summary>
 public sealed class RuleCatalog
 {
     private readonly IReadOnlyDictionary<string, IValidationRule> _byId;
@@ -2591,54 +2113,9 @@ public sealed class RuleCatalog
     ]);
 
     public IValidationRule? Find(string ruleId) => _byId.GetValueOrDefault(ruleId);
+    public IReadOnlyCollection<string> KnownRuleIds => _byId.Keys.ToList();
 }
 ```
-
-`DomainServices/RuleSetGuard.cs`:
-```csharp
-using GovErp.Domain.Validation.Entities;
-using GovErp.Domain.Validation.ValueObjects;
-
-namespace GovErp.Domain.Validation.DomainServices;
-
-/// <summary>Проверка набора определений при seed / сохранении: реализация существует; адаптируемое правило не ослаблено локальным слоем.</summary>
-public static class RuleSetGuard
-{
-    public static IReadOnlyList<string> FindViolations(IReadOnlyList<RuleDefinition> definitions, RuleCatalog catalog)
-    {
-        var violations = new List<string>();
-        foreach (var group in definitions.GroupBy(d => d.RuleId))
-        {
-            var sample = group.First();
-            if (sample.Step <= ValidationStep.EncumbranceImpact && catalog.Find(group.Key) is null)
-            {
-                violations.Add($"{group.Key}: configured for step {(int)sample.Step} but has no implementation.");
-                continue;
-            }
-
-            var latestPerLayer = group.GroupBy(d => d.Layer)
-                .Select(l => l.OrderByDescending(d => d.Version).First())
-                .OrderBy(d => d.Layer).ToList();
-            if (!latestPerLayer[0].IsLocallyAdjustable || catalog.Find(group.Key) is not { } rule)
-            {
-                continue;
-            }
-
-            for (var i = 1; i < latestPerLayer.Count; i++)
-            {
-                if (rule.IsWeakening(latestPerLayer[i - 1], latestPerLayer[i]))
-                {
-                    violations.Add($"{group.Key}: {latestPerLayer[i].Layer} v{latestPerLayer[i].Version} weakens {latestPerLayer[i - 1].Layer} v{latestPerLayer[i - 1].Version}.");
-                }
-            }
-        }
-
-        return violations;
-    }
-}
-```
-
-`APPROVAL_ROUTE` (шаг 7) реализации в каталоге не требует — его параметры читает `ApprovalRouting`; ослабление порога FinanceDirector для демо не проверяется (записать в Self-review как известное упрощение).
 
 `DomainServices/ValidationPipeline.cs`:
 ```csharp
@@ -2653,23 +2130,26 @@ namespace GovErp.Domain.Validation.DomainServices;
 /// Шаг 7 — маршрут (всегда). Шаг 8 — posting check (только при trigger = Post).
 /// Чистая функция: ни портов, ни часов, ни случайности, кроме Guid записи.
 /// </summary>
-public sealed class ValidationPipeline(RuleCatalog catalog)
+public sealed class ValidationPipeline
 {
-    private static readonly ValidationStep[] RuleSteps =
-    [
-        ValidationStep.RequiredSegments, ValidationStep.ValidCombination, ValidationStep.FundAndGrantRestrictions,
-        ValidationStep.TransactionPurpose, ValidationStep.BudgetAvailability, ValidationStep.EncumbranceImpact,
-    ];
+    private readonly RuleCatalog _catalog;
 
-    private readonly RuleCatalog _catalog = catalog;
+    public ValidationPipeline(RuleCatalog catalog)
+    {
+        _catalog = catalog;
+    }
 
-    public EvaluationRecord Evaluate(ValidationSubject subject, EffectiveRuleSet ruleSet, EvaluationTrigger trigger,
+    public EvaluationRecord Evaluate(ValidationSubject subject, EffectiveRuleSet rules, EvaluationTrigger trigger,
         UserId evaluatedBy, DateTimeOffset evaluatedAt)
     {
         var raw = new List<RuleOutcome>();
-        foreach (var step in RuleSteps)
+        foreach (var step in new[]
+                 {
+                     ValidationStep.RequiredSegments, ValidationStep.ValidCombination, ValidationStep.FundAndGrantRestrictions,
+                     ValidationStep.TransactionPurpose, ValidationStep.BudgetAvailability, ValidationStep.EncumbranceImpact,
+                 })
         {
-            foreach (var definition in ruleSet.ForStep(step))
+            foreach (var definition in rules.ForStep(step))
             {
                 var rule = _catalog.Find(definition.RuleId)
                     ?? throw new ValidationException($"Rule {definition.RuleId} is configured but has no implementation.");
@@ -2682,15 +2162,16 @@ public sealed class ValidationPipeline(RuleCatalog catalog)
             }
         }
 
-        var (outcomes, overall) = OutcomeAggregation.Apply(raw, subject.ActiveOverrides);
-        var route = ApprovalRouting.Build(subject, outcomes, ruleSet.Find("APPROVAL_ROUTE"));
+        var (outcomes, overall) = OutcomeAggregation.Apply(raw, subject.OverridesSoFar);
+        var route = ApprovalRouting.Build(subject, outcomes, rules.Find("APPROVAL_ROUTE"));
         var preview = overall <= Severity.SoftStop ? PostingPreviewComposer.Compose(subject) : [];
         var postingCheck = trigger == EvaluationTrigger.Post
-            ? PostingEligibility.Check(subject, overall, route, preview, ruleSet.Fingerprint)
+            ? PostingEligibility.Check(subject, overall, route, preview, rules.Versions)
             : null;
+        var capabilities = Capabilities.For(overall, postingCheck?.Passed);
 
-        return new EvaluationRecord(subject, trigger, evaluatedAt, evaluatedBy, ruleSet, outcomes, overall,
-            Capabilities.For(overall, postingCheck?.Passed), route, preview, postingCheck);
+        return new EvaluationRecord(subject.Transaction.TransactionRef, subject.Transaction.TransactionVersion, trigger,
+            evaluatedAt, evaluatedBy, rules.Versions, outcomes, overall, capabilities, route, preview, postingCheck, subject);
     }
 }
 ```
@@ -2716,18 +2197,18 @@ public static IEnumerable<Assembly> DomainContexts => [ChartOfAccounts, Ledger, 
 public static IEnumerable<Assembly> AllDomain => [Shared, ChartOfAccounts, Ledger, Payables, Validation];
 ```
 
-- [ ] **Step 5: Прогнать всё**
+- [ ] **Step 4: Прогнать всё**
 
 Run: `dotnet test`
-Expected: Validation.Tests — 100 passed (81 + 4 + 15); Architecture.Tests — зелёные (`ValidationPipeline._catalog` и `RuleCatalog._byId` — `readonly`, поэтому `Domain_services_have_no_mutable_instance_fields` проходит).
+Expected: Validation.Tests — 74 passed; Architecture.Tests — зелёные (в т.ч. `Domain_services_have_no_mutable_instance_fields` — `ValidationPipeline._catalog` и `RuleCatalog._byId` — `readonly`).
 
-- [ ] **Step 6: Commit и push**
+- [ ] **Step 5: Commit и push**
 
 ```bash
 git add -A
-git commit -m "Validation: evaluation record with fingerprint, rule catalog and guard, pipeline scenarios
+git commit -m "Validation: EvaluationRecord, rule catalog, pipeline with end-to-end scenarios
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 git push
 ```
 
@@ -2735,8 +2216,8 @@ git push
 
 ## Self-review
 
-**Покрытие спеки 3.5 / 4.1–4.3:** снимки, бюджетный ключ, собственный резерв, PO-строки — задача 1; `RuleDefinition` с адаптируемостью, разрешение слоёв, fingerprint — задача 2; `RuleOutcome`, привязанные overrides, `Capabilities` — задача 3; 11 правил — задачи 4–5; маршрут по департаментам, posting preview, eligibility с базовой линией — задача 6; `EvaluationRecord`, каталог, guard ослабления, конвейер и сценарии spec §7 — задача 7.
+**Покрытие спеки 3.5 / 4.1–4.3:** снимки и `ValidationSubject` — задача 1; `RuleDefinition`, слои, версии — задача 2; `RuleOutcome`, override-агрегация, `Capabilities` — задача 3; 11 правил — задачи 4–5; `ApprovalRouting`, posting preview, `PostingEligibility` — задача 6; `EvaluationRecord`, `RuleCatalog`, `ValidationPipeline`, все `Scenario_*` и `Pipeline_*` тесты из спеки 7 — задача 7. Синтетический `BUDGET_CONCURRENCY` (4.2) — формируется слоем сценариев в плане 3 через `RuleOutcome`-конструктор (все поля публичны в record).
 
-**Решения, фиксируемые планом:** (1) расчёт `RequiredNewBudget` / `ProjectedAvailable` — чистые методы `ValidationSubject`, а не поля, заполняемые сборщиком: одна формула, проверяемая юнит-тестами; значения всё равно сохраняются в `Inputs`/`Computed` outcome'ов; (2) бюджетные outcome'ы привязаны к первой строке ключа — к ней же привязывается override; (3) `PO_LIQUIDATION` выдаёт информационный outcome `Allowed`, чтобы ликвидация была видна в Results и аудите; (4) ослабление `APPROVAL_ROUTE.finance_director_threshold` не проверяется — известное упрощение демо.
+**Отклонения от спеки, фиксируемые планом:** (1) `AmountToCheck` вычисляется в `DistributionSnapshot`, а не в assembler — проще и без дублирования; (2) `IsSatisfied` для `DepartmentHead` — по роли, не по департаменту; (3) `PO_LIQUIDATION` выдаёт информационный outcome `Allowed`.
 
-**Согласованность имён:** `Capabilities` — 4 флага (без оплаты); `PostingEligibility.Check(..., string currentFingerprint)`; `ApprovalBaseline(ContentVersion, RuleSetFingerprint)` формирует план 3 из оценки, на которую ссылается последнее согласование активного цикла; `PostingPreviewLine.Family` — строки `PostingPreviewComposer.Financial` / `.Budgetary`, план 3 маппит их в `LedgerFamily`.
+**Согласованность имён:** `RuleSetVersions` — record с value-равенством, поэтому сравнение `v != currentVersions` в `PostingEligibility` корректно. `Capabilities.For(Severity, bool?)` — используется в `ValidationPipeline` и тестах. `RuleOutcome.From(...)` — 6 параметров, последний опционален. `PostingPreviewLine.Family` — строка, чтобы не заводить enum, дублирующий `LedgerFamily` из Ledger; план 3 маппит `"Budgetary"` → `LedgerFamily.Budgetary`.

@@ -18,9 +18,9 @@
 | **Outstanding encumbrances** | `BudgetLine.Encumbered` | Сумма открытых encumbrances по бюджетной строке |
 | **Liquidation** | `Encumbrance.Liquidate` | Снятие резерва при приходе инвойса по PO; резерв превращается в actuals |
 | **Reservation** (Held) | `BudgetLine.Reservations`, `ReservationStatus.Held` | Резерв бюджета под новую (не ликвидируемую) часть инвойса, взятый на Submit и принадлежащий `InvoiceId + ContentVersion`. Не бухгалтерский термин, а механизм защиты от двойного списания |
-| **Own held** | `BudgetLine.HeldFor` | Резервы этого же инвойса; при перевалидации прибавляются к available, чтобы не вычесть резерв дважды |
+| **Own held** | `BudgetLine.OwnHeld` | Резервы этого же инвойса; при перевалидации прибавляются к available, чтобы не вычесть резерв дважды |
 | **Encumbrance claim** | `Encumbrance.Claims` | Захват части остатка encumbrance инвойсом на Submit; погашается на Post (ликвидация) |
-| **PO billing claim** | `PurchaseOrderLine.BillingClaims` | Захват полной суммы PO-backed инвойса по PO-строке; защищает накопительный допуск от утверждённой суммы PO |
+| **PO billing claim** | `Encumbrance.BillingClaims` | Захват полной суммы PO-backed инвойса по PO-строке; защищает накопительный допуск от утверждённой суммы PO |
 | **Opening balance** | `OpeningBalance` | Начальный снимок actuals и encumbrances на дату загрузки; не проводка |
 | **Available budget** | `BudgetLine.Available` | `Amended − Actuals − Encumbered − ΣHeld` |
 | **Hard / Soft budget control** | `BudgetControlMode` | Hard — превышение блокирует; Soft — превышение даёт Soft Stop, снимаемый уполномоченным |
@@ -57,7 +57,7 @@
 | **Content version** | `VendorInvoice.ContentVersion` | Номер версии содержания инвойса; растёт только при изменении сумм, поставщика, дат, PO или distributions. Не путать с SQL `RowVersion` |
 | **Approval cycle** | `VendorInvoice.ApprovalCycleId` | Цикл согласования; закрывается при Reject/Withdraw или смене содержания/fingerprint; решения прошлых циклов остаются историей |
 | **Withdraw** | `VendorInvoice.Withdraw` | Отзыв автором до Post: освобождает резервы и claims, возвращает в Draft |
-| **Payment handoff readiness** | `VendorInvoice.IsReadyForPaymentHandoff` | Posted ∧ vendor Active ∧ нет PaymentHold ∧ DueDate ≤ BusinessDate; вычисляется, статуса Payable нет |
+| **Payment handoff readiness** | `VendorInvoice.ReadyForPaymentHandoff` | Posted ∧ vendor Active ∧ нет PaymentHold ∧ DueDate ≤ BusinessDate; вычисляется, статуса Payable нет |
 | **Command receipt** | `ap.ProcessedCommands` | Запись о выполненной команде по `CommandId`; повтор возвращает её, а не выполняет заново |
 | **Debarred vendor** | `VendorStatus.Debarred` | Поставщик, которому запрещены государственные контракты |
 | **SAM registration** | `Vendor.SamRegistered` | Регистрация в федеральной системе SAM.gov; обязательна для федеральных грантов |
@@ -77,7 +77,7 @@
 | **Soft Stop** | `Severity.SoftStop` | Блокировка, снимаемая override уполномоченной роли |
 | **Rule outcome** | `RuleOutcome` | Результат одного правила: входы, расчёт, severity, сообщение, resolution |
 | **Evaluation record** | `EvaluationRecord` | Неизменяемая запись одной оценки: снимок входов, применённые правила и их fingerprint, outcomes, overall, capabilities, маршрут, preview |
-| **Rule set fingerprint** | `EvaluationRecord.RuleSetFingerprint` | SHA-256 по всем применённым правилам (id, слой, версия, параметры) и версии engine; смена открывает новый цикл согласования |
+| **Rule set fingerprint** | `RuleSetVersions.Fingerprint`, `VendorInvoice.RuleFingerprint` | SHA-256 по всем применённым правилам (id, слой, версия, параметры) и версии engine; смена открывает новый цикл согласования |
 | **Validation subject** | `ValidationSubject` | Снимки всего, что нужно конвейеру; собирается в слое сценариев |
 | **Capabilities** | `Capabilities` | Что можно сделать с транзакцией при данном результате: save / submit / approve / post / pay |
 | **Approval route** | `ApprovalRouting` | Список согласующих ролей и что каждой показывается |

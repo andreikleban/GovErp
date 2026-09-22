@@ -141,32 +141,29 @@ year-end lapse vs carryforward для грантов; pooled cash и due to/from
 
 | Агрегат | Состояние | Методы | Инварианты |
 |---|---|---|---|
-| `BudgetLine` | `Account`, `FiscalYear`, `ControlMode`, `Adopted`, `Amendments[]`, `Actuals`, `Encumbered`, `Reservations[]` (`Id`, `InvoiceId`, `ContentVersion`, `Amount`, `IsOverage`, `Status: Held / Committed / Released`), `ChangeStamp`, `RowVersion` | `Open(OpeningBalance)`, `Amend`, `Reserve(invoiceId, contentVersion, amount) → ReservationResult`, `Commit(reservationId)`, `Release(reservationId)`, `ReleaseAllFor(invoiceId)`, `RecordLiquidation(amount)`, `HeldFor(invoiceId, contentVersion)`, `AvailableFor(invoiceId, contentVersion)` | `Amended = Adopted + ΣAmendments`; `Available = Amended − Actuals − Encumbered − ΣHeld`; `AvailableFor = Available + OwnHeld`; при Hard `Reserve` отказывает, если `AvailableFor < amount`; при Soft резервирует с `IsOverage`; `Commit`: Held → Committed, `Actuals += amount`; `RecordLiquidation`: `Encumbered −= amount`, `Actuals += amount`; любое изменение увеличивает `ChangeStamp` |
-| `Encumbrance` | `PoLineRef`, `Account`, `FiscalYear`, `Original`, `Liquidated`, `Released`, `Claims[]` (`Id`, `InvoiceId`, `ContentVersion`, `Amount`, `Status: Held / Consumed / Released`), `ChangeStamp`, `RowVersion` | `Claim(invoiceId, contentVersion, amount)`, `ConsumeClaim(claimId)`, `ReleaseClaim(claimId)`, `ReleaseAllFor(invoiceId)`, `ClaimableFor(invoiceId)`, `ReleaseRemainder(reason)` | `Remaining = Original − Liquidated − Released ≥ 0`; `Σ Held claims ≤ Remaining`; `ConsumeClaim`: `Liquidated += claim.Amount`; claim меняет только владелец (InvoiceId) |
-| `OpeningBalance` | `Account`, `FiscalYear`, `AsOfDate`, `InitialActuals`, `InitialEncumbered`, `SourceReference` | анемичный, неизменяемый | — |
-| `JournalEntry` | `SourceRef`, `PostingKind`, `PostingDate`, `PostedAt`, `PostedBy`, `Lines[]` (`Account`, `LedgerFamily: Financial / Budgetary`, `Debit`, `Credit`, `Description`) | фабрика `Create(sourceRef, kind, lines, period, actor, at)`; неизменяем | по каждой паре (фонд, семейство) `ΣDebit = ΣCredit`; ≥ 2 строк; период открыт; `(SourceRef, PostingKind)` уникален |
+| `BudgetLine` | `Account`, `FiscalYear`, `ControlMode`, `Adopted`, `Amendments[]`, `Actuals`, `Encumbered`, `Reservations[]` (`Id`, `InvoiceId`, `ContentVersion`, `SourceRef`, `Amount`, `Status: Held / Committed / Released`), `OpeningBalanceId`, `ChangeStamp` | `ApplyOpeningBalance(opening)`, `Amend`, `Reserve(invoiceId, contentVersion, amount, sourceRef) → ReservationResult`, `Commit(reservationId, invoiceId, contentVersion)`, `Release(reservationId, invoiceId, contentVersion)`, `RecordLiquidation(amount)`, `OwnHeld(invoiceId, contentVersion)`, `AvailableForInvoice(invoiceId, contentVersion)` | `Amended = Adopted + ΣAmendments`; `Available = Amended − Actuals − Encumbered − ΣHeld`; `AvailableForInvoice = Available + OwnHeld`; при Hard `Reserve` отказывает, если `Available < amount`; при Soft резервирует с признаком превышения; `Commit` / `Release` — только владельцем (инвойс + версия содержания); `RecordLiquidation`: `Encumbered −= amount`, `Actuals += amount`; opening balance — один раз и только на нетронутую строку; любое изменение увеличивает `ChangeStamp` |
+| `Encumbrance` | `PoLineRef`, `Account`, `Original`, `Liquidated`, `Released`, `AuthorizedPoAmount`, `AlreadyPostedAgainstPo`, `Claims[]` (ликвидируемая часть), `BillingClaims[]` (полная PO-сумма инвойса); у обеих коллекций `InvoiceId`, `ContentVersion`, `Amount`, `Status: Held / Consumed / Released`; `ChangeStamp` | `ClaimableForInvoice(invoiceId, contentVersion)`, `Claim`, `ConsumeClaim`, `ReleaseClaim`, `ClaimBilling(invoiceId, contentVersion, amount, tolerance)`, `ConsumeBillingClaim`, `ReleaseBillingClaim`, `ReleaseRemainder` | `Remaining = Original − Liquidated − Released`; `Σ Held claims ≤ Remaining`; **`AlreadyPostedAgainstPo + Σ Held billing claims + amount ≤ AuthorizedPoAmount × (1 + tolerance)`** — проверяет сам агрегат (§5, правило 4); `ConsumeClaim` увеличивает `Liquidated`, `ConsumeBillingClaim` — `AlreadyPostedAgainstPo`; claim меняет только его владелец |
+| `OpeningBalance` | `Account`, `FiscalYear`, `AsOfDate`, `InitialActuals`, `InitialEncumbered`, `SourceReference` | неизменяемый | дата в пределах бюджетного года, суммы ≥ 0 |
+| `JournalEntry` | `SourceRef`, `PeriodYear/Month`, `PostedAt`, `PostedBy`, `Lines[]` (`Account`, `LedgerFamily: Financial / Budgetary`, `Debit`, `Credit`, `Description`) | фабрика `Create(sourceRef, lines, period, actor, at)`; неизменяем | по каждой паре (фонд, семейство) `ΣDebit = ΣCredit`; ≥ 2 строк; период открыт; повторная проводка исключена уникальным `SourceRef` и receipt команды |
 | `FiscalPeriod` | `Year`, `Month`, `Status` | `Close()` | — |
 
-`BudgetLine.Encumbered` — денормализованная сумма; сверка: `Encumbered = Σ Encumbrance.Remaining` по ключу.
-`Actuals = OpeningBalance.InitialActuals + Σ` проведённых в прототипе расходов.
+Billing claim живёт в Ledger рядом с encumbrance, а не на строке PO. Допуск передаётся из параметра правила `PO_LIQUIDATION` (`tolerance_pct`), значение по умолчанию в агрегате не используется.
 
-Инвариант Post по каждой бюджетной строке: `Actuals` растёт ровно на сумму distributions инвойса
-(`Commit` собственного резерва + `RecordLiquidation` захваченной части); `Encumbered` уменьшается на
-погашенные encumbrance claims; `Held` — на собственные резервы.
+Инвариант Post по каждой бюджетной строке: `Actuals` растёт ровно на сумму distributions инвойса (`Commit` собственного резерва + `RecordLiquidation` погашенного claim); `Encumbered` уменьшается на погашенные claims; `Held` — на собственные резервы.
 
-Репозитории: `IBudgetLineRepository`, `IEncumbranceRepository`, `IOpeningBalanceRepository`, `IJournalRepository`, `IFiscalPeriodRepository`.
+Репозитории: `IBudgetLineRepository`, `IEncumbranceRepository`, `IJournalRepository`, `IFiscalPeriodRepository`.
 
 ### 3.4 Payables
 
 | Агрегат | Состояние | Методы | Инварианты |
 |---|---|---|---|
 | `Vendor` | `Code`, `Name`, `Status` (Active / Inactive / Debarred), `SamRegistered` | анемичный | — |
-| `PurchaseOrder` | `Number`, `VendorId`, `Status`, `Lines[]` (`LineNo`, `Account`, `AuthorizedAmount`, `PostedAmount`, `BillingClaims[]` (`Id`, `InvoiceId`, `ContentVersion`, `Amount`, `Status: Held / Consumed / Released`)), `ChangeStamp`, `RowVersion` | `ClaimBilling(lineNo, invoiceId, contentVersion, amount)`, `ConsumeBillingClaim(claimId)`, `ReleaseBillingClaimsFor(invoiceId)`, `OtherActiveBillingClaims(lineNo, invoiceId)`, `LineRef(lineNo)` | `AuthorizedAmount > 0`; `ConsumeBillingClaim`: `PostedAmount += claim.Amount`; допустимость суммы проверяет конвейер (правило `PO_LIQUIDATION`) в той же транзакции под `RowVersion` |
-| `VendorInvoice` | `Number`, `NormalizedNumber`, `VendorId`, `InvoiceDate`, `ServiceDate`, `PostingDate`, `DueDate`, `Total`, `PoNumber?`, `Distributions[]` (`LineNo`, `Account`, `Amount`, `PoLineNo?`), `Status`, `ContentVersion`, `ApprovalCycleId`, `Approvals[]` (`CycleId`, `Role`, `Department?`, `UserId`, `Decision`, `EvaluationId`, `Reason?`, `At`), `Overrides[]` (`CycleId`, `EvaluationId`, `RuleId`, `RuleVersion`, `DistributionLine?`, `ContentVersion`, `UserId`, `Reason`, `At`), `PaymentHold`, `LastEvaluationId`, `CreatedBy`, `RowVersion` | `ReplaceContent(...)`, `Submit(evaluationId)`, `RecordApproval(role, department, user, evaluationId, at)`, `MarkApproved()`, `Override(...)`, `OpenNewApprovalCycle(reason)`, `Reject(user, reason, at)`, `Withdraw(user, reason, at)`, `Post(evaluationId, at)`, `SetPaymentHold(bool)`, `IsReadyForPaymentHandoff(vendorActive, businessDate)` | `ΣDistributions = Total` при `Submit`; содержимое меняется только в `Draft` и увеличивает `ContentVersion`; согласует не автор, одна роль+департамент — один раз за цикл; `Withdraw` — только автор, до `Post`; `Post` — только из `Approved`; история approvals/overrides не удаляется |
+| `PurchaseOrder` | `Number`, `VendorId`, `Status`, `Lines[]` (`LineNo`, `Account`, `Amount`) | анемичный (seed) | уникальные номера строк, положительные суммы |
+| `VendorInvoice` | `Number`, `NormalizedInvoiceNumber`, `VendorId`, `InvoiceDate`, `ServiceDate`, `PostingDate`, `DueDate`, `Total`, `PoRef?`, `Distributions[]`, `Status`, `ContentVersion`, `ApprovalCycleId`, `LastEvaluationRef`, `RuleFingerprint`, маршрут (`ApprovalRequirement[]`: роль + департамент), `Approvals[]` (с циклом, версией содержания и fingerprint), `Overrides[]` (`OverrideTarget`: оценка, outcome, правило, версия, строка, версия содержания, цикл), `Withdrawals[]`, ссылки на свои резервы и claims (`ReservationRefs`, `EncumbranceClaimRefs`, `PoBillingClaimRefs`), `PaymentHold` | `UpdateHeader`, `AddDistribution`, `RemoveDistribution`, `Submit(evaluation, fingerprint, route, refs)`, `RecordApproval(role, department, user, evaluation)`, `MarkApproved`, `Override(target, user, reason)`, `Reevaluate(evaluation, contentVersion, fingerprint, route)`, `Reject → InvoiceRelease`, `ReturnToDraft`, `Withdraw → InvoiceRelease`, `Post(evaluation, contentVersion, cycle, fingerprint)`, `SetPaymentHold`, `ReadyForPaymentHandoff(vendorActive, businessDate)` | `ΣDistributions = Total` при `Submit`; содержание меняется только в `Draft` и увеличивает `ContentVersion`; согласует только шаг маршрута (роль + свой департамент) и не автор; `MarkApproved` — когда все шаги согласованы в текущем цикле, версии и fingerprint; `Reevaluate` открывает новый цикл при смене fingerprint **или маршрута**; override — не автором и только для текущей оценки, цикла и версии; `Post` — только согласованные оценка, цикл, версия и fingerprint; `Withdraw` — только автор, до `Post`; история согласований и отзывов не удаляется |
 
-Статусы: `Draft → Submitted → Approved → Posted`; `Reject` и `Withdraw` из `Submitted` / `Approved` возвращают
-в `Draft`, закрывают цикл и открывают новый `ApprovalCycleId`. Статуса `Payable` нет — готовность к оплате
-вычисляется.
+Статусы: `Draft → Submitted → Approved → Posted`; `Reject` переводит в `Rejected`.
+
+Маршрут и fingerprint хранятся на инвойсе намеренно: повторное согласование. Ссылки на резервы и claims дублируют владельца, записанного в Ledger; расхождение ловит проверка владельца в `Commit` / `ConsumeClaim`.
 
 Репозитории: `IVendorInvoiceRepository`, `IPurchaseOrderRepository`, `IVendorRepository`.
 
@@ -174,17 +171,15 @@ year-end lapse vs carryforward для грантов; pooled cash и due to/from
 
 | Тип | Что это | Состояние |
 |---|---|---|
-| `RuleDefinition` (агрегат, анемичный) | Запись о правиле: включённость, версия, параметры | `RuleId`, `Version`, `Step (1..8)`, `Layer (Core / Federal / State / Tenant)`, `IsLocallyAdjustable`, `Severity?`, `Parameters` (json), `OverridableBy[]`, `Effective*`, `Message`, `Resolution` |
-| `ValidationSubject` (value object) | Все входы конвейера — снимки | `TransactionSnapshot` (ref, ContentVersion, ApprovalCycleId, даты, сумма, vendor, PO?, признак дубликата); по distribution — `CombinationSnapshot`, `FundSnapshot`, `GrantSnapshot?`, `EncumbranceSnapshot?`; по бюджетному ключу — `BudgetSnapshot` (`Amended`, `Actuals`, `Encumbered`, `Held`, `OwnHeld`, `AvailableForInvoice`, `RequiredNewBudget`, `ProjectedAvailable`); по PO-строке — `PoLineSnapshot` (`AuthorizedAmount`, `AlreadyPosted`, `OtherActiveClaims`, `CurrentInvoicePoAmount`, `CumulativeExcessPct`); `ActiveApprovals`, `ActiveOverrides`, `PeriodIsOpen`, `FingerprintAtLastApproval?` |
-| `ValidationPipeline` (доменный сервис) | `Evaluate(subject, ruleSet, trigger, actor, at) → EvaluationRecord` | без состояния; правила — классы в `DomainServices/Rules/` |
-| `ApprovalRouting`, `PostingEligibility` (доменные сервисы) | шаги 7 и 8 | без состояния |
-| `EvaluationRecord` (агрегат, неизменяемый) | Результат оценки | `Id`, `TransactionRef`, `ContentVersion`, `ApprovalCycleId`, `Trigger`, `EvaluatedAt`, `EvaluatedBy`, `EngineVersion`, `AppliedRules[]` (`RuleId`, `Layer`, `Version`, `ParametersHash`), `RuleSetFingerprint`, `Outcomes[]`, `Overall`, `Capabilities`, `ApprovalRoute[]`, `PostingPreview[]`, `PostingCheck?`, `InputSnapshot` |
+| `RuleDefinition` (агрегат, анемичный) | Запись о правиле | `RuleId`, `Version`, `Step (1..8)`, `Layer (Core / Federal / State / Tenant)`, `ScopeFund?`, `ScopeGrant?`, `Severity?`, `Parameters` (json), `OverridableBy[]`, `Effective*`, `Message`, `Resolution`, `IsEnabled` |
+| `ValidationSubject` (value object) | Все входы конвейера — снимки | `TransactionSnapshot` (ref, версия содержания, цикл, fingerprint, статус, даты, сумма, vendor, PO?, дубликат, PaymentHold); по distribution — `CombinationSnapshot`, `FundSnapshot`, `GrantSnapshot?`, `BudgetSnapshot` (с `OwnHeld`), `EncumbranceSnapshot?` (остаток, чужие и свои claims, утверждённая и выставленная сумма PO); согласования и overrides активного цикла; `PeriodIsOpen`; `BusinessDate` |
+| `EffectiveRuleSet` | Набор правил на дату и scope (фонд, грант) | определения, `RuleSetVersions` (максимумы по слоям — для отображения, `AppliedRules`, `Fingerprint`) |
+| `ValidationPipeline`, `BudgetAllocation`, `ApprovalRouteResolver`, `PostingPreviewBuilder`, `PostingEligibility` (доменные сервисы) | конвейер; распределение ликвидации по строкам; шаг 7; preview; шаг 8 | без состояния |
+| `EvaluationRecord` (агрегат, неизменяемый) | Результат оценки | ref, версия содержания, цикл, trigger, время, актор, `RuleSetVersions` с fingerprint, outcomes (у каждого `OutcomeRef` для привязки override), `Overall`, `Capabilities`, маршрут, preview, `PostingCheck?`, снимок входов |
 
-Инварианты `EvaluationRecord`: `Overall = max(Outcomes.Severity)` без применённых overrides; `Capabilities` —
-функция от `Overall` и `PostingCheck`; создаётся один раз, не изменяется.
+Инварианты `EvaluationRecord`: `Overall = max(Outcomes.Severity)` без применённых overrides; `Capabilities` — функция от `Overall` и `PostingCheck`; создаётся один раз.
 
-`RuleSetFingerprint` — SHA-256 по упорядоченному списку `(RuleId, Layer, Version, canonical Parameters)`
-всех применённых правил, включая не сработавшие, плюс `EngineVersion`.
+Fingerprint — SHA-256 по бинарной сериализации (с префиксами длины) всех применённых определений: id, версия, слой, шаг, scope, severity, включённость, effective dates, сообщения, параметры, роли override, плюс версия engine и наборы по scope.
 
 Репозитории: `IRuleDefinitionRepository`, `IEvaluationRecordRepository`.
 
@@ -222,41 +217,42 @@ Evaluate(subject, ruleSet, trigger, actor, at):
 Разрешение конфликтов:
 1. Внутри шага — все правила шага выполняются, результат = строжайший.
 2. Между шагами — Hard Stop на шагах 1–6 прерывает; Soft / Warning накапливаются.
-3. Одинаковый `RuleId` в нескольких слоях:
-   - правило с `IsLocallyAdjustable = false` (обязательные ограничения `Core` / `Federal`) не заменяется:
-     выполняются **все** действующие определения, итог — строжайший;
-   - правило с `IsLocallyAdjustable = true` заменяется определением более специфичного слоя
-     (`Tenant > State > Federal > Core`), внутри слоя — старшей версией. Ослабление запрещено и проверяется
-     типом правила при сохранении/seed (например, повышение `PROCUREMENT_THRESHOLD.threshold` над
-     вышестоящим слоем — отказ), а не только сравнением severity.
-   Это допущение демо, а не утверждение о правовой иерархии США.
+3. Правила разрешаются на дату и **scope** (фонд, грант distribution): определение со `ScopeFund` /
+   `ScopeGrant` действует только для своих строк. Одинаковый `RuleId` в нескольких слоях — побеждает самый
+   специфичный слой (`Tenant > State > Federal > Core`), внутри слоя — старшая версия, **но только если он не
+   ослабляет ни один вышестоящий**: не ниже severity, не шире роли override, параметры — не мягче
+   (`threshold`, `finance_director_threshold`, `tolerance_pct` — не выше; `pct` — не ниже; прочие параметры
+   менять нельзя, а у правил без override нельзя менять никакие). Ослабление — ошибка конфигурации; та же
+   проверка выполняется при seed и сохранении правила, чтобы ошибка не всплывала впервые при оценке.
+   Так обязательное ограничение не исчезает при локальном переопределении. Это допущение демо, а не
+   утверждение о правовой иерархии США.
 
-Override меняет агрегацию, не outcome. Override привязан к `EvaluationId`, `RuleId` + `RuleVersion`,
-строке distribution, `ContentVersion` и активному `ApprovalCycleId`; на другую строку, версию содержания
-или цикл не переносится.
+Override меняет агрегацию, не outcome. Override привязан к `OutcomeRef` конкретной оценки, `RuleId` +
+`RuleVersion`, строке distribution, `ContentVersion` и активному `ApprovalCycleId`; на другую строку,
+версию содержания или цикл не переносится; автор инвойса override не делает.
 
-Шаг 6 (encumbrance impact) вычислительно предшествует шагу 5: сборщик снимков считает по каждой PO-строке
-`EligibleLiquidation = min(сумма distributions на PO-строку, ClaimableForInvoice)`, а по каждому бюджетному
-ключу `RequiredNewBudget = Σ amount − Σ EligibleLiquidation` и
-`ProjectedAvailable = AvailableForInvoice − RequiredNewBudget`. Правило шага 6 отчитывается о ликвидации и
-допуске, правило шага 5 использует `RequiredNewBudget` и `ProjectedAvailable`.
+Шаг 6 (encumbrance impact) вычислительно предшествует шагу 5: `BudgetAllocation` распределяет по строкам
+каждой PO-строки ликвидацию `min(amount, ClaimableForInvoice)` (для уже поданного инвойса — его собственный
+claim) и проверяет согласованность снимков; `BUDGET_AVAILABILITY` суммирует по бюджетному ключу
+`RequiredNewBudget = Σ amount − Σ liquidation` и сравнивает с `AvailableForInvoice = Available + OwnHeld`.
+Правило шага 6 отчитывается о ликвидации и накопительном допуске PO.
 
 ### 4.2 Правила демо
 
-| # | RuleId | Шаг | Layer | Adjustable | Severity | Проверяет | Параметры |
-|---|---|---|---|---|---|---|---|
-| 1 | `SEG_REQUIRED` | 1 | Core | нет | Hard | Grant — по `GrantPolicy` (Fund/Dept/Object гарантированы типом) | — |
-| 2 | `SEG_GRANT_FORBIDDEN` | 1 | Core | нет | Hard | Grant при `GrantPolicy = Forbidden` | — |
-| 3 | `COA_COMBINATION_ACTIVE` | 2 | Core | нет | Hard | комбинация в whitelist, Active, в effective-окне на InvoiceDate | — |
-| 4 | `FUND_DEPT_OBJECT_ALLOWED` | 3 | Tenant | нет | Hard | dept ∈ `Fund.AllowedDepartments`, object ∈ `Fund.AllowedObjects` | — |
-| 5 | `GRANT_ELIGIBLE` | 3 | Federal | нет | Hard | грант активен, ServiceDate в периоде, dept и object разрешены | — |
-| 6 | `VENDOR_ELIGIBLE` | 4 | Federal | нет | Hard | vendor Active (не Debarred / Inactive); для федерального гранта — `SamRegistered` | — |
-| 7 | `PROCUREMENT_THRESHOLD` | 4 | State | да | Soft | non-PO и total ≥ threshold | `threshold: 25000`; override `FinanceDirector` |
-| 8 | `INVOICE_DUPLICATE` | 4 | Core | нет | Hard | тот же vendor + `NormalizedNumber` у другого инвойса (любой статус) | — |
-| 9 | `BUDGET_AVAILABILITY` | 5 | Core | нет | по фонду | `ProjectedAvailable < 0` по бюджетному ключу → Hard при `ControlMode = Hard`, Soft при Soft; нет бюджетной строки → Hard | override (Soft): `BudgetOfficer`, `FinanceDirector` |
-| 10 | `BUDGET_LOW_REMAINING` | 5 | Tenant | да | Warning | `0 ≤ ProjectedAvailable / Amended < pct` | `pct: 0.10` |
-| 11 | `PO_LIQUIDATION` | 6 | Core | да (только tolerance) | Allowed / Warning / Hard | PO-строка открыта, `AuthorizedAmount > 0`; `CumulativeExcessPct` = 0 → Allowed (информационный), ≤ tolerance → Warning, > tolerance → Hard | `tolerance_pct: 0.05` |
-| 12 | `APPROVAL_ROUTE` | 7 | Tenant | да | — | параметры маршрута | `finance_director_threshold: 50000` |
+| # | RuleId | Шаг | Layer | Severity | Проверяет | Параметры |
+|---|---|---|---|---|---|---|
+| 1 | `SEG_REQUIRED` | 1 | Core | Hard | Grant — по `GrantPolicy` (Fund/Dept/Object гарантированы типом) | — |
+| 2 | `SEG_GRANT_FORBIDDEN` | 1 | Core | Hard | Grant при `GrantPolicy = Forbidden` | — |
+| 3 | `COA_COMBINATION_ACTIVE` | 2 | Core | Hard | комбинация в whitelist, Active, в effective-окне на InvoiceDate | — |
+| 4 | `FUND_DEPT_OBJECT_ALLOWED` | 3 | Tenant | Hard | dept ∈ `Fund.AllowedDepartments`, object ∈ `Fund.AllowedObjects` | — |
+| 5 | `GRANT_ELIGIBLE` | 3 | Federal | Hard | грант активен, ServiceDate в периоде, dept и object разрешены | — |
+| 6 | `VENDOR_ELIGIBLE` | 4 | Federal | Hard | vendor Active (не Debarred / Inactive); для федерального гранта — `SamRegistered` | — |
+| 7 | `PROCUREMENT_THRESHOLD` | 4 | State | Soft | non-PO и total ≥ threshold | `threshold: 25000`; override `FinanceDirector` |
+| 8 | `INVOICE_DUPLICATE` | 4 | Core | Hard | тот же vendor + `NormalizedNumber` у другого инвойса (любой статус) | — |
+| 9 | `BUDGET_AVAILABILITY` | 5 | Core | по фонду | `ProjectedAvailable < 0` по бюджетному ключу → Hard при `ControlMode = Hard`, Soft при Soft; нет бюджетной строки → Hard | override (Soft): `BudgetOfficer`, `FinanceDirector` |
+| 10 | `BUDGET_LOW_REMAINING` | 5 | Tenant | Warning | `0 ≤ ProjectedAvailable / Amended < pct` | `pct: 0.10` |
+| 11 | `PO_LIQUIDATION` | 6 | Core | Allowed / Warning / Hard | PO-строка открыта, `AuthorizedAmount > 0`; `CumulativeExcessPct` = 0 → Allowed (информационный), ≤ tolerance → Warning, > tolerance → Hard | `tolerance_pct: 0.05` |
+| 12 | `APPROVAL_ROUTE` | 7 | Tenant | — | параметры маршрута | `finance_director_threshold: 50000` |
 
 Синтетический outcome `REVALIDATION_REQUIRED` (Hard) выдаёт `PostingEligibility`, если fingerprint или
 `ContentVersion` отличаются от активного цикла согласования. Он снимается новым согласованием
@@ -269,12 +265,12 @@ Override меняет агрегацию, не outcome. Override привяза�
 Severity: Allowed < Warning < SoftStop < HardStop
 
 RuleOutcome
-  RuleId, RuleVersion, Step, Layer, DistributionLine?, BudgetKey?
+  OutcomeRef, RuleId, RuleVersion, Step, Layer, DistributionLine?
   Severity
   Inputs   (json)     { amended, actuals, encumbered, held, ownHeld, requiredNewBudget, ... }
   Computed (json)     { availableForInvoice, projectedAvailable, overage, ... }
   Message, Resolution
-  OverridableBy[], OverriddenBy? { evaluationId, user, reason, at }
+  OverridableBy[], OverriddenBy? { rule, user, reason, at }
 ```
 
 | Overall | Save | Submit | Approve | Post | Payment handoff |
@@ -290,7 +286,7 @@ RuleOutcome
 сбалансирован по каждой паре (фонд, семейство) ∧ `ContentVersion` и `RuleSetFingerprint` совпадают с теми,
 по которым было последнее согласование цикла.
 
-`ApprovalRouting`: по правилам 2.4; шаг маршрута = (роль, департамент?); для каждого — причина и признак
+`ApprovalRouteResolver`: по правилам 2.4; шаг маршрута = (роль, департамент?); для каждого — причина и признак
 удовлетворённости согласованием активного цикла.
 
 ### 4.4 Explanation — отдельно от решения
@@ -397,14 +393,14 @@ tests/
 | Схема | Таблицы |
 |---|---|
 | `coa` | Funds, Departments, ObjectCodes, Grants, AccountCombinations |
-| `ledger` | BudgetLines, BudgetAmendments, BudgetReservations, Encumbrances, EncumbranceClaims, OpeningBalances, JournalEntries, JournalLines, FiscalPeriods |
-| `ap` | Vendors, PurchaseOrders, PurchaseOrderLines, PoBillingClaims, VendorInvoices, InvoiceDistributions, InvoiceApprovals, InvoiceOverrides, ProcessedCommands |
+| `ledger` | BudgetLines, BudgetAmendments, BudgetReservations, Encumbrances, EncumbranceClaims, PoBillingClaims, OpeningBalances, JournalEntries, JournalLines, FiscalPeriods |
+| `ap` | Vendors, PurchaseOrders, PurchaseOrderLines, VendorInvoices, InvoiceDistributions, InvoiceApprovals, InvoiceOverrides, InvoiceWithdrawals, ProcessedCommands |
 | `validation` | RuleDefinitions, EvaluationRecords (json-колонки: AppliedRules, Outcomes, InputSnapshot, PostingPreview, ApprovalRoute, PostingCheck), Explanations |
 | `audit` | Events |
 
-FK — только внутри схемы. `rowversion` на BudgetLines, Encumbrances, PurchaseOrders, VendorInvoices;
+FK — только внутри схемы. `rowversion` на BudgetLines, Encumbrances, VendorInvoices;
 `ChangeStamp` на корнях с owned-коллекциями гарантирует UPDATE корня при добавлении резерва/claim.
-Уникальные индексы: `ap.VendorInvoices (VendorId, NormalizedNumber)`, `ledger.JournalEntries (SourceRef, PostingKind)`,
+Уникальные индексы: `ap.VendorInvoices (VendorId, NormalizedInvoiceNumber)`, `ledger.JournalEntries (SourceRef)`,
 `ap.ProcessedCommands (CommandId)`. `EvaluationRecords`, `Explanations`, `audit.Events`, `JournalEntries` —
 только INSERT: interceptor защищает EF-путь, права runtime-пользователя БД запрещают UPDATE/DELETE
 (interceptor не объявляется полной защитой). `AccountCode` — одна колонка `nvarchar(64)` через конвертер.
@@ -473,8 +469,8 @@ FK — только внутри схемы. `rowversion` на BudgetLines, Encu
 `Scenario_MultiFund_101_Overage_IsSoftStop_202_501_Allowed`, `Scenario_MultiFund_501_UsesExpenseNotExpenditure`,
 `Scenario_SameBudgetAcrossDistributions_IsHardStop13000`, `Scenario_OwnReservationIsNotChargedTwice`,
 по одному `Rule_*` на каждое правило, `Pipeline_HardStopAtStep2_SkipsSteps3To6_StillBuildsRoute`,
-`Resolution_AdjustableRule_TenantLayerReplacesState`, `Resolution_NonAdjustableRule_AllLayersEvaluated`,
-`Resolution_WeakeningThreshold_IsRejected`, `Fingerprint_ChangesWithParameters_NotWithOrder`,
+`Resolution_StricterTenantLayerReplacesState`, `Resolution_WeakeningThreshold_IsRejected`,
+`Resolution_ScopedRuleAppliesOnlyToItsFundOrGrant`, `Fingerprint_ChangesWithParameters_NotWithOrder`,
 `Pipeline_Override_ChangesOverall_NotOutcome`, `Override_OtherLineOrContentVersion_DoesNotApply`,
 `Capabilities_*`, `PostingEligibility_FingerprintChanged_RequiresReapproval`,
 `PostingEligibility_DepartmentHeadOfOtherDepartment_DoesNotSatisfyStep`,
