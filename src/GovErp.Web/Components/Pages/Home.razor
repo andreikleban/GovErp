@@ -1,5 +1,6 @@
 @page "/"
+@inject NavigationManager Navigation
 
-<PageTitle>GovErp</PageTitle>
-<h1>GovErp</h1>
-<p>Government invoice validation prototype.</p>
+@code {
+    protected override void OnInitialized() => Navigation.NavigateTo("/invoices");
+}

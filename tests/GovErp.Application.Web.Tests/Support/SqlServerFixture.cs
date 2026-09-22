@@ -28,6 +28,7 @@ public sealed class SqlServerFixture : IAsyncLifetime
     private AsyncServiceScope _appScope;
 
     public ServiceProvider Services { get; private set; } = null!;
+    public IConfiguration Configuration { get; private set; } = null!;
 
     /// <summary>
     /// App-сервисы зарегистрированы scoped (validateScopes запрещает брать их из корня); они без состояния —
@@ -59,6 +60,7 @@ public sealed class SqlServerFixture : IAsyncLifetime
             ["Tenancy:Credentials:test:User"] = RuntimeUser, ["Tenancy:Credentials:test:Password"] = RuntimePassword,
             ["Clock:BusinessDate"] = "2026-07-15",
         }).Build();
+        Configuration = cfg;
 
         var services = new ServiceCollection().AddLogging();
         services.AddApplication(cfg).AddInfrastructure(cfg).AddStartup(cfg);

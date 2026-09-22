@@ -1,15 +1,34 @@
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
+using GovErp.Web.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 
 namespace GovErp.Web.Extensions;
 
-/// <summary>
-/// Точка расширения для Web-специфичных сервисов (аутентификация, авторизация Blazor — план 4).
-/// Заведена в задаче 7 вместе с Dockerfile/compose, чтобы каталог уже существовал: Web ссылается
-/// на Application.Web и Infrastructure только из Program.cs и Extensions/ (global constraint).
-/// Пока пуста — план 4 добавит сюда регистрацию аутентификации и вызовет из Program.cs.
-/// </summary>
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddWebHost(this IServiceCollection services, IConfiguration configuration) => services;
+    public static IServiceCollection AddWebHost(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddCascadingAuthenticationState();
+        services.AddHttpContextAccessor();
+        services.AddScoped<CurrentActor>();
+        services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+            .AddCookie(options =>
+            {
+                options.LoginPath = "/login";
+                options.LogoutPath = "/auth/logout";
+                options.AccessDeniedPath = "/login";
+                options.Cookie.Name = "GovErp.Auth";
+                options.Cookie.HttpOnly = true;
+                options.Cookie.SameSite = SameSiteMode.Lax;
+                options.SlidingExpiration = true;
+                options.ExpireTimeSpan = TimeSpan.FromHours(8);
+            });
+        services.AddAuthorization(options =>
+        {
+            options.FallbackPolicy = new AuthorizationPolicyBuilder()
+                .RequireAuthenticatedUser()
+                .Build();
+        });
+        return services;
+    }
 }

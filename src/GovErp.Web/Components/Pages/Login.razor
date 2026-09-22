@@ -1,0 +1,33 @@
+@page "/login"
+@attribute [AllowAnonymous]
+@layout MainLayout
+@inject IHostEnvironment Environment
+
+<PageTitle>Sign in</PageTitle>
+<h1>Sign in</h1>
+@if (Error)
+{
+    <p>Invalid user name or password.</p>
+}
+<form method="post" action="/auth/login">
+    <AntiforgeryToken />
+    <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+    <label>User name <input name="username" autocomplete="username" /></label>
+    <label>Password <input name="password" type="password" autocomplete="current-password" /></label>
+    <button type="submit">Sign in</button>
+</form>
+@if (Environment.IsEnvironment("Demo"))
+{
+    <p>Demo users (password is not listed): @string.Join(", ", DemoUsers)</p>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "error")] public string? ErrorValue { get; set; }
+    [SupplyParameterFromQuery(Name = "returnUrl")] public string? ReturnUrl { get; set; }
+    private bool Error => ErrorValue == "1";
+    private static readonly string[] DemoUsers =
+    [
+        "ap.clerk", "fire.chief", "police.chief", "pw.director", "water.director",
+        "grants.manager", "budget.officer", "finance.director", "shelby.clerk", "shelby.finance"
+    ];
+}

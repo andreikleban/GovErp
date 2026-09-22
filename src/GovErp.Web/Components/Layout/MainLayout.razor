@@ -1,0 +1,21 @@
+@inherits LayoutComponentBase
+@using GovErp.Web.Authentication
+@using Microsoft.AspNetCore.Components.Authorization
+
+<div class="app">
+    <AuthorizeView>
+        <Authorized>
+            <header>
+                <strong>GovErp</strong>
+                <span>@context.User.FindFirst(ActorClaims.Name)?.Value</span>
+                <span>@string.Join(", ", context.User.FindAll(ActorClaims.Role).Select(c => c.Value))</span>
+                <span>@context.User.FindFirst(ActorClaims.Tenant)?.Value</span>
+                <form method="post" action="/auth/logout">
+                    <AntiforgeryToken />
+                    <button type="submit">Logout</button>
+                </form>
+            </header>
+        </Authorized>
+    </AuthorizeView>
+    <main>@Body</main>
+</div>

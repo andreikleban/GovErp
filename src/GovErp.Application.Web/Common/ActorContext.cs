@@ -5,4 +5,9 @@ public sealed record ActorContext(TenantId TenantId, UserId UserId, string UserN
 {
     public bool IsInRole(string role) => Roles.Contains(role);
     public bool IsInAnyRole(params string[] roles) => roles.Any(IsInRole);
+    public string TenantKey => TenantId.Value;
+    public Guid UserKey => UserId.Value;
+
+    public static ActorContext Create(string tenantId, Guid userId, string userName, IReadOnlySet<string> roles, string? departmentCode) =>
+        new(new TenantId(tenantId), new UserId(userId), userName, roles, departmentCode);
 }

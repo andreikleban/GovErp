@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
+    <PackageReference Include="Testcontainers.MsSql" />
+    <ProjectReference Include="../../src/GovErp.Web/GovErp.Web.csproj" />
+    <ProjectReference Include="../../src/GovErp.Application.Web/GovErp.Application.Web.csproj" />
+    <ProjectReference Include="../../src/GovErp.Infrastructure/GovErp.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/GovErp.Domain.Shared/GovErp.Domain.Shared.csproj" />
+    <ProjectReference Include="../../src/GovErp.Domain.ChartOfAccounts/GovErp.Domain.ChartOfAccounts.csproj" />
+    <ProjectReference Include="../../src/GovErp.Domain.Ledger/GovErp.Domain.Ledger.csproj" />
+    <ProjectReference Include="../../src/GovErp.Domain.Payables/GovErp.Domain.Payables.csproj" />
+    <ProjectReference Include="../../src/GovErp.Domain.Validation/GovErp.Domain.Validation.csproj" />
+    <ProjectReference Include="../../tests/GovErp.Application.Web.Tests/GovErp.Application.Web.Tests.csproj" />
+  </ItemGroup>
+</Project>
