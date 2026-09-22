@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "GovErp.Web": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:56381;http://localhost:56382"
+    }
+  }
+}

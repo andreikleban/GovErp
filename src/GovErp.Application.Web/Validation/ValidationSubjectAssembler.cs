@@ -114,7 +114,9 @@ public sealed class ValidationSubjectAssembler(
         Money Sum(IEnumerable<Money> values) => values.Aggregate(Money.Zero, (s, m) => s + m);
         var heldClaims = e.Claims.Where(c => c.Status == ClaimStatus.Held).ToList();
         var heldBilling = e.BillingClaims.Where(c => c.Status == ClaimStatus.Held).ToList();
-        return new EncumbranceSnapshot(lineRef, e.Remaining, e.Status == EncumbranceStatus.Open,
+        // IsOpen = billing still allowed. Fully liquidated lines close the encumbrance (Remaining = 0)
+        // but Released stays zero; residual invoices within PO tolerance must still pass (GE-17).
+        return new EncumbranceSnapshot(lineRef, e.Remaining, e.Released.IsZero,
             e.AuthorizedPoAmount, e.AlreadyPostedAgainstPo,
             OtherActiveInvoiceClaims: Sum(heldBilling.Where(c => !Own(c.InvoiceId, c.ContentVersion)).Select(c => c.Amount)),
             CurrentInvoicePoAmount: Sum(invoice.Distributions.Where(x => x.PoLineNo == no).Select(x => x.Amount)),
