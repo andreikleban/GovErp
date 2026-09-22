@@ -39,7 +39,9 @@ public sealed class DomainPurityTests
     [Fact]
     public void Domain_services_are_stateless()
     {
-        var types = Domains.SelectMany(a => a.GetTypes()).Where(t => t.Namespace?.Contains(".DomainServices", StringComparison.Ordinal) == true);
+        var types = Domains.SelectMany(a => a.GetTypes()).Where(t =>
+            t.Namespace?.Contains(".DomainServices", StringComparison.Ordinal) == true
+            && !t.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false));
         foreach (var type in types)
         {
             Assert.DoesNotContain(type.GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance), f => !f.IsInitOnly);
