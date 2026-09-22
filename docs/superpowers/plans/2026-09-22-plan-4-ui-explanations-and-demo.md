@@ -81,9 +81,9 @@
 **Interfaces:** потребляет `IApprovalAppService`, `IBudgetAppService`, `IPostingAppService`, `IReferenceAppService.GetRulesAsync`.
 
 - [ ] Тесты: Fire chief не удовлетворяет шаг Police; автор не согласует свой документ даже имея нужную роль; override без причины запрещён; изменение документа делает старый override неприменимым; повторный Post не создаёт второй журнал.
-- [ ] Approvals: очередь пользователя, кнопки Approve / Reject; override выбирает конкретный outcome (правило, строка, версия), требует причину. Сервер проверяет полномочия именно на это исключение.
+- [ ] Approvals: очередь пользователя (`ApprovalQueueItemVm.Kind`: `Approve` — шаг маршрута, кнопки Approve / Reject; `Override` — открытый Soft Stop, который пользователь вправе снять). Override выбирает конкретный outcome последней оценки (правило, строка, `EvaluationId`) и требует причину. Сервер проверяет полномочия именно на это исключение. Отклонённый инвойс автор возвращает в Draft (`ReturnToDraftAsync`).
 - [ ] Budget: FY, Account, Opening actuals / encumbered, Amended, Actuals, Encumbered, Held, Available; форма поправки с суммой, бюджетным годом, effective date и reference. Показывать, что действие симулирует уже утверждённую поправку для демо.
-- [ ] Rules: только чтение — версия, слой, признак `IsLocallyAdjustable`, effective dates, параметры и текущий fingerprint набора (`RuleSetVm`). Federal/State — демонстрационные слои; не заявлять подтверждённое юридическое соответствие.
+- [ ] Rules: только чтение — версия, слой, scope (`ScopeFund`, `ScopeGrant`), effective dates, параметры и текущий fingerprint набора (`RuleSetVm`). Federal/State — демонстрационные слои; не заявлять подтверждённое юридическое соответствие.
 - [ ] Post доступен роли и статусу, указанным сервером; после успеха перечитать журнал и бюджет. Проверить тесты и сценарий полного согласования; commit: `feat: add approvals budget amendment and rules views`.
 
 ## Task 5: Независимые от поставщика объяснения

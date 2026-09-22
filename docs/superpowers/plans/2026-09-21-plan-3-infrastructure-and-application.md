@@ -15,7 +15,8 @@
 ## Global Constraints
 
 - Всё из планов 1–2.
-- Уточнения `2026-09-22-plan-consistency.md` (§2, §4, §5, §6, §7) и spec §5 внесены в задачи ниже; ранние наброски (`ReserveWithRetryAsync`, компенсации в `finally`, `BUDGET_CONCURRENCY`, `RuleSetVersions`, `ReservationRefs`) не использовать.
+- Уточнения `2026-09-22-plan-consistency.md` (§2, §4, §5, §6, §7) и spec §5 внесены в задачи ниже; ранние наброски (`ReserveWithRetryAsync`, компенсации в `finally`, `BUDGET_CONCURRENCY`) не использовать.
+- Источник истины по домену — код ветки `codex/foundation` (`src/GovErp.Domain.*`). Где план расходится с кодом, прав код; домен меняется только в задаче 3, шаг 0.
 - Application ссылается на `Domain.*`; Infrastructure — на `Domain.*` и `Application.Web`; Web — на `Application.Web` и `Infrastructure` только в `Program.cs` и `Extensions/`.
 - UI-facing `I*AppService` принимают `*Command` / примитивы и возвращают `*Vm` / `CommandResult<*Vm>` (`CA-10`, `NM-10`); порты (`I*Repository`, `IExplanationGenerator`) доменные типы принимают закономерно.
 - Все app-сервисы принимают `ActorContext` явно (`NM-16`); тенант определяется только из `ActorContext`, который Web строит из аутентифицированного principal (план 4).
@@ -34,7 +35,7 @@
 src/GovErp.Application.Web/
   Common/        ActorContext.cs, Roles.cs, RoleMapping.cs, IClock.cs, AuthorizationException.cs, NotFoundException.cs
   Commands/      CommandEnvelope.cs, CommandStatus.cs, CommandResult.cs, CommandReceipt.cs, ICommandReceipts.cs,
-                 IConcurrencyGuard.cs, ITenantOperationRunner.cs, DuplicateKeyException.cs
+                 IConcurrencyGuard.cs, ITenantOperationRunner.cs
   Tenancy/       ITenantContext.cs, ITenantContextInitializer.cs, ITenantCatalog.cs, TenantInfo.cs
   Identity/      ISignIn.cs
   Audit/         AuditEvent.cs, IAuditTrail.cs, AuditEventVm.cs
@@ -45,11 +46,11 @@ src/GovErp.Application.Web/
                  IInvoiceAppService.cs, InvoiceAppService.cs
   Approvals/     Contracts/ApprovalQueueItemVm.cs, Commands/*.cs, IApprovalAppService.cs, ApprovalAppService.cs
   Posting/       IPostingAppService.cs, PostingAppService.cs
-  Budget/        Contracts/BudgetLineVm.cs, Commands/AmendBudgetCommand.cs, IBudgetAppService.cs, BudgetAppService.cs
+  Budget/        Contracts/BudgetLineVm.cs, Commands/AmendBudgetCommand.cs, IBudgetAppService.cs, BudgetAppService.cs, BudgetMapping.cs
   Reference/     Contracts/*.cs, IReferenceAppService.cs, ReferenceAppService.cs
   Extensions/    ServiceCollectionExtensions.cs
 src/GovErp.Infrastructure/
-  Persistence/   GovErpDbContext.cs, GovErpDbContextFactory.cs, Conversions.cs, JsonColumn.cs, AppendOnlyInterceptor.cs,
+  Persistence/   GovErpDbContext.cs, GovErpDbContextFactory.cs, Conversions.cs, CodeList.cs, JsonColumn.cs, AppendOnlyInterceptor.cs,
                  EfConcurrencyGuard.cs, EfCommandReceipts.cs, Configurations/{Coa,Ledger,Ap,Validation,Audit}/*.cs,
                  Repositories/Ef*.cs, Migrations/
   Operations/    EfTenantOperationRunner.cs
@@ -165,9 +166,6 @@ public interface IConcurrencyGuard
     void Expect(object aggregate, string? rowVersion);
     string? VersionOf(object aggregate);
 }
-
-// Commands/DuplicateKeyException.cs — Infrastructure переводит нарушение уникального индекса в этот тип
-public sealed class DuplicateKeyException(string message) : Exception(message);
 
 // Commands/ITenantOperationRunner.cs
 public interface ITenantOperationRunner
@@ -290,10 +288,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Create: `src/GovErp.Application.Web/Validation/ValidationSubjectAssembler.cs`
 - Test: `tests/GovErp.Application.Web.Tests/Support/InMemoryRepositories.cs`, `Support/FixedClock.cs`, `ValidationSubjectAssemblerTests.cs`, `EnumMappingTests.cs`
 
-**Interfaces:**
-- Produces: `SpringfieldData.Create()` — свежий набор доменных объектов seed (spec §2.2–2.5): `Funds`, `Departments`, `Objects`, `Grants`, `Combinations`, `OpeningBalances`, `BudgetLines`, `Encumbrances`, `PurchaseOrders`, `Vendors`, `Periods`, `Rules`, константы `ClerkId`, `SystemUserId`, `AcmeId`, `ShadyId`, `DormantId`, `Jun15`, `Dates`; фабрики черновиков `NonPoExerciseInvoice(string number = "V-7781", InvoiceDates? dates = null)`, `PoBackedInvoice(decimal amount = 160_000m, string number = "V-0451-1")`, `MultiFundInvoice(string number = "V-MF-1")`. `RuleSeed.All(DateOnly effectiveFrom)` — 12 определений spec §4.2 (те же, что `DemoRules` плана 2, с сообщениями и resolution).
-- Produces: `ValidationSubjectAssembler.BuildAsync(VendorInvoice, CancellationToken) → ValidationSubject`. Конструктор: `IFundRepository, IGrantRepository, IAccountCombinationRepository, IBudgetLineRepository, IEncumbranceRepository, IFiscalPeriodRepository, IVendorRepository, IPurchaseOrderRepository, IVendorInvoiceRepository, IEvaluationRecordRepository, IOptions<PostingOptions>`.
-- Даты (spec §5, правило 6): бюджетный год и период — `PostingDate`; грант — `ServiceDate`; комбинация — `InvoiceDate`. Собственные резервы и claims — `InvoiceId + ContentVersion`; `ApprovalBaseline` — из оценки последнего согласования активного цикла.
+**Interfaces (домен — фактический код ветки `codex/foundation`, `src/GovErp.Domain.*`):**
+- Consumes: `BudgetLine(account, fy, mode, adopted)` + `ApplyOpeningBalance(OpeningBalance)`, `OwnHeld(invoiceId, cv)`; `Encumbrance(poLineRef, account, original, authorizedPoAmount, alreadyPostedAgainstPo)`, `Claims` / `BillingClaims` (`Id`, `InvoiceId`, `ContentVersion`, `Amount`, `Status`); `PurchaseOrder(number, vendorId, [PurchaseOrderLine(lineNo, account, amount)])`; `VendorInvoice(number, vendorId, invoiceDate, serviceDate, postingDate, dueDate, total, poRef, createdBy, createdAt)` + `AddDistribution(account, amount, poLineNo)`; `RuleDefinition(ruleId, version, step, layer, severity, parameters, overridableBy, effectiveFrom, effectiveTo, message, resolution, enabled, scopeFund, scopeGrant)`; снимки Validation: `TransactionSnapshot`, `DistributionSnapshot`, `BudgetSnapshot`, `EncumbranceSnapshot`, `ApprovalSnapshot`, `OverrideSnapshot`, `PreviousEvaluation`, `ValidationSubject`.
+- Produces: `SpringfieldData.Create()` — свежий набор seed (spec §2.2–2.5): `Funds`, `Departments`, `Objects`, `Grants`, `Combinations`, `OpeningBalances`, `BudgetLines`, `Encumbrances`, `PurchaseOrders`, `Vendors`, `Periods`, `Rules`; константы `ClerkId`, `SystemUserId`, `AcmeId`, `ShadyId`, `DormantId`, `Jun15`, `Jul15`; фабрики черновиков `NonPoExerciseInvoice(string number = "V-7781", DateOnly? date = null)`, `PoBackedInvoice(decimal amount = 160_000m, string number = "V-0451-1")`, `MultiFundInvoice(string number = "V-MF-1")`. `RuleSeed.All(DateOnly effectiveFrom)` — 12 определений spec §4.2.
+- Produces: `ValidationSubjectAssembler.BuildAsync(VendorInvoice, DateOnly businessDate, CancellationToken) → ValidationSubject`.
+- Правила сборки (spec §3.5, §5 правило 6, DEBT.md D-1): бюджетный год и период — `PostingDate`; грант — `ServiceDate`; комбинация — `InvoiceDate`; использовать `ContentVersion`, `InvoiceDate`, `DetailedApprovals`, `Transaction.RuleFingerprint` (legacy-поля `ApprovalsSoFar`, `VersionsAtLastApproval` не заполнять); `BudgetSnapshot.FiscalYear` передавать явно; снимок бюджета один на бюджетный ключ (все строки ключа получают **тот же** экземпляр — `BudgetAllocation` проверяет согласованность); overrides — только активного цикла и версии содержания; все оценки, на которые они ссылаются, — в `PreviousEvaluations`.
 
 - [ ] **Step 1: SpringfieldData и RuleSeed**
 
@@ -303,8 +302,8 @@ using GovErp.Domain.ChartOfAccounts.Entities;
 using GovErp.Domain.Ledger.Entities;
 using GovErp.Domain.Payables.Entities;
 using GovErp.Domain.Validation.Entities;
-using LedgerControl = GovErp.Domain.Ledger.Entities.BudgetControlMode;
 using CoaControl = GovErp.Domain.ChartOfAccounts.Entities.BudgetControlMode;
+using LedgerControl = GovErp.Domain.Ledger.Entities.BudgetControlMode;
 
 namespace GovErp.Infrastructure.Seed;
 
@@ -317,7 +316,7 @@ public sealed class SpringfieldData
     public static readonly Guid ShadyId = Guid.Parse("20000000-0000-0000-0000-000000000002");
     public static readonly Guid DormantId = Guid.Parse("20000000-0000-0000-0000-000000000003");
     public static readonly DateOnly Jun15 = new(2026, 6, 15);
-    public static readonly InvoiceDates Dates = new(Jun15, Jun15, Jun15, new DateOnly(2026, 7, 15));
+    public static readonly DateOnly Jul15 = new(2026, 7, 15);
     private static readonly DateOnly Fy2026Start = new(2025, 7, 1);
     private static readonly DateTimeOffset LoadedAt = new(2026, 6, 1, 0, 0, 0, TimeSpan.Zero);
 
@@ -396,8 +395,10 @@ public sealed class SpringfieldData
         void Budget(string account, decimal adopted, decimal actuals, decimal encumbered, LedgerControl mode)
         {
             var opening = new OpeningBalance(A(account), fy, new DateOnly(2026, 6, 1), Money.Of(actuals), Money.Of(encumbered), "FY2026 opening load (demo)");
+            var line = new BudgetLine(A(account), fy, mode, Money.Of(adopted));
+            line.ApplyOpeningBalance(opening);
             d.OpeningBalances.Add(opening);
-            d.BudgetLines.Add(BudgetLine.Open(opening, mode, Money.Of(adopted)));
+            d.BudgetLines.Add(line);
         }
 
         Budget("701-6000-53100-G-COPS-26", 375_000m, 132_000m, 96_000m, LedgerControl.Hard);
@@ -413,10 +414,11 @@ public sealed class SpringfieldData
             new Vendor(DormantId, "DORMANT", "Dormant Supply", VendorStatus.Inactive, samRegistered: true),
         ]);
 
+        // Утверждённая сумма PO-строки копируется в Encumbrance один раз (GE-17).
         void Po(string number, string account, decimal amount)
         {
-            d.PurchaseOrders.Add(new PurchaseOrder(number, AcmeId, [(1, A(account), Money.Of(amount))]));
-            d.Encumbrances.Add(new Encumbrance($"{number}/1", A(account), fy, Money.Of(amount)));
+            d.PurchaseOrders.Add(new PurchaseOrder(number, AcmeId, [new PurchaseOrderLine(1, A(account), Money.Of(amount))]));
+            d.Encumbrances.Add(new Encumbrance($"{number}/1", A(account), Money.Of(amount), Money.Of(amount), Money.Zero));
         }
 
         Po("PO-2026-0449", "701-6000-53100-G-COPS-26", 36_000m);
@@ -427,9 +429,9 @@ public sealed class SpringfieldData
         {
             var date = Fy2026Start.AddMonths(m);
             var period = new FiscalPeriod(date.Year, date.Month);
-            if (date.Year == 2026 && date.Month <= 5)
+            if (date < new DateOnly(2026, 6, 1))
             {
-                period.Close();
+                period.Close();   // открыт только июнь 2026 — месяц демо-даты
             }
 
             d.Periods.Add(period);
@@ -439,25 +441,27 @@ public sealed class SpringfieldData
         return d;
     }
 
-    public VendorInvoice NonPoExerciseInvoice(string number = "V-7781", InvoiceDates? dates = null) =>
-        new(number, AcmeId, dates ?? Dates, Money.Of(160_000m), null,
-            [new DistributionInput(A("701-6000-53100-G-COPS-26"), Money.Of(160_000m), null)], ClerkId, LoadedAt);
+    private static VendorInvoice Draft(string number, decimal total, string? poRef, DateOnly date, params (string Account, decimal Amount, int? PoLine)[] lines)
+    {
+        var invoice = new VendorInvoice(number, AcmeId, date, date, date, date.AddDays(30), Money.Of(total), poRef, ClerkId, LoadedAt);
+        foreach (var (account, amount, poLine) in lines)
+        {
+            invoice.AddDistribution(A(account), Money.Of(amount), poLine);
+        }
+
+        return invoice;
+    }
+
+    public VendorInvoice NonPoExerciseInvoice(string number = "V-7781", DateOnly? date = null) =>
+        Draft(number, 160_000m, null, date ?? Jun15, ("701-6000-53100-G-COPS-26", 160_000m, null));
 
     public VendorInvoice PoBackedInvoice(decimal amount = 160_000m, string number = "V-0451-1") =>
-        new(number, AcmeId, Dates, Money.Of(amount), "PO-2026-0451",
-            [new DistributionInput(A("701-3000-53100-G-COPS-26"), Money.Of(amount), 1)], ClerkId, LoadedAt);
+        Draft(number, amount, "PO-2026-0451", Jun15, ("701-3000-53100-G-COPS-26", amount, 1));
 
     public VendorInvoice MultiFundInvoice(string number = "V-MF-1") =>
-        new(number, AcmeId, Dates, Money.Of(30_000m), null,
-        [
-            new DistributionInput(A("101-6000-53100"), Money.Of(12_000m), null),
-            new DistributionInput(A("202-4000-53100"), Money.Of(8_000m), null),
-            new DistributionInput(A("501-5000-53100"), Money.Of(10_000m), null),
-        ], ClerkId, LoadedAt);
+        Draft(number, 30_000m, null, Jun15, ("101-6000-53100", 12_000m, null), ("202-4000-53100", 8_000m, null), ("501-5000-53100", 10_000m, null));
 }
 ```
-
-Периоды: 2025-07…2026-04 закрываются вместе с 2026-05 — открыт только июнь 2026, что соответствует демо-дате; негативный тест использует май.
 
 `src/GovErp.Infrastructure/Seed/RuleSeed.cs`:
 ```csharp
@@ -471,63 +475,62 @@ public static class RuleSeed
 {
     public static IReadOnlyList<RuleDefinition> All(DateOnly from)
     {
-        RuleDefinition R(string id, ValidationStep step, RuleLayer layer, bool adjustable, Severity? severity, string message, string resolution,
+        RuleDefinition R(string id, ValidationStep step, RuleLayer layer, Severity? severity, string message, string resolution,
             Dictionary<string, string>? p = null, ApproverRole[]? overridable = null) =>
-            new(id, 1, step, layer, adjustable, severity, p ?? [], overridable ?? [], from, null, message, resolution);
+            new(id, 1, step, layer, severity, p ?? [], overridable ?? [], from, null, message, resolution);
 
         return
         [
-            R("SEG_REQUIRED", ValidationStep.RequiredSegments, RuleLayer.Core, false, Severity.HardStop,
+            R("SEG_REQUIRED", ValidationStep.RequiredSegments, RuleLayer.Core, Severity.HardStop,
                 "A required chart-of-accounts segment is missing.", "Add the missing segment."),
-            R("SEG_GRANT_FORBIDDEN", ValidationStep.RequiredSegments, RuleLayer.Core, false, Severity.HardStop,
+            R("SEG_GRANT_FORBIDDEN", ValidationStep.RequiredSegments, RuleLayer.Core, Severity.HardStop,
                 "The fund does not accept a grant segment.", "Remove the grant segment or use a grant fund."),
-            R("COA_COMBINATION_ACTIVE", ValidationStep.ValidCombination, RuleLayer.Core, false, Severity.HardStop,
+            R("COA_COMBINATION_ACTIVE", ValidationStep.ValidCombination, RuleLayer.Core, Severity.HardStop,
                 "The account combination is not active.", "Use an active combination or request a new one from Finance."),
-            R("FUND_DEPT_OBJECT_ALLOWED", ValidationStep.FundAndGrantRestrictions, RuleLayer.Tenant, false, Severity.HardStop,
+            R("FUND_DEPT_OBJECT_ALLOWED", ValidationStep.FundAndGrantRestrictions, RuleLayer.Tenant, Severity.HardStop,
                 "The department or object is not an allowed use of the fund.", "Recode to a fund that permits this use."),
-            R("GRANT_ELIGIBLE", ValidationStep.FundAndGrantRestrictions, RuleLayer.Federal, false, Severity.HardStop,
+            R("GRANT_ELIGIBLE", ValidationStep.FundAndGrantRestrictions, RuleLayer.Federal, Severity.HardStop,
                 "The expense is not eligible under the grant.", "Recode to an eligible grant or to a non-grant fund."),
-            R("VENDOR_ELIGIBLE", ValidationStep.TransactionPurpose, RuleLayer.Federal, false, Severity.HardStop,
+            R("VENDOR_ELIGIBLE", ValidationStep.TransactionPurpose, RuleLayer.Federal, Severity.HardStop,
                 "The vendor is not eligible for payment.", "Resolve vendor status before submitting."),
-            R("PROCUREMENT_THRESHOLD", ValidationStep.TransactionPurpose, RuleLayer.State, true, Severity.SoftStop,
+            R("PROCUREMENT_THRESHOLD", ValidationStep.TransactionPurpose, RuleLayer.State, Severity.SoftStop,
                 "Non-PO invoice meets the procurement threshold.", "Attach a purchase order or a documented procurement exception.",
                 new() { ["threshold"] = "25000" }, [ApproverRole.FinanceDirector]),
-            R("INVOICE_DUPLICATE", ValidationStep.TransactionPurpose, RuleLayer.Core, false, Severity.HardStop,
+            R("INVOICE_DUPLICATE", ValidationStep.TransactionPurpose, RuleLayer.Core, Severity.HardStop,
                 "Duplicate invoice number for this vendor.", "Verify the invoice was not already entered."),
-            R("BUDGET_AVAILABILITY", ValidationStep.BudgetAvailability, RuleLayer.Core, false, null,
+            R("BUDGET_AVAILABILITY", ValidationStep.BudgetAvailability, RuleLayer.Core, null,
                 "The invoice exceeds available budget.", "Budget amendment, budget transfer, or authorized coding change.",
                 overridable: [ApproverRole.BudgetOfficer, ApproverRole.FinanceDirector]),
-            R("BUDGET_LOW_REMAINING", ValidationStep.BudgetAvailability, RuleLayer.Tenant, true, Severity.Warning,
+            R("BUDGET_LOW_REMAINING", ValidationStep.BudgetAvailability, RuleLayer.Tenant, Severity.Warning,
                 "Little budget remains after this invoice.", "No action required; consider a budget review.",
                 new() { ["pct"] = "0.10" }),
-            R("PO_LIQUIDATION", ValidationStep.EncumbranceImpact, RuleLayer.Core, true, null,
+            R("PO_LIQUIDATION", ValidationStep.EncumbranceImpact, RuleLayer.Core, null,
                 "PO liquidation and tolerance check.", "Within tolerance no action is required; above it a change order is required.",
                 new() { ["tolerance_pct"] = "0.05" }),
-            R("APPROVAL_ROUTE", ValidationStep.ApprovalRequirements, RuleLayer.Tenant, true, null,
+            R("APPROVAL_ROUTE", ValidationStep.ApprovalRequirements, RuleLayer.Tenant, null,
                 "Approval route parameters.", "—",
                 new() { ["finance_director_threshold"] = "50000" }),
         ];
     }
 }
 ```
+Сверить `RuleSeed.All` с `tests/GovErp.Domain.Validation.Tests/Support/DemoRules.cs` (severity, параметры, роли override); при расхождении правильным считается `DemoRules` — на нём проверены 210 тестов.
 
 - [ ] **Step 2: Фейки репозиториев и часы**
 
-`tests/GovErp.Application.Web.Tests/Support/InMemoryRepositories.cs` — по одному классу на порт, над `List<T>`, конструктор принимает `IEnumerable<T>`. Образец (остальные — тем же способом, методы порта — LINQ по списку):
+`tests/GovErp.Application.Web.Tests/Support/InMemoryRepositories.cs` — по одному классу на порт (`src/GovErp.Domain.*/Repositories`) над `List<T>`, конструктор принимает `IEnumerable<T>`. Нетривиальные методы:
 ```csharp
-public sealed class InMemoryBudgetLineRepository(IEnumerable<BudgetLine> lines) : IBudgetLineRepository
-{
-    public List<BudgetLine> Items { get; } = [.. lines];
-    public Task<BudgetLine?> FindAsync(AccountCode account, FiscalYear fy, CancellationToken ct = default) =>
-        Task.FromResult(Items.SingleOrDefault(l => l.Account == account && l.FiscalYear == fy));
-    public Task<IReadOnlyList<BudgetLine>> ListAsync(FiscalYear fy, CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<BudgetLine>>(Items.Where(l => l.FiscalYear == fy).ToList());
-    public Task<IReadOnlyList<BudgetLine>> ListHeldForInvoiceAsync(Guid invoiceId, CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<BudgetLine>>(Items.Where(l => l.Reservations.Any(r => r.InvoiceId == invoiceId && r.Status == ReservationStatus.Held)).ToList());
-    public Task AddAsync(BudgetLine line, CancellationToken ct = default) { Items.Add(line); return Task.CompletedTask; }
-}
+// InMemoryBudgetLineRepository
+public Task<BudgetLine?> FindByReservationAsync(Guid id, CancellationToken ct = default) =>
+    Task.FromResult(Items.SingleOrDefault(l => l.Reservations.Any(r => r.Id == id)));
+// InMemoryEncumbranceRepository
+public Task<Encumbrance?> FindByClaimAsync(Guid id, CancellationToken ct = default) =>
+    Task.FromResult(Items.SingleOrDefault(e => e.Claims.Any(c => c.Id == id) || e.BillingClaims.Any(c => c.Id == id)));
+// InMemoryVendorInvoiceRepository
+public Task<bool> ExistsDuplicateAsync(Guid vendorId, string normalizedNumber, Guid? excludingInvoiceId, CancellationToken ct = default) =>
+    Task.FromResult(Items.Any(i => i.VendorId == vendorId && i.NormalizedInvoiceNumber == normalizedNumber && i.Id != excludingInvoiceId));
 ```
-Нужны: `InMemoryFundRepository`, `InMemoryGrantRepository`, `InMemoryAccountCombinationRepository`, `InMemoryBudgetLineRepository`, `InMemoryEncumbranceRepository`, `InMemoryFiscalPeriodRepository`, `InMemoryVendorRepository`, `InMemoryPurchaseOrderRepository`, `InMemoryVendorInvoiceRepository` (`ExistsDuplicateAsync` — `Items.Any(i => i.VendorId == v && i.NormalizedNumber == n && i.Id != excluding)`), `InMemoryEvaluationRecordRepository`. `Support/FixedClock.cs`: `public sealed class FixedClock(DateTimeOffset now, DateOnly businessDate) : IClock`.
+`Support/FixedClock.cs`: `public sealed class FixedClock(DateTimeOffset now, DateOnly businessDate) : IClock`.
 
 - [ ] **Step 3: Тесты**
 
@@ -535,6 +538,7 @@ public sealed class InMemoryBudgetLineRepository(IEnumerable<BudgetLine> lines) 
 ```csharp
 using GovErp.Application.Web.Validation;
 using GovErp.Domain.Payables.Entities;
+using GovErp.Domain.Validation.DomainServices;
 using GovErp.Domain.Validation.ValueObjects;
 using GovErp.Infrastructure.Seed;
 using Microsoft.Extensions.Options;
@@ -544,33 +548,42 @@ namespace GovErp.Application.Web.Tests;
 public class ValidationSubjectAssemblerTests
 {
     private static readonly AccountCode Fire = AccountCode.Parse("701-6000-53100-G-COPS-26");
-    private static readonly AccountCode Police = AccountCode.Parse("701-3000-53100-G-COPS-26");
 
-    private static ValidationSubjectAssembler Assembler(SpringfieldData d, IEnumerable<VendorInvoice>? invoices = null,
+    internal static ValidationSubjectAssembler Assembler(SpringfieldData d, IEnumerable<VendorInvoice>? invoices = null,
         IEnumerable<Domain.Validation.Entities.EvaluationRecord>? evaluations = null) =>
         new(new InMemoryFundRepository(d.Funds), new InMemoryGrantRepository(d.Grants), new InMemoryAccountCombinationRepository(d.Combinations),
             new InMemoryBudgetLineRepository(d.BudgetLines), new InMemoryEncumbranceRepository(d.Encumbrances),
             new InMemoryFiscalPeriodRepository(d.Periods), new InMemoryVendorRepository(d.Vendors),
-            new InMemoryPurchaseOrderRepository(d.PurchaseOrders), new InMemoryVendorInvoiceRepository(invoices ?? []),
-            new InMemoryEvaluationRecordRepository(evaluations ?? []), Options.Create(new PostingOptions()));
+            new InMemoryVendorInvoiceRepository(invoices ?? []), new InMemoryEvaluationRecordRepository(evaluations ?? []),
+            Options.Create(new PostingOptions()));
 
     [Fact]
-    public async Task Exercise_invoice_yields_exercise_snapshot()
+    public async Task Exercise_invoice_yields_exercise_snapshot_and_hard_stop()
     {
         var d = SpringfieldData.Create();
-        var s = await Assembler(d).BuildAsync(d.NonPoExerciseInvoice());
-        s.Transaction.Total.Should().Be(Money.Of(160_000m));
-        s.Transaction.IsPoBacked.Should().BeFalse();
-        s.Transaction.ContentVersion.Should().Be(1);
-        var dist = s.Distributions.Single();
-        dist.Fund!.Control.Should().Be(BudgetControl.Hard);
-        dist.Fund.GrantRule.Should().Be(GrantRule.Required);
-        dist.Grant!.Eligibility.Should().Be(GrantEligibilityResult.Eligible);
-        dist.Combination.IsActiveOnDate.Should().BeTrue();
-        s.BudgetFor(Fire).Available.Should().Be(Money.Of(147_000m));
-        s.BudgetFor(Fire).OwnHeld.Should().Be(Money.Zero);
+        var inv = d.NonPoExerciseInvoice();
+        var s = await Assembler(d).BuildAsync(inv, SpringfieldData.Jun15);
+        s.Transaction.ContentVersion.Should().Be(inv.ContentVersion);
+        s.Transaction.Status.Should().Be("Draft");
+        s.Distributions.Single().Budget.Available.Should().Be(Money.Of(147_000m));
+        s.Distributions.Single().Budget.FiscalYear.Should().Be(2026);
         s.PeriodIsOpen.Should().BeTrue();
-        s.ApprovalBaseline.Should().BeNull();
+
+        var record = new ValidationPipeline(RuleCatalog.Default).Evaluate(s, d.Rules, EvaluationTrigger.Manual, SpringfieldData.ClerkId, DateTimeOffset.UtcNow);
+        record.Overall.Should().Be(Severity.HardStop);
+        record.Outcomes.Single(o => o.RuleId == "BUDGET_AVAILABILITY").Computed["overage"].Should().Be("13,000.00");
+    }
+
+    [Fact]
+    public async Task Distributions_on_one_budget_key_share_one_snapshot()
+    {
+        var d = SpringfieldData.Create();
+        var inv = new VendorInvoice("V-2", SpringfieldData.AcmeId, SpringfieldData.Jun15, SpringfieldData.Jun15, SpringfieldData.Jun15,
+            SpringfieldData.Jul15, Money.Of(160_000m), null, SpringfieldData.ClerkId, DateTimeOffset.UtcNow);
+        inv.AddDistribution(Fire, Money.Of(80_000m), null);
+        inv.AddDistribution(Fire, Money.Of(80_000m), null);
+        var s = await Assembler(d).BuildAsync(inv, SpringfieldData.Jun15);
+        s.Distributions[0].Budget.Should().BeSameAs(s.Distributions[1].Budget);
     }
 
     [Fact]
@@ -578,38 +591,27 @@ public class ValidationSubjectAssemblerTests
     {
         var d = SpringfieldData.Create();
         var inv = d.NonPoExerciseInvoice();
-        d.BudgetLines.Single(l => l.Account == Fire).Reserve(inv.Id, inv.ContentVersion, Money.Of(100_000m));
-        var s = await Assembler(d).BuildAsync(inv);
-        s.BudgetFor(Fire).Held.Should().Be(Money.Of(100_000m));
-        s.BudgetFor(Fire).OwnHeld.Should().Be(Money.Of(100_000m));
+        d.BudgetLines.Single(l => l.Account == Fire).Reserve(inv.Id, inv.ContentVersion, Money.Of(100_000m), inv.Reference);
+        var budget = (await Assembler(d).BuildAsync(inv, SpringfieldData.Jun15)).Distributions.Single().Budget;
+        budget.Held.Should().Be(Money.Of(100_000m));
+        budget.OwnHeld.Should().Be(Money.Of(100_000m));
     }
 
     [Fact]
-    public async Task Po_backed_invoice_carries_po_line_and_claimable_encumbrance()
+    public async Task Po_backed_snapshot_separates_own_and_other_claims()
     {
         var d = SpringfieldData.Create();
-        var other = Guid.NewGuid();
-        d.Encumbrances.Single(e => e.PoLineRef == "PO-2026-0451/1").Claim(other, 1, Money.Of(10_000m));
-        d.PurchaseOrders.Single(p => p.Number == "PO-2026-0451").ClaimBilling(1, other, 1, Money.Of(10_000m));
-        var s = await Assembler(d).BuildAsync(d.PoBackedInvoice());
-        var po = s.PoLines.Single();
-        po.PoLineRef.Should().Be("PO-2026-0451/1");
-        po.AuthorizedAmount.Should().Be(Money.Of(160_000m));
-        po.OtherActiveClaims.Should().Be(Money.Of(10_000m));
-        po.Encumbrance!.ClaimableForInvoice.Should().Be(Money.Of(150_000m));
-        s.Distributions.Single().PoLineRef.Should().Be("PO-2026-0451/1");
-        s.RequiredNewBudget(Police).Should().Be(Money.Of(10_000m));
-    }
-
-    [Fact]
-    public async Task Missing_combination_and_budget_are_reported_not_thrown()
-    {
-        var d = SpringfieldData.Create();
-        var inv = new VendorInvoice("X-1", SpringfieldData.AcmeId, SpringfieldData.Dates, Money.Of(10m), null,
-            [new DistributionInput(AccountCode.Parse("101-3000-54000"), Money.Of(10m), null)], SpringfieldData.ClerkId, DateTimeOffset.UtcNow);
-        var s = await Assembler(d).BuildAsync(inv);
-        s.Distributions.Single().Combination.Exists.Should().BeFalse();
-        s.BudgetFor(AccountCode.Parse("101-3000-54000")).Exists.Should().BeFalse();
+        var inv = d.PoBackedInvoice();
+        var enc = d.Encumbrances.Single(e => e.PoLineRef == "PO-2026-0451/1");
+        enc.Claim(Guid.NewGuid(), 1, Money.Of(10_000m));
+        enc.ClaimBilling(Guid.NewGuid(), 1, Money.Of(10_000m), .05m);
+        var e = (await Assembler(d).BuildAsync(inv, SpringfieldData.Jun15)).Distributions.Single().Encumbrance!;
+        e.PoLineRef.Should().Be("PO-2026-0451/1");
+        e.AuthorizedPoAmount.Should().Be(Money.Of(160_000m));
+        e.OtherLiquidationClaims.Should().Be(Money.Of(10_000m));
+        e.OtherActiveInvoiceClaims.Should().Be(Money.Of(10_000m));
+        e.CurrentInvoicePoAmount.Should().Be(Money.Of(160_000m));
+        e.ClaimableForInvoice.Should().Be(Money.Of(150_000m));
     }
 
     [Fact]
@@ -617,43 +619,55 @@ public class ValidationSubjectAssemblerTests
     {
         var d = SpringfieldData.Create();
         var first = d.NonPoExerciseInvoice(" v-7781 ");
-        (await Assembler(d, [first]).BuildAsync(d.NonPoExerciseInvoice("V-7781"))).Transaction.IsDuplicate.Should().BeTrue();
-
-        var may = new InvoiceDates(new(2026, 5, 20), new(2026, 5, 20), new(2026, 5, 20), new(2026, 6, 20));
-        (await Assembler(d).BuildAsync(d.NonPoExerciseInvoice(dates: may))).PeriodIsOpen.Should().BeFalse();
+        (await Assembler(d, [first]).BuildAsync(d.NonPoExerciseInvoice("V-7781"), SpringfieldData.Jun15)).Transaction.IsDuplicate.Should().BeTrue();
+        (await Assembler(d).BuildAsync(d.NonPoExerciseInvoice(date: new DateOnly(2026, 5, 20)), SpringfieldData.Jun15)).PeriodIsOpen.Should().BeFalse();
     }
 
     [Fact]
-    public async Task Approvals_of_the_active_cycle_and_their_baseline_are_included()
+    public async Task Active_overrides_bring_their_evaluations_as_evidence()
     {
         var d = SpringfieldData.Create();
         var inv = d.NonPoExerciseInvoice();
-        var assembler = Assembler(d);
-        var subject = await assembler.BuildAsync(inv);
-        var rules = Domain.Validation.DomainServices.RuleResolution.Resolve(d.Rules, inv.Dates.Invoice);
-        var eval = new Domain.Validation.DomainServices.ValidationPipeline(Domain.Validation.DomainServices.RuleCatalog.Default)
-            .Evaluate(subject, rules, EvaluationTrigger.Approve, SpringfieldData.ClerkId, DateTimeOffset.UtcNow);
-        inv.Submit(eval.Id);
-        inv.RecordApproval(Domain.Payables.Entities.ApproverRole.DepartmentHead, "6000", UserId.New(), eval.Id, DateTimeOffset.UtcNow);
+        d.BudgetLines.Single(l => l.Account == Fire).Amend(Money.Of(13_000m), "BA-1", SpringfieldData.Jun15);
+        var pipeline = new ValidationPipeline(RuleCatalog.Default);
+        var first = pipeline.Evaluate(await Assembler(d).BuildAsync(inv, SpringfieldData.Jun15), d.Rules, EvaluationTrigger.Submit,
+            SpringfieldData.ClerkId, DateTimeOffset.UtcNow);
+        inv.Submit(first.Id, first.RuleFingerprint, [new(Domain.Payables.Entities.ApproverRole.DepartmentHead, new DepartmentCode("6000"))], []);
+        var soft = first.Outcomes.Single(o => o.RuleId == "PROCUREMENT_THRESHOLD");
+        inv.Override(new OverrideTarget(first.Id, soft.OutcomeRef, soft.RuleId, soft.RuleVersion, soft.DistributionLine, inv.ContentVersion,
+            inv.ApprovalCycleId!.Value), Domain.Payables.Entities.ApproverRole.FinanceDirector, UserId.New(), "Sole source on file", DateTimeOffset.UtcNow);
 
-        var s = await Assembler(d, evaluations: [eval]).BuildAsync(inv);
-        s.ActiveApprovals.Should().ContainSingle(a => a.Role == ApproverRole.DepartmentHead && a.Department == "6000");
-        s.ApprovalBaseline.Should().Be(new ApprovalBaseline(1, rules.Fingerprint));
+        var s = await Assembler(d, evaluations: [first]).BuildAsync(inv, SpringfieldData.Jun15);
+        s.OverridesSoFar.Should().ContainSingle(o => o.OutcomeRef == soft.OutcomeRef && o.Role == ApproverRole.FinanceDirector);
+        s.PreviousEvaluations.Should().ContainSingle(e => e.EvaluationId == first.Id);
+        pipeline.Evaluate(s, d.Rules, EvaluationTrigger.Manual, SpringfieldData.ClerkId, DateTimeOffset.UtcNow)
+            .Outcomes.Single(o => o.RuleId == "PROCUREMENT_THRESHOLD").IsOverridden.Should().BeTrue();
     }
 }
 ```
 
-`EnumMappingTests.cs` — для пар (`ChartOfAccounts.FundRestrictionCheck` ↔ `Validation.FundRestriction`), (`GrantEligibility` ↔ `GrantEligibilityResult`), (`GrantPolicy` ↔ `GrantRule`), (`Payables.ApproverRole` ↔ `Validation.ApproverRole`), (`ChartOfAccounts.BudgetControlMode` ↔ `Validation.BudgetControl`), (`FundType` ↔ `FundKind`, с отображением `Governmental→Governmental`, `Enterprise→Enterprise`) сравнить `Enum.GetNames` как множества — расхождение ловится тестом, а не в рантайме:
+`EnumMappingTests.cs` — сборщик и `RoleMapping` переводят enum'ы по имени, поэтому множества имён обязаны совпадать:
 ```csharp
-[Theory]
-[InlineData(typeof(Domain.ChartOfAccounts.Entities.FundRestrictionCheck), typeof(Domain.Validation.ValueObjects.FundRestriction))]
-[InlineData(typeof(Domain.ChartOfAccounts.Entities.GrantEligibility), typeof(Domain.Validation.ValueObjects.GrantEligibilityResult))]
-[InlineData(typeof(Domain.ChartOfAccounts.Entities.GrantPolicy), typeof(Domain.Validation.ValueObjects.GrantRule))]
-[InlineData(typeof(Domain.Payables.Entities.ApproverRole), typeof(Domain.Validation.ValueObjects.ApproverRole))]
-[InlineData(typeof(Domain.ChartOfAccounts.Entities.BudgetControlMode), typeof(Domain.Validation.ValueObjects.BudgetControl))]
-[InlineData(typeof(Domain.ChartOfAccounts.Entities.FundType), typeof(Domain.Validation.ValueObjects.FundKind))]
-[InlineData(typeof(Domain.ChartOfAccounts.Entities.BudgetControlMode), typeof(Domain.Ledger.Entities.BudgetControlMode))]
-public void Enum_names_match(Type a, Type b) => Enum.GetNames(a).Should().BeEquivalentTo(Enum.GetNames(b));
+using Coa = GovErp.Domain.ChartOfAccounts.Entities;
+using Led = GovErp.Domain.Ledger.Entities;
+using Pay = GovErp.Domain.Payables.Entities;
+using Val = GovErp.Domain.Validation.ValueObjects;
+
+namespace GovErp.Application.Web.Tests;
+
+public class EnumMappingTests
+{
+    [Theory]
+    [InlineData(typeof(Coa.FundRestrictionCheck), typeof(Val.FundRestriction))]
+    [InlineData(typeof(Coa.GrantEligibility), typeof(Val.GrantEligibilityResult))]
+    [InlineData(typeof(Coa.GrantPolicy), typeof(Val.GrantRule))]
+    [InlineData(typeof(Coa.FundType), typeof(Val.FundKind))]
+    [InlineData(typeof(Coa.BudgetControlMode), typeof(Val.BudgetControl))]
+    [InlineData(typeof(Coa.BudgetControlMode), typeof(Led.BudgetControlMode))]
+    [InlineData(typeof(Pay.ApproverRole), typeof(Val.ApproverRole))]
+    public void Context_enums_mapped_by_name_have_identical_names(Type a, Type b) =>
+        Enum.GetNames(a).Should().BeEquivalentTo(Enum.GetNames(b));
+}
 ```
 
 - [ ] **Step 4: Убедиться, что не компилируется**
@@ -680,112 +694,112 @@ namespace GovErp.Application.Web.Validation;
 public sealed class ValidationSubjectAssembler(
     IFundRepository funds, IGrantRepository grants, IAccountCombinationRepository combinations,
     IBudgetLineRepository budgetLines, IEncumbranceRepository encumbrances, IFiscalPeriodRepository periods,
-    IVendorRepository vendors, IPurchaseOrderRepository purchaseOrders, IVendorInvoiceRepository invoices,
-    IEvaluationRecordRepository evaluations, IOptions<PostingOptions> posting)
+    IVendorRepository vendors, IVendorInvoiceRepository invoices, IEvaluationRecordRepository evaluations,
+    IOptions<PostingOptions> posting)
 {
-    public async Task<ValidationSubject> BuildAsync(VendorInvoice invoice, CancellationToken ct = default)
+    public async Task<ValidationSubject> BuildAsync(VendorInvoice invoice, DateOnly businessDate, CancellationToken ct = default)
     {
         var vendor = await vendors.FindAsync(invoice.VendorId, ct) ?? throw new NotFoundException($"Vendor {invoice.VendorId} not found.");
-        var fy = FiscalYear.FromDate(invoice.Dates.Posting);
-        var (py, pm) = FiscalPeriod.KeyFor(invoice.Dates.Posting);
+        var fy = FiscalYear.FromDate(invoice.PostingDate);
+        var (py, pm) = FiscalPeriod.KeyFor(invoice.PostingDate);
         var period = await periods.FindAsync(py, pm, ct);
-        var isDuplicate = await invoices.ExistsDuplicateAsync(invoice.VendorId, invoice.NormalizedNumber, invoice.Id, ct);
+        var cycle = invoice.ApprovalCycleId ?? Guid.Empty;
+        var fingerprint = invoice.RuleFingerprint ?? "";
+        var cv = invoice.ContentVersion;
 
-        var tx = new TransactionSnapshot(invoice.Reference, invoice.Id, invoice.ContentVersion, invoice.ApprovalCycleId, "AP_INVOICE",
-            invoice.Dates.Invoice, invoice.Dates.Service, invoice.Dates.Posting, invoice.Total,
-            new VendorSnapshot(vendor.Id, vendor.Name, vendor.IsActive, vendor.Status == VendorStatus.Debarred, vendor.SamRegistered),
-            invoice.PoNumber, isDuplicate, invoice.CreatedBy);
+        var tx = new TransactionSnapshot(invoice.Reference, cv, "AP_INVOICE", invoice.InvoiceDate, invoice.Total,
+            new VendorSnapshot(vendor.Id, vendor.Name, vendor.Status == VendorStatus.Debarred, vendor.SamRegistered, vendor.Status == VendorStatus.Active),
+            invoice.IsPoBacked, await invoices.ExistsDuplicateAsync(invoice.VendorId, invoice.NormalizedInvoiceNumber, invoice.Id, ct),
+            invoice.CreatedBy, cycle, fingerprint, invoice.Status.ToString(),
+            invoice.ServiceDate, invoice.PostingDate, invoice.DueDate, invoice.PaymentHold);
+
+        var budgets = new Dictionary<AccountCode, BudgetSnapshot>();
+        foreach (var key in invoice.Distributions.Select(d => d.Account).Distinct())
+        {
+            var line = await budgetLines.FindAsync(key, fy, ct);
+            budgets[key] = line is null
+                ? BudgetSnapshot.Missing with { FiscalYear = fy.Year }
+                : new BudgetSnapshot(true, line.Amended, line.Actuals, line.Encumbered, line.Held, line.Available, line.OwnHeld(invoice.Id, cv), fy.Year);
+        }
 
         var distributions = new List<DistributionSnapshot>();
         foreach (var d in invoice.Distributions)
         {
-            distributions.Add(await DistributionAsync(invoice, d, ct));
+            distributions.Add(new DistributionSnapshot(d.LineNo, d.Account, d.Amount,
+                await CombinationAsync(d.Account, invoice.InvoiceDate, ct), await FundAsync(d, ct), await GrantAsync(d, invoice.ServiceDate, ct),
+                budgets[d.Account], await EncumbranceAsync(invoice, d, ct)));
         }
 
-        var budgets = new List<BudgetSnapshot>();
-        foreach (var key in invoice.Distributions.Select(d => d.Account).Distinct())
+        var approvals = invoice.Approvals
+            .Where(a => a.Decision == ApprovalDecision.Approved)
+            .Select(a => new ApprovalSnapshot(RoleMapping.ToValidation(a.Role), a.UserId, a.Department, a.ContentVersion,
+                a.ApprovalCycleId, a.RuleFingerprint, a.EvaluationRef))
+            .ToList();
+
+        var active = invoice.Overrides.Where(o => o.Target.ContentVersion == cv && o.Target.ApprovalCycleId == cycle).ToList();
+        var overrides = active.Select(o => new OverrideSnapshot(o.Target.RuleId, o.UserId, o.Reason, o.Target.RuleVersion,
+            o.Target.DistributionLine, o.Target.ContentVersion, o.Target.ApprovalCycleId, fingerprint, o.Target.EvaluationRef,
+            RoleMapping.ToValidation(o.Role), o.Target.OutcomeRef)).ToList();
+        var previous = new List<PreviousEvaluation>();
+        foreach (var id in active.Select(o => o.Target.EvaluationRef).Distinct())
         {
-            var line = await budgetLines.FindAsync(key, fy, ct);
-            budgets.Add(line is null
-                ? BudgetSnapshot.Missing(key)
-                : new BudgetSnapshot(key, true, line.Amended, line.Actuals, line.Encumbered, line.Held, line.HeldFor(invoice.Id, invoice.ContentVersion)));
-        }
-
-        var poLines = await PoLinesAsync(invoice, ct);
-        var approvals = invoice.ActiveApprovals.Select(a => new ApprovalSnapshot(RoleMapping.ToValidation(a.Role), a.Department)).ToList();
-        var overrides = invoice.ActiveOverrides
-            .Select(o => new OverrideSnapshot(o.EvaluationId, o.RuleId, o.RuleVersion, o.DistributionLine, o.UserId, o.Reason)).ToList();
-
-        ApprovalBaseline? baseline = null;
-        if (invoice.ActiveApprovals.LastOrDefault() is { EvaluationId: { } evalId }
-            && await evaluations.FindAsync(evalId, ct) is { } basis)
-        {
-            baseline = new ApprovalBaseline(basis.ContentVersion, basis.RuleSetFingerprint);
-        }
-
-        return new ValidationSubject(tx, distributions, budgets, poLines, approvals, overrides,
-            period?.IsOpen ?? false, baseline, posting.Value.ToPostingAccounts());
-    }
-
-    private async Task<DistributionSnapshot> DistributionAsync(VendorInvoice invoice, InvoiceDistribution d, CancellationToken ct)
-    {
-        var fund = await funds.FindAsync(d.Account.Fund, ct);
-        var combination = await combinations.FindAsync(d.Account, ct);
-        var grant = d.Account.Grant is null ? null : await grants.FindAsync(d.Account.Grant, ct);
-
-        FundSnapshot? fundSnapshot = fund is null ? null : new(fund.Code.Value, fund.Name,
-            Enum.Parse<FundKind>(fund.Type.ToString()),
-            Enum.Parse<BudgetControl>(fund.ControlMode.ToString()),
-            Enum.Parse<GrantRule>(fund.GrantPolicy.ToString()),
-            Enum.Parse<FundRestriction>(fund.Check(d.Account.Department, d.Account.Object).ToString()),
-            fund.IsActive);
-
-        GrantSnapshot? grantSnapshot = d.Account.Grant is null ? null
-            : grant is null ? new(d.Account.Grant.Value, false, GrantEligibilityResult.GrantNotActive, "Missing")
-            : new(grant.Code.Value, grant.IsFederal,
-                Enum.Parse<GrantEligibilityResult>(grant.CheckEligibility(invoice.Dates.Service, d.Account.Department, d.Account.Object).ToString()),
-                grant.Status.ToString());
-
-        var combinationSnapshot = combination is null
-            ? new CombinationSnapshot(false, false, "Missing")
-            : new CombinationSnapshot(true, combination.IsActiveOn(invoice.Dates.Invoice), combination.Status.ToString());
-
-        var poLineRef = d.PoLineNo is { } no && invoice.PoNumber is { } po ? $"{po}/{no}" : null;
-        return new DistributionSnapshot(d.LineNo, d.Account, d.Amount, poLineRef, combinationSnapshot, fundSnapshot, grantSnapshot);
-    }
-
-    private async Task<IReadOnlyList<PoLineSnapshot>> PoLinesAsync(VendorInvoice invoice, CancellationToken ct)
-    {
-        if (invoice.PoNumber is null)
-        {
-            return [];
-        }
-
-        var po = await purchaseOrders.FindByNumberAsync(invoice.PoNumber, ct);
-        if (po is null)
-        {
-            return [];   // правило PO_LIQUIDATION сообщит «PO line not found»
-        }
-
-        var result = new List<PoLineSnapshot>();
-        foreach (var no in invoice.Distributions.Where(d => d.PoLineNo is not null).Select(d => d.PoLineNo!.Value).Distinct())
-        {
-            var line = po.Lines.SingleOrDefault(l => l.LineNo == no);
-            if (line is null)
+            if (await evaluations.FindAsync(id, ct) is { } record)
             {
-                continue;
+                previous.Add(new PreviousEvaluation(record.Id, record.Outcomes));
             }
-
-            var lineRef = po.LineRef(no);
-            var enc = await encumbrances.FindByPoLineAsync(lineRef, ct);
-            var own = enc?.ClaimOf(invoice.Id, invoice.ContentVersion)?.Amount ?? Money.Zero;
-            EncumbranceSnapshot? encSnapshot = enc is null ? null
-                : new(enc.Remaining, enc.HeldClaims - own, enc.Status == EncumbranceStatus.Open);
-            result.Add(new PoLineSnapshot(lineRef, line.Account, po.Status == PurchaseOrderStatus.Open,
-                line.AuthorizedAmount, line.PostedAmount, po.OtherActiveBillingClaims(no, invoice.Id), encSnapshot));
         }
 
-        return result;
+        return new ValidationSubject(tx, distributions, [], overrides, period?.IsOpen ?? false, null, posting.Value.ToPostingAccounts(),
+            approvals, businessDate) { PreviousEvaluations = previous };
+    }
+
+    private async Task<CombinationSnapshot> CombinationAsync(AccountCode account, DateOnly invoiceDate, CancellationToken ct) =>
+        await combinations.FindAsync(account, ct) is { } c
+            ? new CombinationSnapshot(true, c.IsActiveOn(invoiceDate), c.Status.ToString())
+            : new CombinationSnapshot(false, false, "Missing");
+
+    private async Task<FundSnapshot?> FundAsync(InvoiceDistribution d, CancellationToken ct) =>
+        await funds.FindAsync(d.Account.Fund, ct) is { } f
+            ? new FundSnapshot(f.Code.Value, f.Name, Enum.Parse<FundKind>(f.Type.ToString()), Enum.Parse<BudgetControl>(f.ControlMode.ToString()),
+                Enum.Parse<GrantRule>(f.GrantPolicy.ToString()), Enum.Parse<FundRestriction>(f.Check(d.Account.Department, d.Account.Object).ToString()), f.IsActive)
+            : null;
+
+    private async Task<GrantSnapshot?> GrantAsync(InvoiceDistribution d, DateOnly serviceDate, CancellationToken ct)
+    {
+        if (d.Account.Grant is null)
+        {
+            return null;
+        }
+
+        return await grants.FindAsync(d.Account.Grant, ct) is { } g
+            ? new GrantSnapshot(g.Code.Value, g.IsFederal,
+                Enum.Parse<GrantEligibilityResult>(g.CheckEligibility(serviceDate, d.Account.Department, d.Account.Object).ToString()), g.Status.ToString())
+            : new GrantSnapshot(d.Account.Grant.Value, false, GrantEligibilityResult.GrantNotActive, "Missing");
+    }
+
+    private async Task<EncumbranceSnapshot?> EncumbranceAsync(VendorInvoice invoice, InvoiceDistribution d, CancellationToken ct)
+    {
+        if (invoice.PoRef is null || d.PoLineNo is not { } no)
+        {
+            return null;
+        }
+
+        var lineRef = $"{invoice.PoRef}/{no}";
+        if (await encumbrances.FindByPoLineAsync(lineRef, ct) is not { } e)
+        {
+            return null;   // BudgetAllocation → «Missing PO line snapshot»
+        }
+
+        bool Own(Guid invoiceId, int version) => invoiceId == invoice.Id && version == invoice.ContentVersion;
+        Money Sum(IEnumerable<Money> values) => values.Aggregate(Money.Zero, (s, m) => s + m);
+        var heldClaims = e.Claims.Where(c => c.Status == ClaimStatus.Held).ToList();
+        var heldBilling = e.BillingClaims.Where(c => c.Status == ClaimStatus.Held).ToList();
+        return new EncumbranceSnapshot(lineRef, e.Remaining, e.Status == EncumbranceStatus.Open,
+            e.AuthorizedPoAmount, e.AlreadyPostedAgainstPo,
+            OtherActiveInvoiceClaims: Sum(heldBilling.Where(c => !Own(c.InvoiceId, c.ContentVersion)).Select(c => c.Amount)),
+            CurrentInvoicePoAmount: Sum(invoice.Distributions.Where(x => x.PoLineNo == no).Select(x => x.Amount)),
+            OtherLiquidationClaims: Sum(heldClaims.Where(c => !Own(c.InvoiceId, c.ContentVersion)).Select(c => c.Amount)),
+            OwnLiquidationClaim: Sum(heldClaims.Where(c => Own(c.InvoiceId, c.ContentVersion)).Select(c => c.Amount)));
     }
 }
 ```
@@ -809,15 +823,59 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 3: Infrastructure — EF-модель, схемы, миграции, Master
 
 **Files:**
+- Modify (домен, шаг 0): `src/GovErp.Domain.Ledger/Entities/{OpeningBalance,BudgetLine,BudgetReservation,Encumbrance,EncumbranceClaim,PoBillingClaim}.cs`, `src/GovErp.Domain.Payables/Entities/{Vendor,PurchaseOrder,VendorInvoice}.cs`, `src/GovErp.Domain.Validation/Entities/RuleDefinition.cs`, `src/GovErp.Domain.Validation/ValueObjects/RuleOutcome.cs`
+- Test (домен): `tests/GovErp.Domain.Payables.Tests/VendorInvoiceTests.cs`, `tests/GovErp.Domain.Validation.Tests/OutcomeTests.cs`
 - Modify: `Directory.Packages.props`, `src/GovErp.Infrastructure/GovErp.Infrastructure.csproj`
-- Create: `Persistence/Conversions.cs`, `JsonColumn.cs`, `GovErpDbContext.cs`, `GovErpDbContextFactory.cs`, `Persistence/Configurations/{Coa,Ledger,Ap,Validation,Audit}/*Configuration.cs`
+- Create: `Persistence/Conversions.cs`, `CodeList.cs`, `JsonColumn.cs`, `GovErpDbContext.cs`, `GovErpDbContextFactory.cs`, `Persistence/Configurations/{Coa,Ledger,Ap,Validation,Audit}/*Configuration.cs`
 - Create: `Master/Tenant.cs`, `UserAccount.cs`, `MasterDbContext.cs`, `MasterDbContextFactory.cs`
 - Generate: `Persistence/Migrations/*_Initial*`, `Master/Migrations/*_Initial*`
 - Test: `tests/GovErp.Application.Web.Tests/JsonRoundTripTests.cs`
 
 **Interfaces:**
-- Produces: `GovErpDbContext` с `DbSet` для `Fund, Department, ObjectCodeDefinition, Grant, AccountCombination, OpeningBalance, BudgetLine, Encumbrance, JournalEntry, FiscalPeriod, Vendor, PurchaseOrder, VendorInvoice, RuleDefinition, EvaluationRecord, ExplanationRecord, AuditEvent, CommandReceipt`; `MasterDbContext` с `Tenants`, `Users`; `JsonColumn.Options` (используют аудит и receipts).
-- Модель (spec §6.2): FK только внутри схемы; `rowversion` на `BudgetLines`, `Encumbrances`, `PurchaseOrders`, `VendorInvoices`; `ChangeStamp` — обычная колонка (домен меняет её при любом изменении owned-коллекций, что гарантирует UPDATE корня); резервы, claims, billing claims, распределения, согласования, overrides, строки журнала — **owned-таблицы**, а не JSON (по ним ищут: `ListHeldForInvoiceAsync`, `ListClaimedByInvoiceAsync`); уникальные индексы `ap.VendorInvoices (VendorId, NormalizedNumber)`, `ledger.JournalEntries (SourceRef, Kind)`, `ap.ProcessedCommands (CommandId)`, `ledger.BudgetLines (Account, FiscalYear)`, `ledger.Encumbrances (PoLineRef)`, `ap.PurchaseOrders (Number)`, `validation.RuleDefinitions (RuleId, Layer, Version)`.
+- Produces: `GovErpDbContext` с `DbSet` для `Fund, Department, ObjectCodeDefinition, Grant, AccountCombination, OpeningBalance, BudgetLine, Encumbrance, JournalEntry, FiscalPeriod, Vendor, PurchaseOrder, VendorInvoice, RuleDefinition, EvaluationRecord, ExplanationRecord, AuditEvent, CommandReceipt`; `MasterDbContext` с `Tenants`, `Users`; `JsonColumn.Options` (используют аудит, receipts и JSON-колонки оценки).
+- Модель (spec §6.2): FK только внутри схемы. Теневой `rowversion` — на `BudgetLines`, `Encumbrances`, `VendorInvoices` (PO в коде неизменяем: billing claims живут на `Encumbrance`, GE-17). `ChangeStamp` — обычная колонка: домен увеличивает её при любом изменении, включая owned-коллекции, поэтому EF всегда выполняет UPDATE корня и проверяет rowversion. Резервы, claims, billing claims, ликвидации, распределения, согласования, overrides, отзывы и строки журнала хранятся в **owned-таблицах**, не в JSON: по ним ищут (`FindByReservationAsync`, `FindByClaimAsync`). Уникальные индексы: `ap.VendorInvoices (VendorId, NormalizedNumber)`, `ledger.JournalEntries (SourceRef)`, `ap.ProcessedCommands (CommandId)`, `ledger.BudgetLines (Account, FiscalYear)`, `ledger.Encumbrances (PoLineRef)`, `ledger.OpeningBalances (Account, FiscalYear)`, `ap.PurchaseOrders (Number)`, `validation.RuleDefinitions (RuleId, Layer, Version, ScopeFund, ScopeGrant)`; id резервов и claims — первичные ключи своих таблиц.
+
+- [ ] **Step 0: Подготовка домена к персистентности (без изменения поведения, кроме ChangeStamp инвойса)**
+
+1. EF материализует агрегаты через приватный конструктор без параметров. Образец уже есть: `Fund`, `Department`, `FiscalPeriod`, `JournalEntry`. Добавить такой конструктор в `OpeningBalance`, `BudgetLine`, `BudgetReservation`, `Encumbrance`, `EncumbranceClaim`, `PoBillingClaim`, `Vendor`, `PurchaseOrder`, `VendorInvoice` и `RuleDefinition`: ссылочные поля заполнить `null!`. Свойства `{ get; }` заменить на `{ get; private set; }`, инициализаторы (`= Guid.NewGuid()`, `= ClaimStatus.Held`) сохранить. EF мапит только свойства с сеттером, и `private set` здесь самый дешёвый вариант. Записи `JournalLine` и `PurchaseOrderLine` менять не нужно: EF связывает их конструкторы, потому что имена параметров совпадают со свойствами.
+2. `PurchaseOrder.Lines` перевести на поле `private readonly List<PurchaseOrderLine> _lines = []` и `public IReadOnlyList<PurchaseOrderLine> Lines => _lines.AsReadOnly();`, как в остальных агрегатах: owned-коллекцию EF заполняет через поле.
+3. `VendorInvoice.ChangeStamp` (`public long ChangeStamp { get; private set; }`) увеличивать в каждом изменяющем методе: `UpdateHeader` (только при реальном изменении), `AddDistribution`, `RemoveDistribution`, `Submit`, `RecordApproval`, `MarkApproved`, `Override`, `Reevaluate`, `Reject`, `ReturnToDraft`, `Withdraw`, `Post`, `SetPaymentHold`. Причина: `RecordApproval` и `Override` меняют только owned-таблицы. Без счётчика EF не обновит строку корня, rowversion не проверится, и два параллельных согласования пройдут оба (spec §6.2, «ChangeStamp на корнях с owned-коллекциями»).
+4. `RuleOutcome`: `OutcomeRef { get; private init; }` и фабрика восстановления для хранилища (JSON-колонки оценки). Приватный конструктор требует `RuleDefinition`, поэтому без фабрики outcome из хранилища не собрать:
+```csharp
+/// <summary>Восстановление сохранённого outcome (JSON-колонки оценки). Не вычисляет ничего заново.</summary>
+public static RuleOutcome Restore(Guid outcomeRef, string ruleId, int ruleVersion, ValidationStep step, RuleLayer layer,
+    int? distributionLine, Severity severity, IReadOnlyDictionary<string, string> inputs, IReadOnlyDictionary<string, string> computed,
+    string message, string resolution, IReadOnlyList<ApproverRole> overridableBy, OverrideSnapshot? overriddenBy) =>
+    new(outcomeRef, ruleId, ruleVersion, step, layer, distributionLine, severity, inputs, computed, message, resolution, overridableBy)
+    { OverriddenBy = overriddenBy };
+```
+Второй приватный конструктор с этими полями копирует словари и список так же, как основной (`ReadOnlyDictionary`, `Array.AsReadOnly`).
+
+Тесты:
+```csharp
+// tests/GovErp.Domain.Payables.Tests/VendorInvoiceTests.cs
+[Fact]
+public void Changes_to_owned_collections_advance_change_stamp()
+{
+    var inv = Submitted();
+    var before = inv.ChangeStamp;
+    inv.RecordApproval(Head.Role, Head.Department, Chief, inv.LastEvaluationRef!.Value, At);
+    inv.ChangeStamp.Should().BeGreaterThan(before);
+}
+
+// tests/GovErp.Domain.Validation.Tests/OutcomeTests.cs
+[Fact]
+public void Restore_reproduces_every_persisted_field()
+{
+    var o = RuleOutcome.From(DemoRules.Rule("P", ValidationStep.TransactionPurpose, RuleLayer.State, Severity.SoftStop,
+        overridableBy: [ApproverRole.FinanceDirector]), Severity.SoftStop, 1,
+        new Dictionary<string, string> { ["amount"] = "1" }, new Dictionary<string, string> { ["x"] = "2" });
+    var back = RuleOutcome.Restore(o.OutcomeRef, o.RuleId, o.RuleVersion, o.Step, o.Layer, o.DistributionLine, o.Severity,
+        o.Inputs, o.Computed, o.Message, o.Resolution, o.OverridableBy, null);
+    back.Should().BeEquivalentTo(o);
+}
+```
+Run: `dotnet test tests/GovErp.Domain.Payables.Tests tests/GovErp.Domain.Validation.Tests tests/GovErp.Architecture.Tests` — все зелёные (было 20 + 210 + 6, стало 21 + 211 + 6).
 
 - [ ] **Step 1: Пакеты**
 
@@ -862,11 +920,13 @@ internal static class Conversions
     public static readonly ValueConverter<TenantId, string> Tenant = new(t => t.Value, s => new TenantId(s));
 }
 ```
+EF не передаёт `null` в конвертер, поэтому `DepartmentCode?` и `GrantCode?` используют те же конверсии.
 
 `Persistence/JsonColumn.cs`:
 ```csharp
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using GovErp.Domain.Validation.ValueObjects;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
@@ -879,7 +939,7 @@ public static class JsonColumn
     {
         PropertyNameCaseInsensitive = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        Converters = { new JsonStringEnumConverter(), new MoneyJsonConverter(), new AccountCodeJsonConverter() },
+        Converters = { new JsonStringEnumConverter(), new MoneyJsonConverter(), new AccountCodeJsonConverter(), new RuleOutcomeJsonConverter() },
     };
 
     public static PropertyBuilder<T> AsJson<T>(this PropertyBuilder<T> builder) =>
@@ -902,46 +962,63 @@ public static class JsonColumn
         public override AccountCode Read(ref Utf8JsonReader r, Type t, JsonSerializerOptions o) => AccountCode.Parse(r.GetString()!);
         public override void Write(Utf8JsonWriter w, AccountCode v, JsonSerializerOptions o) => w.WriteStringValue(v.ToString());
     }
+
+    /// <summary>RuleOutcome создаётся только из RuleDefinition; из хранилища — через RuleOutcome.Restore (шаг 0).</summary>
+    private sealed class RuleOutcomeJsonConverter : JsonConverter<RuleOutcome>
+    {
+        private sealed record Dto(Guid OutcomeRef, string RuleId, int RuleVersion, ValidationStep Step, RuleLayer Layer, int? DistributionLine,
+            Severity Severity, Dictionary<string, string> Inputs, Dictionary<string, string> Computed, string Message, string Resolution,
+            List<ApproverRole> OverridableBy, OverrideSnapshot? OverriddenBy);
+
+        public override RuleOutcome Read(ref Utf8JsonReader r, Type t, JsonSerializerOptions o)
+        {
+            var d = JsonSerializer.Deserialize<Dto>(ref r, o)!;
+            return RuleOutcome.Restore(d.OutcomeRef, d.RuleId, d.RuleVersion, d.Step, d.Layer, d.DistributionLine, d.Severity,
+                d.Inputs, d.Computed, d.Message, d.Resolution, d.OverridableBy, d.OverriddenBy);
+        }
+
+        public override void Write(Utf8JsonWriter w, RuleOutcome v, JsonSerializerOptions o) =>
+            JsonSerializer.Serialize(w, new Dto(v.OutcomeRef, v.RuleId, v.RuleVersion, v.Step, v.Layer, v.DistributionLine, v.Severity,
+                new(v.Inputs), new(v.Computed), v.Message, v.Resolution, [.. v.OverridableBy], v.OverriddenBy), o);
+    }
 }
 ```
 
-`tests/GovErp.Application.Web.Tests/JsonRoundTripTests.cs` — снимок и запись оценки переживают сериализацию (они хранятся JSON-колонками):
+`tests/GovErp.Application.Web.Tests/JsonRoundTripTests.cs`: снимок и запись оценки хранятся JSON-колонками и должны переживать сериализацию.
 ```csharp
 using System.Text.Json;
 using GovErp.Domain.Validation.DomainServices;
 using GovErp.Domain.Validation.ValueObjects;
 using GovErp.Infrastructure.Persistence;
 using GovErp.Infrastructure.Seed;
-using Microsoft.Extensions.Options;
 
 namespace GovErp.Application.Web.Tests;
 
 public class JsonRoundTripTests
 {
+    private static T RoundTrip<T>(T value) => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value, JsonColumn.Options), JsonColumn.Options)!;
+
     [Fact]
-    public async Task Validation_subject_and_outcomes_round_trip()
+    public async Task Validation_subject_and_evaluation_parts_round_trip()
     {
         var d = SpringfieldData.Create();
         var inv = d.PoBackedInvoice(164_800m);
-        var subject = await new Validation.ValidationSubjectAssembler(
-            new InMemoryFundRepository(d.Funds), new InMemoryGrantRepository(d.Grants), new InMemoryAccountCombinationRepository(d.Combinations),
-            new InMemoryBudgetLineRepository(d.BudgetLines), new InMemoryEncumbranceRepository(d.Encumbrances),
-            new InMemoryFiscalPeriodRepository(d.Periods), new InMemoryVendorRepository(d.Vendors),
-            new InMemoryPurchaseOrderRepository(d.PurchaseOrders), new InMemoryVendorInvoiceRepository([]),
-            new InMemoryEvaluationRecordRepository([]), Options.Create(new Validation.PostingOptions())).BuildAsync(inv);
+        var subject = await ValidationSubjectAssemblerTests.Assembler(d).BuildAsync(inv, SpringfieldData.Jun15);
         var record = new ValidationPipeline(RuleCatalog.Default)
-            .Evaluate(subject, RuleResolution.Resolve(d.Rules, inv.Dates.Invoice), EvaluationTrigger.Manual, SpringfieldData.ClerkId, DateTimeOffset.UtcNow);
+            .Evaluate(subject, d.Rules, EvaluationTrigger.Manual, SpringfieldData.ClerkId, DateTimeOffset.UtcNow);
 
-        var back = JsonSerializer.Deserialize<ValidationSubject>(JsonSerializer.Serialize(subject, JsonColumn.Options), JsonColumn.Options)!;
+        var back = RoundTrip(subject);
         back.Should().BeEquivalentTo(subject);
-        back.RequiredNewBudget(AccountCode.Parse("701-3000-53100-G-COPS-26")).Should().Be(Money.Of(4_800m));
+        back.Distributions.Single().Encumbrance!.ClaimableForInvoice.Should().Be(Money.Of(160_000m));
 
-        var outcomes = JsonSerializer.Deserialize<List<RuleOutcome>>(JsonSerializer.Serialize(record.Outcomes, JsonColumn.Options), JsonColumn.Options)!;
-        outcomes.Should().BeEquivalentTo(record.Outcomes);
+        RoundTrip(record.Outcomes).Should().BeEquivalentTo(record.Outcomes);
+        RoundTrip(record.RuleSetVersions).Should().Be(record.RuleSetVersions);
+        RoundTrip(record.Steps).Should().BeEquivalentTo(record.Steps);
+        RoundTrip(record.PostingCheck).Should().BeEquivalentTo(record.PostingCheck);
     }
 }
 ```
-Если STJ не сопоставит параметр конструктора наследника `SegmentCode` (`value`) со свойством `Value` — добавить по конвертеру на тип кода, как `AccountCodeJsonConverter`.
+Если STJ не сопоставит параметр конструктора наследника `SegmentCode` (`value`) со свойством `Value`, добавить конвертер на каждый тип кода по образцу `AccountCodeJsonConverter`.
 
 - [ ] **Step 3: DbContext**
 
@@ -987,13 +1064,19 @@ public sealed class GovErpDbContext(DbContextOptions<GovErpDbContext> options) :
 
 - [ ] **Step 4: Конфигурации**
 
-Общие приёмы: `ToTable("X", "schema")`; перечисления — `HasConversion<string>().HasMaxLength(30)`; `Money` — `HasConversion(Conversions.Money).HasPrecision(18, 2)`; коллекции с приватным полем — `b.Navigation(x => x.Prop).HasField("_field").UsePropertyAccessMode(PropertyAccessMode.Field)`; вычисляемые свойства — `Ignore`.
+Общие приёмы:
+- `ToTable("X", "schema")`;
+- перечисления — `HasConversion<string>().HasMaxLength(30)`;
+- `Money` — `HasConversion(Conversions.Money).HasPrecision(18, 2)`;
+- owned-коллекции с приватным полем — `b.Navigation(x => x.Prop).HasField("_field").UsePropertyAccessMode(PropertyAccessMode.Field)`;
+- вычисляемые свойства — `Ignore`.
+
+**Ключи, которые назначает домен (`Guid.NewGuid()` в сущности), помечаются `ValueGeneratedNever()`.** Для owned-коллекций это обязательно. Иначе EF, увидев в коллекции новый резерв с непустым ключом, посчитает его существующим и выполнит UPDATE вместо INSERT, и `SaveChanges` упадёт с `DbUpdateConcurrencyException`.
 
 Образец — `Configurations/Coa/FundConfiguration.cs`:
 ```csharp
 using GovErp.Domain.ChartOfAccounts.Entities;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace GovErp.Infrastructure.Persistence.Configurations.Coa;
@@ -1040,18 +1123,18 @@ internal static class CodeList
 |---|---|---|---|
 | `Department` | `coa.Departments` | `Code` | конверсия `Department` |
 | `ObjectCodeDefinition` | `coa.ObjectCodes` | `Code` | `Category` string |
-| `Grant` | `coa.Grants` | `Code` | `OwnsOne(Period)` → колонки `PeriodFrom`, `PeriodTo`; списки — `CodeList`; `Status` string |
-| `AccountCombination` | `coa.AccountCombinations` | `Id` | `Code` — `Account`, `HasMaxLength(64)`, уникальный индекс; `CreatedBy`/`ApprovedBy` — `User`; `Status`, `Source` string |
-| `OpeningBalance` | `ledger.OpeningBalances` | `Id` | `Account`, `FiscalYear`; `InitialActuals`, `InitialEncumbered` — Money; уникальный индекс `(Account, FiscalYear)` |
+| `Grant` | `coa.Grants` | `Code` | `OwnsOne(Period)` → колонки `PeriodFrom`, `PeriodTo`; `AllowedDepartments`, `AllowableObjects` — `CodeList`; `Status` string |
+| `AccountCombination` | `coa.AccountCombinations` | `Id` (`ValueGeneratedNever`) | `Code` — `Account`, `HasMaxLength(64)`, уникальный индекс; `CreatedBy`/`ApprovedBy` — `User`; `Status`, `Source` string |
+| `OpeningBalance` | `ledger.OpeningBalances` | `Id` (`ValueGeneratedNever`) | `Account`, `FiscalYear`, `AsOfDate`; `InitialActuals`, `InitialEncumbered` — Money; `SourceReference` 200; уникальный `(Account, FiscalYear)` |
 | `BudgetLine` | `ledger.BudgetLines` | `Id` | см. ниже |
-| `Encumbrance` | `ledger.Encumbrances` | `Id` | уникальный `PoLineRef`; `Account`, `FiscalYear`, `Original`, `Liquidated`, `Released`; `Claims` — `OwnsMany` в `ledger.EncumbranceClaims` (ключ `Id`, `InvoiceId` + индекс, `ContentVersion`, `Amount`, `Status`), `HasField("_claims")`; `Ignore(Remaining, HeldClaims)`; `RowVersion` |
-| `JournalEntry` | `ledger.JournalEntries` | `Id` | `Kind` string; `PostingDate`; `PostedBy` — `User`; уникальный `(SourceRef, Kind)`; `Lines` — `OwnsMany` в `ledger.JournalLines` (shadow `Id`, `Account`, `Family` string, `Debit`/`Credit` — Money), `HasField("_lines")` |
+| `Encumbrance` | `ledger.Encumbrances` | `Id` | см. ниже |
+| `JournalEntry` | `ledger.JournalEntries` | `Id` (`ValueGeneratedNever`) | `SourceRef` 100, **уникальный** (один журнал на инвойс — вторая попытка Post падает на индексе); `PeriodYear`, `PeriodMonth`, `PostedBy` — `User`, `PostedAt`; `Lines` — `OwnsMany` в `ledger.JournalLines` (теневой `int Id`, `Account`, `Family` string, `Debit`/`Credit` — Money, `Description` 200), `HasField("_lines")` |
 | `FiscalPeriod` | `ledger.FiscalPeriods` | `(Year, Month)` | `Status` string; `Ignore(IsOpen)` |
-| `Vendor` | `ap.Vendors` | `Id` | `Status` string; `Ignore(IsActive)` |
-| `PurchaseOrder` | `ap.PurchaseOrders` | `Id` | уникальный `Number`; `Status` string; `RowVersion`; `Lines` — `OwnsMany` в `ap.PurchaseOrderLines` (shadow `Id`, `LineNo`, `Account`, `AuthorizedAmount`, `PostedAmount`), внутри — `OwnsMany(l => l.BillingClaims)` в `ap.PoBillingClaims` (ключ `Id`, `InvoiceId` + индекс, `ContentVersion`, `Amount`, `Status`), поля `_lines` и `_billingClaims` |
+| `Vendor` | `ap.Vendors` | `Id` (`ValueGeneratedNever`) | `Code` 20 уникальный; `Name` 200; `Status` string |
+| `PurchaseOrder` | `ap.PurchaseOrders` | `Id` (`ValueGeneratedNever`) | уникальный `Number` 50; `VendorId`; `Status` string; `Ignore(Total)`; `Lines` — `OwnsMany` в `ap.PurchaseOrderLines` (теневой `int Id`, `LineNo`, `Account`, `Amount`), `HasField("_lines")`. Без rowversion: PO в коде неизменяем |
 | `VendorInvoice` | `ap.VendorInvoices` | `Id` | см. ниже |
-| `RuleDefinition` | `validation.RuleDefinitions` | `Id` | `Parameters`, `OverridableBy` — `AsJson()`; `Step`/`Layer`/`Severity` string; `Ignore(CanonicalParameters)`; уникальный `(RuleId, Layer, Version)` |
-| `EvaluationRecord` | `validation.EvaluationRecords` | `Id` | `AppliedRules`, `Outcomes`, `Capabilities`, `ApprovalRoute`, `PostingPreview`, `PostingCheck`, `InputSnapshot` — `AsJson()`; `Trigger`/`Overall` string; `EvaluatedBy` — `User`; индексы `TransactionRef`, `InvoiceId` |
+| `RuleDefinition` | `validation.RuleDefinitions` | `Id` (`ValueGeneratedNever`) | `Parameters`, `OverridableBy` — `AsJson()`; `Step`/`Layer`/`Severity` string; `ScopeFund` 3, `ScopeGrant` 32; уникальный `(RuleId, Layer, Version, ScopeFund, ScopeGrant)` с `.HasFilter(null)`: по умолчанию EF на SQL Server фильтрует `IS NOT NULL`, и правила без scope выпали бы из проверки |
+| `EvaluationRecord` | `validation.EvaluationRecords` | `Id` (`ValueGeneratedNever`) | `RuleSetVersions`, `Outcomes`, `Capabilities`, `Steps`, `ApprovalRoute`, `PostingPreview`, `PostingCheck`, `InputSnapshot` — `AsJson()`; `Trigger`/`Overall` string; `EvaluatedBy` — `User`; `RuleFingerprint` 64; индекс `TransactionRef` |
 | `ExplanationRecord` | `validation.Explanations` | `Id` | `Audience` string; индекс `EvaluationId` |
 | `AuditEvent` | `audit.Events` | `Id` | `TenantId` — `Tenant`, `Actor` — `User`; `PayloadJson` nvarchar(max); индекс `SubjectRef` |
 | `CommandReceipt` | `ap.ProcessedCommands` | `CommandId` | `ActorId` — `User`; `RequestHash` nvarchar(64); `ResultJson` nvarchar(max) |
@@ -1062,6 +1145,7 @@ public void Configure(EntityTypeBuilder<BudgetLine> b)
 {
     b.ToTable("BudgetLines", "ledger");
     b.HasKey(x => x.Id);
+    b.Property(x => x.Id).ValueGeneratedNever();
     b.Property(x => x.Account).HasConversion(Conversions.Account).HasMaxLength(64);
     b.Property(x => x.FiscalYear).HasConversion(Conversions.FiscalYear);
     b.HasIndex(x => new { x.Account, x.FiscalYear }).IsUnique();
@@ -1069,6 +1153,8 @@ public void Configure(EntityTypeBuilder<BudgetLine> b)
     b.Property(x => x.Adopted).HasConversion(Conversions.Money).HasPrecision(18, 2);
     b.Property(x => x.Actuals).HasConversion(Conversions.Money).HasPrecision(18, 2);
     b.Property(x => x.Encumbered).HasConversion(Conversions.Money).HasPrecision(18, 2);
+    b.Property(x => x.ChangeStamp);
+    b.Property(x => x.OpeningBalanceId);
     b.Ignore(x => x.Amended).Ignore(x => x.Held).Ignore(x => x.Available);
     b.Property<byte[]>("RowVersion").IsRowVersion();
     b.OwnsMany(x => x.Amendments, o =>
@@ -1086,11 +1172,65 @@ public void Configure(EntityTypeBuilder<BudgetLine> b)
         o.ToTable("BudgetReservations", "ledger");
         o.WithOwner().HasForeignKey("BudgetLineId");
         o.HasKey(r => r.Id);
+        o.Property(r => r.Id).ValueGeneratedNever();
         o.HasIndex(r => r.InvoiceId);
+        o.Property(r => r.SourceRef).HasMaxLength(100);
         o.Property(r => r.Amount).HasConversion(Conversions.Money).HasPrecision(18, 2);
         o.Property(r => r.Status).HasConversion<string>().HasMaxLength(10);
     });
     b.Navigation(x => x.Reservations).HasField("_reservations").UsePropertyAccessMode(PropertyAccessMode.Field);
+}
+```
+
+`Configurations/Ledger/EncumbranceConfiguration.cs`:
+```csharp
+public void Configure(EntityTypeBuilder<Encumbrance> b)
+{
+    b.ToTable("Encumbrances", "ledger");
+    b.HasKey(x => x.Id);
+    b.Property(x => x.Id).ValueGeneratedNever();
+    b.Property(x => x.PoLineRef).HasMaxLength(60);
+    b.HasIndex(x => x.PoLineRef).IsUnique();
+    b.Property(x => x.Account).HasConversion(Conversions.Account).HasMaxLength(64);
+    foreach (var money in new[] { nameof(Encumbrance.Original), nameof(Encumbrance.Liquidated), nameof(Encumbrance.Released),
+                                  nameof(Encumbrance.AuthorizedPoAmount), nameof(Encumbrance.AlreadyPostedAgainstPo) })
+    {
+        b.Property<Money>(money).HasConversion(Conversions.Money).HasPrecision(18, 2);
+    }
+
+    b.Property(x => x.Status).HasConversion<string>().HasMaxLength(10);
+    b.Property(x => x.ChangeStamp);
+    b.Ignore(x => x.Remaining);
+    b.Property<byte[]>("RowVersion").IsRowVersion();
+
+    b.OwnsMany(x => x.Liquidations, o =>
+    {
+        o.ToTable("EncumbranceLiquidations", "ledger");
+        o.WithOwner().HasForeignKey("EncumbranceId");
+        o.Property<int>("Id").ValueGeneratedOnAdd();
+        o.HasKey("Id");
+        o.Property(l => l.Amount).HasConversion(Conversions.Money).HasPrecision(18, 2);
+        o.Property(l => l.SourceRef).HasMaxLength(100);
+    });
+    b.Navigation(x => x.Liquidations).HasField("_liquidations").UsePropertyAccessMode(PropertyAccessMode.Field);
+
+    b.OwnsMany(x => x.Claims, o => Claim(o, "EncumbranceClaims"));
+    b.Navigation(x => x.Claims).HasField("_claims").UsePropertyAccessMode(PropertyAccessMode.Field);
+    b.OwnsMany(x => x.BillingClaims, o => Claim(o, "PoBillingClaims"));
+    b.Navigation(x => x.BillingClaims).HasField("_billingClaims").UsePropertyAccessMode(PropertyAccessMode.Field);
+}
+
+/// <summary>Claims ликвидации и billing claims устроены одинаково: id владельца-инвойса, версия содержания, сумма, статус.</summary>
+private static void Claim<T>(OwnedNavigationBuilder<Encumbrance, T> o, string table) where T : class
+{
+    o.ToTable(table, "ledger");
+    o.WithOwner().HasForeignKey("EncumbranceId");
+    o.Property<Guid>("Id").ValueGeneratedNever();
+    o.HasKey("Id");
+    o.HasIndex("InvoiceId");
+    o.Property<int>("ContentVersion");
+    o.Property<Money>("Amount").HasConversion(Conversions.Money).HasPrecision(18, 2);
+    o.Property<ClaimStatus>("Status").HasConversion<string>().HasMaxLength(10);
 }
 ```
 
@@ -1100,23 +1240,24 @@ public void Configure(EntityTypeBuilder<VendorInvoice> b)
 {
     b.ToTable("VendorInvoices", "ap");
     b.HasKey(x => x.Id);
+    b.Property(x => x.Id).ValueGeneratedNever();
     b.Property(x => x.Number).HasMaxLength(50);
-    b.Property(x => x.NormalizedNumber).HasMaxLength(50);
-    b.HasIndex(x => new { x.VendorId, x.NormalizedNumber }).IsUnique().HasDatabaseName("UX_VendorInvoices_Vendor_Number");
-    b.OwnsOne(x => x.Dates, o =>
-    {
-        o.Property(d => d.Invoice).HasColumnName("InvoiceDate");
-        o.Property(d => d.Service).HasColumnName("ServiceDate");
-        o.Property(d => d.Posting).HasColumnName("PostingDate");
-        o.Property(d => d.Due).HasColumnName("DueDate");
-    });
+    // Домен вычисляет NormalizedInvoiceNumber на лету; для уникального индекса хранится вычисляемая колонка.
+    b.Ignore(x => x.NormalizedInvoiceNumber);
+    b.Property<string>("NormalizedNumber").HasMaxLength(50).HasComputedColumnSql("UPPER(TRIM([Number]))", stored: true);
+    b.HasIndex("VendorId", "NormalizedNumber").IsUnique().HasDatabaseName("UX_VendorInvoices_Vendor_Number");
     b.Property(x => x.Total).HasConversion(Conversions.Money).HasPrecision(18, 2);
-    b.Property(x => x.PoNumber).HasMaxLength(50);
+    b.Property(x => x.PoRef).HasMaxLength(50);
     b.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
     b.Property(x => x.CreatedBy).HasConversion(Conversions.User);
+    b.Property(x => x.RuleFingerprint).HasMaxLength(64);
+    b.Property(x => x.ChangeStamp);
     b.Property<byte[]>("RowVersion").IsRowVersion();
-    b.Ignore(x => x.Reference).Ignore(x => x.IsPoBacked).Ignore(x => x.DistributedTotal)
-     .Ignore(x => x.ActiveApprovals).Ignore(x => x.ActiveOverrides);
+    b.Ignore(x => x.Reference).Ignore(x => x.IsPoBacked).Ignore(x => x.DistributedTotal);
+    b.PrimitiveCollection(x => x.ReservationRefs);
+    b.PrimitiveCollection(x => x.EncumbranceClaimRefs);
+    b.PrimitiveCollection(x => x.PoBillingClaimRefs);
+    b.Property<IReadOnlyList<ApprovalRequirement>>("_requirements").HasColumnName("ApprovalRoute").AsJson();
 
     b.OwnsMany(x => x.Distributions, o =>
     {
@@ -1136,9 +1277,10 @@ public void Configure(EntityTypeBuilder<VendorInvoice> b)
         o.Property<int>("Id").ValueGeneratedOnAdd();
         o.HasKey("Id");
         o.Property(a => a.Role).HasConversion<string>().HasMaxLength(30);
-        o.Property(a => a.Decision).HasConversion<string>().HasMaxLength(10);
+        o.Property(a => a.Department).HasConversion(Conversions.Department).HasMaxLength(4);
         o.Property(a => a.UserId).HasConversion(Conversions.User);
-        o.Property(a => a.Department).HasMaxLength(4);
+        o.Property(a => a.Decision).HasConversion<string>().HasMaxLength(10);
+        o.Property(a => a.RuleFingerprint).HasMaxLength(64);
         o.Property(a => a.Reason).HasMaxLength(1000);
     });
     b.Navigation(x => x.Approvals).HasField("_approvals").UsePropertyAccessMode(PropertyAccessMode.Field);
@@ -1149,15 +1291,28 @@ public void Configure(EntityTypeBuilder<VendorInvoice> b)
         o.WithOwner().HasForeignKey("InvoiceId");
         o.Property<int>("Id").ValueGeneratedOnAdd();
         o.HasKey("Id");
-        o.Property(v => v.RuleId).HasMaxLength(50);
+        // Позиционная запись InvoiceOverride: EF связывает конструктор только со скалярами, поэтому Target — JSON-колонка.
+        o.Property(v => v.Target).AsJson();
+        o.Property(v => v.Role).HasConversion<string>().HasMaxLength(30);
         o.Property(v => v.UserId).HasConversion(Conversions.User);
         o.Property(v => v.Reason).HasMaxLength(1000);
     });
     b.Navigation(x => x.Overrides).HasField("_overrides").UsePropertyAccessMode(PropertyAccessMode.Field);
+
+    b.OwnsMany(x => x.Withdrawals, o =>
+    {
+        o.ToTable("InvoiceWithdrawals", "ap");
+        o.WithOwner().HasForeignKey("InvoiceId");
+        o.Property<int>("Id").ValueGeneratedOnAdd();
+        o.HasKey("Id");
+        o.Property(w => w.UserId).HasConversion(Conversions.User);
+        o.Property(w => w.Reason).HasMaxLength(1000);
+    });
+    b.Navigation(x => x.Withdrawals).HasField("_withdrawals").UsePropertyAccessMode(PropertyAccessMode.Field);
 }
 ```
 
-`ReplaceContent` очищает и заново заполняет `_distributions`: EF удалит старые owned-строки и вставит новые — это ожидаемо (содержание Draft изменилось, ContentVersion вырос).
+`RemoveDistribution` перенумеровывает строки через `with`. EF видит в коллекции новые экземпляры, поэтому удаляет старые owned-строки и вставляет новые. Так и должно быть: содержание Draft изменилось, `ContentVersion` вырос. `UPPER(TRIM(...))` в SQL отрезает только пробелы, а `string.Trim()` — любые пробельные символы. Первичная проверка дубликата выполняется в домене и сборщике (`ExistsDuplicateAsync`), индекс — последняя защита от гонки.
 
 - [ ] **Step 5: Master**
 
@@ -1213,7 +1368,13 @@ public sealed class MasterDbContext(DbContextOptions<MasterDbContext> options) :
 dotnet ef migrations add Initial --project src/GovErp.Infrastructure --startup-project src/GovErp.Infrastructure --context GovErpDbContext --output-dir Persistence/Migrations
 dotnet ef migrations add Initial --project src/GovErp.Infrastructure --startup-project src/GovErp.Infrastructure --context MasterDbContext --output-dir Master/Migrations
 ```
-Проверить сгенерированную миграцию `GovErpDbContext`: пять `EnsureSchema` (`coa`, `ledger`, `ap`, `validation`, `audit`); `rowversion` на четырёх таблицах; все уникальные индексы из блока Interfaces; FK только внутри схем (owned-таблицы → свой корень).
+Проверить сгенерированную миграцию `GovErpDbContext`:
+- пять `EnsureSchema`: `coa`, `ledger`, `ap`, `validation`, `audit`;
+- `rowversion` на трёх таблицах: `BudgetLines`, `Encumbrances`, `VendorInvoices`;
+- `ChangeStamp` на тех же трёх;
+- все уникальные индексы из блока Interfaces, у `RuleDefinitions` — без фильтра;
+- у ключей резервов и claims нет `defaultValueSql`;
+- FK только внутри схем: owned-таблицы ссылаются на свой корень.
 
 - [ ] **Step 7:** `dotnet build && dotnet test tests/GovErp.Application.Web.Tests --filter JsonRoundTrip` — 1 passed.
 - [ ] **Step 8: Commit**
@@ -1247,30 +1408,43 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 - [ ] **Step 1: Репозитории**
 
-По одному `Ef*Repository` на порт планов 1–2 (14: Fund, Grant, AccountCombination, ReferenceData, OpeningBalance, BudgetLine, Encumbrance, Journal, FiscalPeriod, Vendor, PurchaseOrder, VendorInvoice, RuleDefinition, EvaluationRecord). Правила: owned-коллекции загружаются автоматически (EF включает owned-сущности); `Add*` — `db.Set<T>().AddAsync`; ни один репозиторий не вызывает `SaveChanges`. Нетривиальные запросы:
+По одному `Ef*Repository` на порт из `src/GovErp.Domain.*/Repositories`, всего 14: Fund, Grant, AccountCombination, ReferenceData, OpeningBalance, BudgetLine, Encumbrance, Journal, FiscalPeriod, Vendor, PurchaseOrder, VendorInvoice, RuleDefinition, EvaluationRecord. Правила:
+- owned-коллекции EF загружает автоматически вместе с корнем;
+- `Add*` вызывает `db.Set<T>().AddAsync`;
+- ни один репозиторий не вызывает `SaveChanges`.
+
+Резервы и claims находятся по id, который хранит инвойс (`ReservationRefs`, `EncumbranceClaimRefs`, `PoBillingClaimRefs`, GE-14). Поиска «все резервы инвойса» нет. Нетривиальные запросы:
 ```csharp
-// EfBudgetLineRepository
-public async Task<IReadOnlyList<BudgetLine>> ListHeldForInvoiceAsync(Guid invoiceId, CancellationToken ct = default) =>
-    await db.BudgetLines.Where(l => l.Reservations.Any(r => r.InvoiceId == invoiceId && r.Status == ReservationStatus.Held))
-        .OrderBy(l => l.Id).ToListAsync(ct);   // стабильный порядок блокировок
+// EfBudgetLineRepository — владелец резерва; id резерва — PK ledger.BudgetReservations
+public Task<BudgetLine?> FindByReservationAsync(Guid reservationId, CancellationToken ct = default) =>
+    db.BudgetLines.SingleOrDefaultAsync(l => l.Reservations.Any(r => r.Id == reservationId), ct);
 
-// EfEncumbranceRepository
-public async Task<IReadOnlyList<Encumbrance>> ListClaimedByInvoiceAsync(Guid invoiceId, CancellationToken ct = default) =>
-    await db.Encumbrances.Where(e => e.Claims.Any(c => c.InvoiceId == invoiceId && c.Status == ClaimStatus.Held))
-        .OrderBy(e => e.PoLineRef).ToListAsync(ct);
+// EfEncumbranceRepository — владелец claim ликвидации или billing claim
+public Task<Encumbrance?> FindByClaimAsync(Guid claimId, CancellationToken ct = default) =>
+    db.Encumbrances.SingleOrDefaultAsync(e => e.Claims.Any(c => c.Id == claimId) || e.BillingClaims.Any(c => c.Id == claimId), ct);
 
-// EfVendorInvoiceRepository — предварительная проверка; гонку закрывает уникальный индекс
-public Task<bool> ExistsDuplicateAsync(Guid vendorId, string normalizedNumber, Guid excludingInvoiceId, CancellationToken ct = default) =>
-    db.VendorInvoices.AnyAsync(i => i.VendorId == vendorId && i.NormalizedNumber == normalizedNumber && i.Id != excludingInvoiceId, ct);
+// EfVendorInvoiceRepository — предварительная проверка; гонку закрывает уникальный индекс по вычисляемой колонке
+public Task<bool> ExistsDuplicateAsync(Guid vendorId, string normalizedNumber, Guid? excludingInvoiceId, CancellationToken ct = default) =>
+    db.VendorInvoices.AnyAsync(i => i.VendorId == vendorId && EF.Property<string>(i, "NormalizedNumber") == normalizedNumber
+        && (excludingInvoiceId == null || i.Id != excludingInvoiceId), ct);
 
 // EfJournalRepository
-public Task<bool> ExistsAsync(string sourceRef, PostingKind kind, CancellationToken ct = default) =>
-    db.JournalEntries.AnyAsync(j => j.SourceRef == sourceRef && j.Kind == kind, ct);
+public async Task<IReadOnlyList<JournalEntry>> ListBySourceAsync(string sourceRef, CancellationToken ct = default) =>
+    await db.JournalEntries.Where(j => j.SourceRef == sourceRef).OrderBy(j => j.PostedAt).ToListAsync(ct);
+
+// EfOpeningBalanceRepository
+public async Task<IReadOnlyList<OpeningBalance>> ListAsync(FiscalYear fiscalYear, CancellationToken ct = default) =>
+    await db.OpeningBalances.Where(o => o.FiscalYear == fiscalYear).OrderBy(o => o.AsOfDate).ToListAsync(ct);
 
 // EfEvaluationRecordRepository
 public async Task<IReadOnlyList<EvaluationRecord>> ListByTransactionAsync(string transactionRef, CancellationToken ct = default) =>
     await db.EvaluationRecords.Where(e => e.TransactionRef == transactionRef).OrderBy(e => e.EvaluatedAt).ToListAsync(ct);
+
+// EfRuleDefinitionRepository — все версии и слои, включая выключенные: разрешение делает домен
+public async Task<IReadOnlyList<RuleDefinition>> ListAsync(CancellationToken ct = default) =>
+    await db.RuleDefinitions.OrderBy(r => r.RuleId).ThenBy(r => r.Layer).ThenBy(r => r.Version).ToListAsync(ct);
 ```
+Команда, меняющая несколько строк бюджета или encumbrance, загружает их в порядке id (`OrderBy` в сценарии задачи 5). Одинаковый порядок блокировок снижает риск deadlock; если deadlock всё же случится, runner один раз повторит команду.
 
 - [ ] **Step 2: Receipts, concurrency guard, append-only**
 
@@ -1327,6 +1501,7 @@ using System.Text.Json;
 using GovErp.Application.Web.Commands;
 using GovErp.Application.Web.Common;
 using GovErp.Application.Web.Tenancy;
+using GovErp.Domain.ChartOfAccounts.Exceptions;
 using GovErp.Domain.Ledger.Exceptions;
 using GovErp.Domain.Payables.Exceptions;
 using GovErp.Domain.Validation.Exceptions;
@@ -1399,7 +1574,7 @@ public sealed class EfTenantOperationRunner(IServiceScopeFactory scopes) : ITena
             }
             catch (AuthorizationException ex) { return CommandResult<T>.Forbidden(ex.Message); }
             catch (NotFoundException ex) { return CommandResult<T>.NotFound(ex.Message); }
-            catch (Exception ex) when (ex is PayablesException or LedgerException or ValidationException or DuplicateKeyException)
+            catch (Exception ex) when (ex is PayablesException or LedgerException or ValidationException or ChartOfAccountsException)
             {
                 return CommandResult<T>.Refused(default, ex.Message);
             }
@@ -1527,7 +1702,6 @@ using GovErp.Domain.Validation.DomainServices;
 using GovErp.Domain.Validation.ValueObjects;
 using GovErp.Infrastructure.Explanation;
 using GovErp.Infrastructure.Seed;
-using Microsoft.Extensions.Options;
 
 namespace GovErp.Application.Web.Tests;
 
@@ -1536,14 +1710,8 @@ public class TemplateExplanationTests
     private static async Task<Domain.Validation.Entities.EvaluationRecord> ExerciseRecord()
     {
         var d = SpringfieldData.Create();
-        var inv = d.NonPoExerciseInvoice();
-        var subject = await new Validation.ValidationSubjectAssembler(
-            new InMemoryFundRepository(d.Funds), new InMemoryGrantRepository(d.Grants), new InMemoryAccountCombinationRepository(d.Combinations),
-            new InMemoryBudgetLineRepository(d.BudgetLines), new InMemoryEncumbranceRepository(d.Encumbrances),
-            new InMemoryFiscalPeriodRepository(d.Periods), new InMemoryVendorRepository(d.Vendors),
-            new InMemoryPurchaseOrderRepository(d.PurchaseOrders), new InMemoryVendorInvoiceRepository([]),
-            new InMemoryEvaluationRecordRepository([]), Options.Create(new Validation.PostingOptions())).BuildAsync(inv);
-        return new ValidationPipeline(RuleCatalog.Default).Evaluate(subject, RuleResolution.Resolve(d.Rules, inv.Dates.Invoice),
+        var subject = await ValidationSubjectAssemblerTests.Assembler(d).BuildAsync(d.NonPoExerciseInvoice(), SpringfieldData.Jun15);
+        return new ValidationPipeline(RuleCatalog.Default).Evaluate(subject, d.Rules,
             EvaluationTrigger.Manual, SpringfieldData.ClerkId, new DateTimeOffset(2026, 6, 15, 10, 0, 0, TimeSpan.Zero));
     }
 
@@ -1569,17 +1737,22 @@ public class TemplateExplanationTests
 
 - [ ] **Step 6: Шаблонное объяснение — реализация**
 
-`Explanation/TemplateExplanationGenerator.cs` — детерминированный текст только из `EvaluationRecord` (`Provider = "Template"`, `Model = null`, `PromptVersion = "template-1"`). Структура (строки через `\n`, `StringBuilder`):
+`Explanation/TemplateExplanationGenerator.cs` строит детерминированный текст только из `EvaluationRecord` (`Provider = "Template"`, `Model = null`, `PromptVersion = "template-1"`). Данные транзакции берутся из `record.InputSnapshot`: `Transaction`, `Distributions[].Fund`, `DetailedApprovals`. Структура (строки через `\n`, `StringBuilder`):
 ```text
-Invoice {TransactionRef} (content v{ContentVersion}) for {Total} from {Vendor.Name} was evaluated on {EvaluatedAt:yyyy-MM-dd} ({Trigger}). Result: {HARD STOP|SOFT STOP|WARNING|ALLOWED}.
-Funds charged: line {n} — {amount} to {account} ({fund name}, {hard|soft} budget control){, grant {code}}.
-Checks performed: steps 1–{last executed step}; {k} rules applied.
-Findings: {RuleId} [{Severity}] — {Message} Required action: {Resolution}.   (по каждому outcome, кроме Allowed; для Allowed-информационных — одна строка без «Required action»)
-Approvals required: {Role (dept)} …; recorded in this cycle: {…|none}.
-Accounting entries to be created: {Dr account amount / Cr account amount …} | none until the stop is resolved.
-Rule set: {EngineVersion}, fingerprint {first 12 chars}.
+Invoice {Transaction.TransactionRef} (content v{Transaction.ContentVersion}) for {Transaction.Total} from {Transaction.Vendor.Name} was evaluated on {EvaluatedAt:yyyy-MM-dd} ({Trigger}). Result: {HARD STOP|SOFT STOP|WARNING|ALLOWED}.
+Funds charged: line {n} — {amount} to {account} ({Fund.Name}, {hard|soft} budget control){, grant {Grant.Code}}.
+Checks performed: steps {список Steps со статусом Executed}; skipped after a hard stop: {Skipped|none}; {k} rules applied.
+Findings: {RuleId} [{Severity}] — {Message} Required action: {Resolution}.   (по каждому outcome, кроме Allowed; overridden — с пометкой «overridden by {Role}»)
+Approvals required: {ApprovalRoute: Role (dept), satisfied|pending} …
+Accounting entries to be created: {PostingPreview: Dr account amount / Cr account amount …} | none until the stop is resolved.
+Rule set: {RuleSetVersions.Engine}, fingerprint {first 12 chars}.
 ```
-Аудитории: `Auditor` — плюс строки `inputs: k=v; …` и `computed: k=v; …` под каждым finding'ом и полный fingerprint; `FinanceUser` / `DepartmentManager` — без inputs, с сообщениями и resolution; `Public` — без имён и идентификаторов пользователей, без inputs, без fingerprint. «Последний выполненный шаг» = `max(Outcomes.Step)`, если среди outcome'ов есть HardStop, иначе 6.
+Аудитории:
+- `Auditor` — дополнительно строки `inputs: k=v; …` и `computed: k=v; …` под каждым finding'ом и полный fingerprint;
+- `FinanceUser` / `DepartmentManager` — без inputs, с сообщениями и resolution;
+- `Public` — без имён и идентификаторов пользователей, без inputs и без fingerprint.
+
+Шаги берутся из `record.Steps`, а не выводятся из outcome'ов: конвейер сам отмечает шаги, пропущенные после Hard Stop.
 
 - [ ] **Step 7: Регистрация**
 
@@ -1645,46 +1818,65 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Create: `Invoices/Contracts/{InvoiceVm,DistributionVm,ApprovalVm,OverrideVm,InvoiceListItemVm}.cs`, `Invoices/Commands/{DistributionCommand,CreateInvoiceCommand,UpdateInvoiceCommand,InvoiceActionCommand,ReasonedActionCommand,OverrideCommand,PaymentHoldCommand,InvoicePreset}.cs`, `Invoices/Mapping/InvoiceMapping.cs`, `Invoices/InvoiceWorkspace.cs`, `Invoices/Presets.cs`, `Invoices/IInvoiceAppService.cs`, `Invoices/InvoiceAppService.cs`
 - Create: `Approvals/Contracts/ApprovalQueueItemVm.cs`, `Approvals/IApprovalAppService.cs`, `Approvals/ApprovalAppService.cs`
 - Create: `Posting/IPostingAppService.cs`, `Posting/PostingAppService.cs`
-- Create: `Budget/Contracts/BudgetLineVm.cs`, `Budget/Commands/AmendBudgetCommand.cs`, `Budget/IBudgetAppService.cs`, `Budget/BudgetAppService.cs`
+- Create: `Budget/Contracts/BudgetLineVm.cs`, `Budget/Commands/AmendBudgetCommand.cs`, `Budget/IBudgetAppService.cs`, `Budget/BudgetAppService.cs`, `Budget/BudgetMapping.cs`
 - Create: `Reference/Contracts/{SegmentValueVm,SegmentsVm,CombinationVm,RuleVm,VendorVm,PurchaseOrderVm}.cs`, `Reference/IReferenceAppService.cs`, `Reference/ReferenceAppService.cs`
 - Create: `Explanation/ExplanationVm.cs`, `Explanation/IExplanationAppService.cs`, `Explanation/ExplanationAppService.cs`, `Audit/AuditEventVm.cs`, `Extensions/ServiceCollectionExtensions.cs`
 - Modify: `tests/GovErp.Architecture.Tests/DomainPurityTests.cs` — тест `CA-10` для UI-facing сервисов
-- Test: поведение сценариев — интеграционно в задачах 8–9 (сценариям нужен настоящий SQL Server с `rowversion`); здесь — архитектурный тест и сборка
+- Test: поведение сценариев проверяется интеграционно в задачах 8–9: сценариям нужен настоящий SQL Server с `rowversion`. Здесь — архитектурный тест и сборка.
+
+**Как сценарии используют домен** (фактический API ветки `codex/foundation`):
+
+| Шаг | Домен |
+|---|---|
+| оценка | `ValidationSubjectAssembler.BuildAsync` → `ValidationPipeline.Evaluate(subject, definitions, trigger, actor, at)`: разрешение по scope делает сам конвейер |
+| маршрут для Payables | `ApprovalRouteResolver.Build(subject, [], RuleResolution.ResolveForSubject(definitions, subject))` → `Payables.ApprovalRequirement(role, department)` — **базовый маршрут**, см. ниже |
+| удержания при Submit | `BudgetAllocation.Allocate(subject)`: `RequiredNewBudget` суммируется по бюджетному ключу и уходит в `BudgetLine.Reserve(invoiceId, cv, amount, reference)`, `LiquidationAmount` суммируется по строке PO и уходит в `Encumbrance.Claim`, полная PO-сумма — в `Encumbrance.ClaimBilling(…, tolerance)`, где tolerance — параметр `tolerance_pct` правила `PO_LIQUIDATION` в scope строки |
+| состояние инвойса | `Submit(evaluationRef, fingerprint, route, reservations, claims, billingClaims)`; `Reevaluate(evaluationRef, cv, fingerprint, route)`, который сам открывает новый цикл при смене fingerprint или маршрута; `RecordApproval`; `MarkApproved`; `Override(target, role, user, reason, at)`; `Reject(...)` / `Withdraw(...)` → `InvoiceRelease`; `ReturnToDraft`; `Post(evaluationRef, cv, cycle, fingerprint, at)` |
+| освобождение и погашение | по id из `InvoiceRelease` или инвойса: `FindByReservationAsync` → `Release` / `Commit(id, invoiceId, cv)`; `FindByClaimAsync` → `ReleaseClaim` / `ConsumeClaim` + `BudgetLine.RecordLiquidation`; `ReleaseBillingClaim` / `ConsumeBillingClaim` |
+
+**Базовый маршрут.** `ApprovalRouteResolver.Build` добавляет в маршрут требования override для открытых Soft Stop («Override required for …»). Если передать такой маршрут в `VendorInvoice.Reevaluate`, получится петля: override снимает Soft Stop, маршрут меняется, `Reevaluate` открывает новый цикл, override этого цикла уже не касается, Soft Stop возвращается. Поэтому инвойс хранит маршрут без outcome'ов: `Build(subject, [], rules)`. Он зависит только от строк, суммы и правил. Требование снять Soft Stop выполняется через `Capabilities.CanApprove`: согласовать нельзя, пока Soft Stop не снят. `PostingEligibility` сам сверяет базовый маршрут (`Build(subject, [], …)`). См. `docs/DEBT.md`, D-6.
+
+**Оценка активного инвойса всегда двигает его «последнюю оценку».** Для Submitted и Approved `InvoiceWorkspace.EvaluateAsync` вызывает `Reevaluate`. Если fingerprint или маршрут изменились, открывается новый цикл, и тогда оценка повторяется уже в новом цикле: так последняя запись показывает актуальные согласования. Override, согласование и Post ссылаются только на `LastEvaluationRef`.
 
 **Interfaces (Produces):**
 ```csharp
 // Validation/Contracts/EvaluationVm.cs
 public sealed record EvaluationVm(Guid Id, string TransactionRef, int ContentVersion, Guid ApprovalCycleId, string Trigger, DateTimeOffset EvaluatedAt,
     Guid EvaluatedBy, string Overall, CapabilitiesVm Capabilities, string EngineVersion, string RuleSetFingerprint,
-    IReadOnlyList<AppliedRuleVm> AppliedRules, IReadOnlyList<OutcomeVm> Outcomes, IReadOnlyList<RouteStepVm> ApprovalRoute,
-    IReadOnlyList<PreviewLineVm> PostingPreview, PostingCheckVm? PostingCheck);
-public sealed record OutcomeVm(string RuleId, int RuleVersion, int Step, string StepName, string Layer, int? Line, string? BudgetKey,
+    IReadOnlyList<AppliedRuleVm> AppliedRules, IReadOnlyList<StepVm> Steps, IReadOnlyList<OutcomeVm> Outcomes,
+    IReadOnlyList<RouteStepVm> ApprovalRoute, IReadOnlyList<PreviewLineVm> PostingPreview, PostingCheckVm? PostingCheck,
+    bool ReadyForPaymentHandoff);
+public sealed record OutcomeVm(Guid OutcomeRef, string RuleId, int RuleVersion, int Step, string StepName, string Layer, int? Line,
     string Severity, IReadOnlyDictionary<string, string> Inputs, IReadOnlyDictionary<string, string> Computed, string Message,
-    string Resolution, IReadOnlyList<string> OverridableBy, Guid? OverriddenBy, string? OverrideReason);
-public sealed record AppliedRuleVm(string RuleId, string Layer, int Version);
+    string Resolution, IReadOnlyList<string> OverridableBy, OverrideInfoVm? OverriddenBy);
+public sealed record OverrideInfoVm(Guid UserId, string? Role, string Reason, Guid EvaluationId);
+public sealed record AppliedRuleVm(string RuleId, string Layer, int Version, string? ScopeFund, string? ScopeGrant);
+public sealed record StepVm(int Step, string Name, bool Executed);
 public sealed record RouteStepVm(string Role, string? Department, string Reason, bool IsSatisfied);
 public sealed record PreviewLineVm(string Account, string Family, decimal Debit, decimal Credit, string Description);
-public sealed record CapabilitiesVm(bool CanSave, bool CanSubmit, bool CanApprove, bool CanPost);
+public sealed record CapabilitiesVm(bool CanSave, bool CanSubmit, bool CanApprove, bool CanPost, bool CanPay);
 public sealed record PostingCheckVm(bool Passed, IReadOnlyList<string> Failures);
 
 // Invoices/Contracts
 /// <summary>RowVersion заполнен только в ответах чтения (GetAsync); после команды UI перечитывает инвойс.</summary>
 public sealed record InvoiceVm(Guid Id, string Number, string Reference, Guid VendorId, string VendorName,
-    DateOnly InvoiceDate, DateOnly ServiceDate, DateOnly PostingDate, DateOnly DueDate, decimal Total, string? PoNumber,
-    string Status, int ContentVersion, Guid ApprovalCycleId, string? RowVersion, Guid CreatedBy, bool PaymentHold,
+    DateOnly InvoiceDate, DateOnly ServiceDate, DateOnly PostingDate, DateOnly DueDate, decimal Total, string? PoRef,
+    string Status, int ContentVersion, Guid? ApprovalCycleId, Guid? LastEvaluationRef, string? RowVersion, Guid CreatedBy, bool PaymentHold,
     bool ReadyForPaymentHandoff, IReadOnlyList<DistributionVm> Distributions, IReadOnlyList<ApprovalVm> Approvals,
     IReadOnlyList<OverrideVm> Overrides, EvaluationVm? LastEvaluation);
 public sealed record DistributionVm(int LineNo, string Account, decimal Amount, int? PoLineNo);
-public sealed record ApprovalVm(Guid CycleId, bool IsActiveCycle, string Role, string? Department, Guid UserId, string Decision, string? Reason, DateTimeOffset At);
-public sealed record OverrideVm(Guid CycleId, bool IsActive, Guid EvaluationId, string RuleId, int RuleVersion, int? Line, Guid UserId, string Reason, DateTimeOffset At);
+public sealed record ApprovalVm(Guid CycleId, bool IsActiveCycle, int ContentVersion, string Role, string? Department, Guid UserId,
+    string Decision, string? Reason, DateTimeOffset At);
+public sealed record OverrideVm(Guid CycleId, bool IsActive, Guid EvaluationId, Guid OutcomeRef, string RuleId, int RuleVersion, int? Line,
+    string Role, Guid UserId, string Reason, DateTimeOffset At);
 public sealed record InvoiceListItemVm(Guid Id, string Reference, string VendorName, decimal Total, string Status, string? LastOverall, DateOnly PostingDate);
 
 // Invoices/Commands — все мутирующие команды несут CommandEnvelope (GE-16)
 public sealed record DistributionCommand(string Account, decimal Amount, int? PoLineNo);
 public sealed record CreateInvoiceCommand(CommandEnvelope Envelope, string Number, Guid VendorId, DateOnly InvoiceDate, DateOnly ServiceDate,
-    DateOnly PostingDate, DateOnly DueDate, decimal Total, string? PoNumber, IReadOnlyList<DistributionCommand> Distributions);
-public sealed record UpdateInvoiceCommand(CommandEnvelope Envelope, Guid InvoiceId, Guid VendorId, DateOnly InvoiceDate, DateOnly ServiceDate,
-    DateOnly PostingDate, DateOnly DueDate, decimal Total, string? PoNumber, IReadOnlyList<DistributionCommand> Distributions);
+    DateOnly PostingDate, DateOnly DueDate, decimal Total, string? PoRef, IReadOnlyList<DistributionCommand> Distributions);
+public sealed record UpdateInvoiceCommand(CommandEnvelope Envelope, Guid InvoiceId, string Number, Guid VendorId, DateOnly InvoiceDate,
+    DateOnly ServiceDate, DateOnly PostingDate, DateOnly DueDate, decimal Total, string? PoRef, IReadOnlyList<DistributionCommand> Distributions);
 public sealed record InvoiceActionCommand(CommandEnvelope Envelope, Guid InvoiceId);
 public sealed record ReasonedActionCommand(CommandEnvelope Envelope, Guid InvoiceId, string Reason);
 public sealed record OverrideCommand(CommandEnvelope Envelope, Guid InvoiceId, Guid EvaluationId, string RuleId, int? DistributionLine, string Reason);
@@ -1701,10 +1893,13 @@ public interface IInvoiceAppService
     Task<CommandResult<InvoiceVm>> ValidateAsync(InvoiceActionCommand cmd, ActorContext actor, CancellationToken ct = default);
     Task<CommandResult<InvoiceVm>> SubmitAsync(InvoiceActionCommand cmd, ActorContext actor, CancellationToken ct = default);
     Task<CommandResult<InvoiceVm>> WithdrawAsync(ReasonedActionCommand cmd, ActorContext actor, CancellationToken ct = default);
+    Task<CommandResult<InvoiceVm>> ReturnToDraftAsync(InvoiceActionCommand cmd, ActorContext actor, CancellationToken ct = default);
     Task<CommandResult<InvoiceVm>> SetPaymentHoldAsync(PaymentHoldCommand cmd, ActorContext actor, CancellationToken ct = default);
 }
 
-public sealed record ApprovalQueueItemVm(Guid InvoiceId, string Reference, string VendorName, decimal Total, string Overall, string Role, string? Department, string Reason);
+/// <summary>Kind = "Approve" (шаг базового маршрута) или "Override" (открытый Soft Stop, который актор вправе снять).</summary>
+public sealed record ApprovalQueueItemVm(Guid InvoiceId, string Reference, string VendorName, decimal Total, string Overall, string Kind,
+    string Role, string? Department, string Reason, Guid EvaluationId, string? RuleId, int? Line);
 public interface IApprovalAppService
 {
     Task<IReadOnlyList<ApprovalQueueItemVm>> GetQueueAsync(ActorContext actor, CancellationToken ct = default);
@@ -1732,11 +1927,11 @@ public interface IBudgetAppService
 public sealed record SegmentValueVm(string Code, string Name, bool IsActive, IReadOnlyDictionary<string, string> Attributes);
 public sealed record SegmentsVm(IReadOnlyList<SegmentValueVm> Funds, IReadOnlyList<SegmentValueVm> Departments, IReadOnlyList<SegmentValueVm> Objects, IReadOnlyList<SegmentValueVm> Grants);
 public sealed record CombinationVm(string Code, string Status, DateOnly EffectiveFrom, DateOnly? EffectiveTo, string Source);
-public sealed record RuleVm(string RuleId, int Version, int Step, string Layer, bool IsLocallyAdjustable, string? Severity,
+public sealed record RuleVm(string RuleId, int Version, int Step, string Layer, string? ScopeFund, string? ScopeGrant, string? Severity,
     IReadOnlyDictionary<string, string> Parameters, IReadOnlyList<string> OverridableBy, DateOnly EffectiveFrom, DateOnly? EffectiveTo, bool IsEnabled, string Message);
 public sealed record RuleSetVm(IReadOnlyList<RuleVm> Rules, string CurrentFingerprint, string EngineVersion);
 public sealed record VendorVm(Guid Id, string Code, string Name, string Status, bool SamRegistered);
-public sealed record PurchaseOrderLineVm(int LineNo, string Account, decimal AuthorizedAmount, decimal PostedAmount);
+public sealed record PurchaseOrderLineVm(int LineNo, string Account, decimal Amount, decimal AuthorizedPoAmount, decimal AlreadyPostedAgainstPo, decimal RemainingEncumbrance);
 public sealed record PurchaseOrderVm(string Number, Guid VendorId, string Status, IReadOnlyList<PurchaseOrderLineVm> Lines);
 public interface IReferenceAppService
 {
@@ -1760,12 +1955,39 @@ public interface IExplanationAppService
 
 - [ ] **Step 1: EvaluationMapping и InvoiceMapping**
 
-`EvaluationMapping.ToVm(EvaluationRecord)` — поле в поле: enum → `ToString()`, `Step` → `(int)` и `ToString()`, `Money` → `.Amount`, `AppliedRules` → `AppliedRuleVm`, `OverriddenBy` → `UserId.Value` и `Reason`. `InvoiceMapping.ToVm(VendorInvoice, Vendor, EvaluationRecord? last, string? rowVersion, DateOnly businessDate)` — `ReadyForPaymentHandoff = invoice.IsReadyForPaymentHandoff(vendor.IsActive, businessDate)`; `ApprovalVm.IsActiveCycle = a.CycleId == invoice.ApprovalCycleId`; `OverrideVm.IsActive = invoice.ActiveOverrides.Contains(o)`. `InvoiceMapping.ToListItem(invoice, vendorName, lastOverall)`.
+`EvaluationMapping.ToVm(EvaluationRecord)` переносит поля один к одному:
+- enum → `ToString()`, `Step` → `(int)` и `ToString()`, `Money` → `.Amount`;
+- `TransactionVersion` → `ContentVersion`, `RuleSetVersions.Engine` → `EngineVersion`, `RuleFingerprint` → `RuleSetFingerprint`;
+- `RuleSetVersions.AppliedRules` → `AppliedRuleVm`, `Steps` → `StepVm(Executed = Status == Executed)`;
+- `OverriddenBy` → `OverrideInfoVm(UserId.Value, Role?.ToString(), Reason, EvaluationId)`.
+
+`InvoiceMapping.ToVm(VendorInvoice, Vendor, EvaluationRecord? last, string? rowVersion, DateOnly businessDate)`:
+- `ReadyForPaymentHandoff = invoice.ReadyForPaymentHandoff(vendor.Status == VendorStatus.Active, businessDate)`;
+- `ApprovalVm.IsActiveCycle = a.ApprovalCycleId == invoice.ApprovalCycleId && a.ContentVersion == invoice.ContentVersion`;
+- `OverrideVm.IsActive = invoice.HasCurrentOverride(o.Target)`.
+
+`InvoiceMapping.ToListItem(invoice, vendorName, lastOverall)`.
 
 - [ ] **Step 2: InvoiceWorkspace — общие шаги сценариев в одном scope**
 
 `Invoices/InvoiceWorkspace.cs` (scoped; живёт в scope операции runner'а):
 ```csharp
+using GovErp.Application.Web.Audit;
+using GovErp.Application.Web.Commands;
+using GovErp.Application.Web.Common;
+using GovErp.Application.Web.Validation;
+using GovErp.Domain.Ledger.Exceptions;
+using GovErp.Domain.Ledger.Repositories;
+using GovErp.Domain.Payables.Entities;
+using GovErp.Domain.Payables.Repositories;
+using GovErp.Domain.Validation.DomainServices;
+using GovErp.Domain.Validation.Entities;
+using GovErp.Domain.Validation.Repositories;
+using GovErp.Domain.Validation.ValueObjects;
+using PayablesRequirement = GovErp.Domain.Payables.Entities.ApprovalRequirement;
+
+namespace GovErp.Application.Web.Invoices;
+
 public sealed class InvoiceWorkspace(
     IVendorInvoiceRepository invoices, IVendorRepository vendors, IPurchaseOrderRepository purchaseOrders,
     IBudgetLineRepository budgetLines, IEncumbranceRepository encumbrances, IFiscalPeriodRepository periods,
@@ -1773,6 +1995,8 @@ public sealed class InvoiceWorkspace(
     ValidationSubjectAssembler assembler, IAuditTrail audit, IConcurrencyGuard concurrency, IClock clock)
 {
     private static readonly ValidationPipeline Pipeline = new(RuleCatalog.Default);
+    private readonly Dictionary<Guid, EvaluationRecord> _evaluated = [];
+    private IReadOnlyList<RuleDefinition>? _definitions;
 
     public IVendorInvoiceRepository Invoices => invoices;
     public IVendorRepository Vendors => vendors;
@@ -1789,48 +2013,150 @@ public sealed class InvoiceWorkspace(
     public async Task<VendorInvoice> LoadAsync(Guid id, CancellationToken ct) =>
         await invoices.FindAsync(id, ct) ?? throw new NotFoundException($"Invoice {id} not found.");
 
-    /// <summary>Снимок → правила на InvoiceDate → оценка; запись добавляется в хранилище, инвойс запоминает её id.</summary>
-    public async Task<(EvaluationRecord Record, ValidationSubject Subject, EffectiveRuleSet Rules)> EvaluateAsync(
+    /// <summary>Определения читаются один раз на операцию: вся команда оценивает по одному набору правил.</summary>
+    public async Task<IReadOnlyList<RuleDefinition>> DefinitionsAsync(CancellationToken ct) => _definitions ??= await rules.ListAsync(ct);
+
+    /// <summary>
+    /// Оценка с сохранением записи. Для Submitted/Approved — Reevaluate: инвойс запоминает оценку, а смена fingerprint
+    /// или базового маршрута открывает новый цикл; тогда оценка повторяется, чтобы последняя запись отражала новый цикл.
+    /// </summary>
+    public async Task<(EvaluationRecord Record, bool CycleRestarted)> EvaluateAsync(
         VendorInvoice invoice, EvaluationTrigger trigger, ActorContext actor, CancellationToken ct)
     {
-        var subject = await assembler.BuildAsync(invoice, ct);
-        var ruleSet = RuleResolution.Resolve(await rules.ListAsync(ct), invoice.Dates.Invoice);
-        var record = Pipeline.Evaluate(subject, ruleSet, trigger, actor.UserId, clock.Now);
-        await evaluations.AddAsync(record, ct);
-        invoice.RecordEvaluation(record.Id);
-        return (record, subject, ruleSet);
+        var record = await EvaluateOnceAsync(invoice, trigger, actor, ct);
+        if (invoice.Status is not (InvoiceStatus.Submitted or InvoiceStatus.Approved))
+        {
+            return (record, false);
+        }
+
+        var cycle = invoice.ApprovalCycleId;
+        invoice.Reevaluate(record.Id, record.TransactionVersion, record.RuleFingerprint, await RouteForAsync(record, ct));
+        if (invoice.ApprovalCycleId == cycle)
+        {
+            return (record, false);
+        }
+
+        record = await EvaluateOnceAsync(invoice, trigger, actor, ct);
+        invoice.Reevaluate(record.Id, record.TransactionVersion, record.RuleFingerprint, await RouteForAsync(record, ct));
+        return (record, true);
     }
 
-    /// <summary>Reject / Withdraw: освобождает бюджетные резервы, encumbrance claims и PO billing claims инвойса.</summary>
-    public async Task ReleaseAllAsync(VendorInvoice invoice, CancellationToken ct)
+    /// <summary>Базовый маршрут (без требований override, D-6) — то, что хранит и проверяет VendorInvoice.</summary>
+    public async Task<IReadOnlyList<PayablesRequirement>> RouteForAsync(EvaluationRecord record, CancellationToken ct)
     {
-        foreach (var line in await budgetLines.ListHeldForInvoiceAsync(invoice.Id, ct))
+        var subject = record.InputSnapshot;
+        var effective = RuleResolution.ResolveForSubject(await DefinitionsAsync(ct), subject);
+        return ApprovalRouteResolver.Build(subject, [], effective)
+            .Select(r => new PayablesRequirement(RoleMapping.ToPayables(r.Role), r.Department is null ? null : new DepartmentCode(r.Department)))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Submit: резервы на бюджетных ключах, claims ликвидации и billing claims по строкам PO — из той же аллокации,
+    /// что видел конвейер. Порядок ключей стабильный (меньше deadlock'ов). Проигранная гонка — LedgerException → Refused.
+    /// </summary>
+    public async Task<InvoiceHolds> HoldAsync(VendorInvoice invoice, ValidationSubject subject, CancellationToken ct)
+    {
+        var effective = RuleResolution.ResolveForSubject(await DefinitionsAsync(ct), subject);
+        var allocation = BudgetAllocation.Allocate(subject);
+        var fy = FiscalYear.FromDate(invoice.PostingDate);
+        var cv = invoice.ContentVersion;
+        static Money Sum(IEnumerable<Money> values) => values.Aggregate(Money.Zero, (s, m) => s + m);
+
+        var reservations = new List<Guid>();
+        foreach (var key in allocation.GroupBy(l => l.Distribution.Account).OrderBy(g => g.Key.ToString(), StringComparer.Ordinal))
         {
-            line.ReleaseAllFor(invoice.Id);
+            var amount = Sum(key.Select(l => l.RequiredNewBudget));
+            if (amount.IsZero)
+            {
+                continue;
+            }
+
+            var line = await budgetLines.FindAsync(key.Key, fy, ct) ?? throw new LedgerException($"Budget line {key.Key} {fy} not found.");
+            var result = line.Reserve(invoice.Id, cv, amount, invoice.Reference);
+            if (!result.IsReserved)
+            {
+                throw new LedgerException($"Budget on {key.Key} is no longer available: short by {result.Shortfall}.");
+            }
+
+            reservations.Add(result.ReservationId!.Value);
         }
 
-        foreach (var enc in await encumbrances.ListClaimedByInvoiceAsync(invoice.Id, ct))
+        var claims = new List<Guid>();
+        var billing = new List<Guid>();
+        foreach (var po in allocation.Where(l => l.Distribution.Encumbrance is not null)
+                     .GroupBy(l => l.Distribution.Encumbrance!.PoLineRef).OrderBy(g => g.Key, StringComparer.Ordinal))
         {
-            enc.ReleaseAllFor(invoice.Id);
+            var encumbrance = await encumbrances.FindByPoLineAsync(po.Key, ct) ?? throw new LedgerException($"Encumbrance {po.Key} not found.");
+            var liquidation = Sum(po.Select(l => l.LiquidationAmount));
+            if (!liquidation.IsZero)
+            {
+                claims.Add(encumbrance.Claim(invoice.Id, cv, liquidation));
+            }
+
+            var account = po.First().Distribution.Account;
+            var tolerance = effective.Find("PO_LIQUIDATION", account.Fund.Value, account.Grant?.Value)?.DecimalParameter("tolerance_pct") ?? 0m;
+            billing.Add(encumbrance.ClaimBilling(invoice.Id, cv, Sum(po.Select(l => l.Distribution.Amount)), tolerance));
         }
 
-        if (invoice.PoNumber is not null && await purchaseOrders.FindByNumberAsync(invoice.PoNumber, ct) is { } po)
+        return new InvoiceHolds(reservations, claims, billing);
+    }
+
+    /// <summary>Reject / Withdraw: освобождает ровно то, что инвойс удерживал в своей версии содержания (GE-14).</summary>
+    public async Task ReleaseAsync(InvoiceRelease release, CancellationToken ct)
+    {
+        foreach (var id in release.ReservationRefs)
         {
-            po.ReleaseBillingClaimsFor(invoice.Id);
+            (await budgetLines.FindByReservationAsync(id, ct) ?? throw new LedgerException($"Reservation {id} not found."))
+                .Release(id, release.InvoiceId, release.ContentVersion);
+        }
+
+        foreach (var id in release.EncumbranceClaimRefs)
+        {
+            (await encumbrances.FindByClaimAsync(id, ct) ?? throw new LedgerException($"Claim {id} not found."))
+                .ReleaseClaim(id, release.InvoiceId, release.ContentVersion);
+        }
+
+        foreach (var id in release.PoBillingClaimRefs)
+        {
+            (await encumbrances.FindByClaimAsync(id, ct) ?? throw new LedgerException($"Billing claim {id} not found."))
+                .ReleaseBillingClaim(id, release.InvoiceId, release.ContentVersion);
         }
     }
+
+    /// <summary>
+    /// Оценка этой операции (ещё не сохранена — запрос к БД её не увидит), иначе LastEvaluationRef, иначе для Draft —
+    /// последняя сохранённая проверка.
+    /// </summary>
+    public async Task<EvaluationRecord?> LastEvaluationAsync(VendorInvoice invoice, CancellationToken ct) =>
+        _evaluated.GetValueOrDefault(invoice.Id)
+        ?? (invoice.LastEvaluationRef is { } id
+            ? await evaluations.FindAsync(id, ct)
+            : (await evaluations.ListByTransactionAsync(invoice.Reference, ct)).LastOrDefault());
 
     public async Task<InvoiceVm> ToVmAsync(VendorInvoice invoice, CancellationToken ct, bool withRowVersion = false)
     {
         var vendor = await vendors.FindAsync(invoice.VendorId, ct) ?? throw new NotFoundException($"Vendor {invoice.VendorId} not found.");
-        var last = invoice.LastEvaluationId is { } id ? await evaluations.FindAsync(id, ct) : null;
-        return InvoiceMapping.ToVm(invoice, vendor, last, withRowVersion ? concurrency.VersionOf(invoice) : null, clock.BusinessDate);
+        return InvoiceMapping.ToVm(invoice, vendor, await LastEvaluationAsync(invoice, ct),
+            withRowVersion ? concurrency.VersionOf(invoice) : null, clock.BusinessDate);
     }
 
     public static string ReasonOf(EvaluationRecord record) =>
         string.Join(" ", record.Outcomes.Where(o => o.Severity >= Severity.SoftStop && !o.IsOverridden).Select(o => o.Message));
+
+    private async Task<EvaluationRecord> EvaluateOnceAsync(VendorInvoice invoice, EvaluationTrigger trigger, ActorContext actor, CancellationToken ct)
+    {
+        var subject = await assembler.BuildAsync(invoice, clock.BusinessDate, ct);
+        var record = Pipeline.Evaluate(subject, await DefinitionsAsync(ct), trigger, actor.UserId, clock.Now);
+        await evaluations.AddAsync(record, ct);
+        _evaluated[invoice.Id] = record;
+        return record;
+    }
 }
+
+public sealed record InvoiceHolds(IReadOnlyList<Guid> Reservations, IReadOnlyList<Guid> Claims, IReadOnlyList<Guid> BillingClaims);
 ```
+Сборщик читает строки бюджета и encumbrance через те же репозитории и тот же `DbContext`. Поэтому оценка сразу после `HoldAsync` видит новые резервы как собственные (`OwnHeld`, `OwnLiquidationClaim`).
 
 - [ ] **Step 3: InvoiceAppService**
 
@@ -1845,7 +2171,7 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
             foreach (var inv in (await ws.Invoices.ListAsync(token)).OrderByDescending(i => i.CreatedAt))
             {
                 var vendor = await ws.Vendors.FindAsync(inv.VendorId, token);
-                var last = inv.LastEvaluationId is { } id ? await ws.Evaluations.FindAsync(id, token) : null;
+                var last = await ws.LastEvaluationAsync(inv, token);
                 result.Add(InvoiceMapping.ToListItem(inv, vendor?.Name ?? "?", last?.Overall.ToString()));
             }
 
@@ -1867,29 +2193,29 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
                 return CommandResult<InvoiceVm>.Forbidden("Only AP clerks create invoices.");
             }
 
-            if (DemoDatesProblem(cmd.InvoiceDate, cmd.ServiceDate, cmd.PostingDate) is { } problem)
-            {
-                return CommandResult<InvoiceVm>.Refused(null, problem);
-            }
-
             var ws = sp.GetRequiredService<InvoiceWorkspace>();
             _ = await ws.Vendors.FindAsync(cmd.VendorId, token) ?? throw new NotFoundException($"Vendor {cmd.VendorId} not found.");
-            if (cmd.PoNumber is not null && await ws.PurchaseOrders.FindByNumberAsync(cmd.PoNumber, token) is null)
+            if (cmd.PoRef is not null && await ws.PurchaseOrders.FindByNumberAsync(cmd.PoRef, token) is null)
             {
-                return CommandResult<InvoiceVm>.Refused(null, $"Purchase order {cmd.PoNumber} not found.");
+                return CommandResult<InvoiceVm>.Refused(null, $"Purchase order {cmd.PoRef} not found.");
             }
 
-            if (await ws.Invoices.ExistsDuplicateAsync(cmd.VendorId, VendorInvoice.Normalize(cmd.Number), Guid.Empty, token))
+            // Конструктор и AddDistribution проверяют инварианты; даты вне правила 6 отклонит конвейер (VALIDATION_INPUT).
+            var invoice = new VendorInvoice(cmd.Number, cmd.VendorId, cmd.InvoiceDate, cmd.ServiceDate, cmd.PostingDate, cmd.DueDate,
+                Money.Of(cmd.Total), cmd.PoRef, actor.UserId, ws.Clock.Now);
+            foreach (var d in cmd.Distributions)
+            {
+                invoice.AddDistribution(AccountCode.Parse(d.Account), Money.Of(d.Amount), d.PoLineNo);
+            }
+
+            if (await ws.Invoices.ExistsDuplicateAsync(invoice.VendorId, invoice.NormalizedInvoiceNumber, null, token))
             {
                 return CommandResult<InvoiceVm>.Refused(null, "An invoice with this number already exists for this vendor.");
             }
 
-            var invoice = new VendorInvoice(cmd.Number, cmd.VendorId,
-                new InvoiceDates(cmd.InvoiceDate, cmd.ServiceDate, cmd.PostingDate, cmd.DueDate), Money.Of(cmd.Total), cmd.PoNumber,
-                cmd.Distributions.Select(ToInput).ToList(), actor.UserId, ws.Clock.Now);
             await ws.Invoices.AddAsync(invoice, token);
             ws.Audit.Record(actor, "InvoiceCreated", invoice.Reference, cmd.Envelope.CommandId.ToString(),
-                new { invoice.Number, cmd.Total, Lines = cmd.Distributions.Count, cmd.PoNumber });
+                new { invoice.Number, cmd.Total, Lines = cmd.Distributions.Count, cmd.PoRef });
             return CommandResult<InvoiceVm>.Accepted(await ws.ToVmAsync(invoice, token));
         }, ct: ct);
 
@@ -1910,29 +2236,51 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
                 return CommandResult<InvoiceVm>.Forbidden("Only the author edits a draft.");
             }
 
-            if (DemoDatesProblem(cmd.InvoiceDate, cmd.ServiceDate, cmd.PostingDate) is { } problem)
+            ws.Concurrency.Expect(invoice, cmd.Envelope.ExpectedRowVersion);
+            invoice.UpdateHeader(cmd.Number, cmd.VendorId, cmd.InvoiceDate, cmd.ServiceDate, cmd.PostingDate, cmd.DueDate,
+                Money.Of(cmd.Total), cmd.PoRef);   // не Draft → PayablesException → Refused
+            var wanted = cmd.Distributions.Select(d => (AccountCode.Parse(d.Account), Money.Of(d.Amount), d.PoLineNo)).ToList();
+            if (!invoice.Distributions.Select(d => (d.Account, d.Amount, d.PoLineNo)).SequenceEqual(wanted))
             {
-                return CommandResult<InvoiceVm>.Refused(null, problem);
+                for (var n = invoice.Distributions.Count; n >= 1; n--)
+                {
+                    invoice.RemoveDistribution(n);
+                }
+
+                foreach (var (account, amount, poLine) in wanted)
+                {
+                    invoice.AddDistribution(account, amount, poLine);
+                }
             }
 
-            ws.Concurrency.Expect(invoice, cmd.Envelope.ExpectedRowVersion);
-            var changed = invoice.ReplaceContent(cmd.VendorId, new InvoiceDates(cmd.InvoiceDate, cmd.ServiceDate, cmd.PostingDate, cmd.DueDate),
-                Money.Of(cmd.Total), cmd.PoNumber, cmd.Distributions.Select(ToInput).ToList());
-            ws.Audit.Record(actor, "InvoiceUpdated", invoice.Reference, cmd.Envelope.CommandId.ToString(), new { changed, invoice.ContentVersion });
+            if (await ws.Invoices.ExistsDuplicateAsync(invoice.VendorId, invoice.NormalizedInvoiceNumber, invoice.Id, token))
+            {
+                // Агрегат уже изменён: отказ только исключением, чтобы runner откатил изменения (см. ниже).
+                throw new PayablesException("An invoice with this number already exists for this vendor.");
+            }
+
+            ws.Audit.Record(actor, "InvoiceUpdated", invoice.Reference, cmd.Envelope.CommandId.ToString(), new { invoice.ContentVersion });
             return CommandResult<InvoiceVm>.Accepted(await ws.ToVmAsync(invoice, token));
         }, ct: ct);
+```
+**Правило для всех сценариев.** Возвращённый из тела `Refused` / `Forbidden` не откатывает транзакцию: runner сохраняет изменения тела вместе с receipt. Так и задумано для оценки: запись оценки, аудит отказа и новый цикл согласования сохраняются. Отказ после изменения агрегатов, которое нельзя сохранять, оформляется только исключением. Доменное исключение runner превращает в `Refused` и откатывает всё.
 
+```csharp
     public Task<CommandResult<InvoiceVm>> ValidateAsync(InvoiceActionCommand cmd, ActorContext actor, CancellationToken ct = default) =>
         runner.ExecuteAsync(actor, cmd.Envelope, "ValidateInvoice", cmd, async (sp, token) =>
         {
             var ws = sp.GetRequiredService<InvoiceWorkspace>();
             var invoice = await ws.LoadAsync(cmd.InvoiceId, token);
-            var (record, _, _) = await ws.EvaluateAsync(invoice, EvaluationTrigger.Manual, actor, token);
-            ws.Audit.Record(actor, "InvoiceValidated", invoice.Reference, record.Id.ToString(), new { Overall = record.Overall.ToString(), record.RuleSetFingerprint });
+            var (record, restarted) = await ws.EvaluateAsync(invoice, EvaluationTrigger.Manual, actor, token);
+            ws.Audit.Record(actor, restarted ? "ApprovalCycleRestarted" : "InvoiceValidated", invoice.Reference, record.Id.ToString(),
+                new { Overall = record.Overall.ToString(), record.RuleFingerprint });
             return CommandResult<InvoiceVm>.Accepted(await ws.ToVmAsync(invoice, token));
         }, ct: ct);
 
-    /// <summary>Атомарный Submit (spec §5.3): оценка; при HardStop — отказ без резервов; иначе резервы, encumbrance и billing claims, статус — в одной транзакции.</summary>
+    /// <summary>
+    /// Атомарный Submit (spec §5.3): оценка черновика; Hard Stop — отказ без удержаний; иначе резервы, claims,
+    /// billing claims, статус и повторная оценка в статусе Submitted (её outcome'ы — основа для override) — одна транзакция.
+    /// </summary>
     public Task<CommandResult<InvoiceVm>> SubmitAsync(InvoiceActionCommand cmd, ActorContext actor, CancellationToken ct = default) =>
         runner.ExecuteAsync(actor, cmd.Envelope, "SubmitInvoice", cmd, async (sp, token) =>
         {
@@ -1949,55 +2297,19 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
             }
 
             ws.Concurrency.Expect(invoice, cmd.Envelope.ExpectedRowVersion);
-            var (record, subject, _) = await ws.EvaluateAsync(invoice, EvaluationTrigger.Submit, actor, token);
-            if (!record.Capabilities.CanSubmit)
+            var (draft, _) = await ws.EvaluateAsync(invoice, EvaluationTrigger.Submit, actor, token);
+            if (!draft.Capabilities.CanSubmit)
             {
-                ws.Audit.Record(actor, "InvoiceSubmitRefused", invoice.Reference, record.Id.ToString(), new { Overall = record.Overall.ToString() });
-                return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), InvoiceWorkspace.ReasonOf(record));
+                ws.Audit.Record(actor, "InvoiceSubmitRefused", invoice.Reference, draft.Id.ToString(), new { Overall = draft.Overall.ToString() });
+                return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), InvoiceWorkspace.ReasonOf(draft));
             }
 
-            var cv = invoice.ContentVersion;
-            var fy = FiscalYear.FromDate(invoice.Dates.Posting);
-            foreach (var key in subject.BudgetKeys.OrderBy(k => k.ToString(), StringComparer.Ordinal))
-            {
-                var required = subject.RequiredNewBudget(key);
-                if (required.IsZero)
-                {
-                    continue;
-                }
-
-                var line = await ws.BudgetLines.FindAsync(key, fy, token)
-                    ?? throw new InvalidOperationException($"Budget line {key} vanished after evaluation.");
-                if (!line.Reserve(invoice.Id, cv, required).IsReserved)
-                {
-                    throw new InvalidOperationException($"Reservation on {key} refused after a passing evaluation.");
-                }
-            }
-
-            foreach (var po in subject.PoLines.OrderBy(p => p.PoLineRef, StringComparer.Ordinal))
-            {
-                var liquidation = subject.EligibleLiquidation(po.PoLineRef);
-                if (!liquidation.IsZero)
-                {
-                    var enc = await ws.Encumbrances.FindByPoLineAsync(po.PoLineRef, token)
-                        ?? throw new InvalidOperationException($"Encumbrance {po.PoLineRef} vanished after evaluation.");
-                    enc.Claim(invoice.Id, cv, liquidation);
-                }
-            }
-
-            if (invoice.PoNumber is not null)
-            {
-                var order = await ws.PurchaseOrders.FindByNumberAsync(invoice.PoNumber, token)
-                    ?? throw new InvalidOperationException($"PO {invoice.PoNumber} vanished after evaluation.");
-                foreach (var no in invoice.Distributions.Where(d => d.PoLineNo is not null).Select(d => d.PoLineNo!.Value).Distinct().Order())
-                {
-                    order.ClaimBilling(no, invoice.Id, cv, subject.PoAmount(order.LineRef(no)));
-                }
-            }
-
-            invoice.Submit(record.Id);
-            ws.Audit.Record(actor, "InvoiceSubmitted", invoice.Reference, record.Id.ToString(),
-                new { Overall = record.Overall.ToString(), cv, Reserved = subject.BudgetKeys.Sum(k => subject.RequiredNewBudget(k).Amount) });
+            var holds = await ws.HoldAsync(invoice, draft.InputSnapshot, token);
+            invoice.Submit(draft.Id, draft.RuleFingerprint, await ws.RouteForAsync(draft, token), holds.Reservations, holds.Claims, holds.BillingClaims);
+            var (submitted, _) = await ws.EvaluateAsync(invoice, EvaluationTrigger.Submit, actor, token);
+            ws.Audit.Record(actor, "InvoiceSubmitted", invoice.Reference, submitted.Id.ToString(),
+                new { Overall = submitted.Overall.ToString(), invoice.ContentVersion, invoice.ApprovalCycleId,
+                      Reservations = holds.Reservations.Count, Claims = holds.Claims.Count, BillingClaims = holds.BillingClaims.Count });
             return CommandResult<InvoiceVm>.Accepted(await ws.ToVmAsync(invoice, token));
         }, ct: ct);
 
@@ -2006,15 +2318,26 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
         {
             var ws = sp.GetRequiredService<InvoiceWorkspace>();
             var invoice = await ws.LoadAsync(cmd.InvoiceId, token);
+            ws.Concurrency.Expect(invoice, cmd.Envelope.ExpectedRowVersion);
+            var release = invoice.Withdraw(actor.UserId, cmd.Reason, ws.Clock.Now);   // не автор / не активен → PayablesException → Refused
+            await ws.ReleaseAsync(release, token);
+            ws.Audit.Record(actor, "InvoiceWithdrawn", invoice.Reference, cmd.Envelope.CommandId.ToString(), new { cmd.Reason });
+            return CommandResult<InvoiceVm>.Accepted(await ws.ToVmAsync(invoice, token));
+        }, ct: ct);
+
+    public Task<CommandResult<InvoiceVm>> ReturnToDraftAsync(InvoiceActionCommand cmd, ActorContext actor, CancellationToken ct = default) =>
+        runner.ExecuteAsync(actor, cmd.Envelope, "ReturnToDraft", cmd, async (sp, token) =>
+        {
+            var ws = sp.GetRequiredService<InvoiceWorkspace>();
+            var invoice = await ws.LoadAsync(cmd.InvoiceId, token);
             if (invoice.CreatedBy != actor.UserId)
             {
-                return CommandResult<InvoiceVm>.Forbidden("Only the author withdraws the invoice.");
+                return CommandResult<InvoiceVm>.Forbidden("Only the author reopens a rejected invoice.");
             }
 
             ws.Concurrency.Expect(invoice, cmd.Envelope.ExpectedRowVersion);
-            await ws.ReleaseAllAsync(invoice, token);
-            invoice.Withdraw(actor.UserId, cmd.Reason, ws.Clock.Now);   // Posted → PayablesException → Refused, ничего не сохраняется
-            ws.Audit.Record(actor, "InvoiceWithdrawn", invoice.Reference, cmd.Envelope.CommandId.ToString(), new { cmd.Reason });
+            invoice.ReturnToDraft();   // не Rejected → PayablesException → Refused
+            ws.Audit.Record(actor, "InvoiceReturnedToDraft", invoice.Reference, cmd.Envelope.CommandId.ToString(), new { invoice.ContentVersion });
             return CommandResult<InvoiceVm>.Accepted(await ws.ToVmAsync(invoice, token));
         }, ct: ct);
 
@@ -2033,18 +2356,18 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
             ws.Audit.Record(actor, "PaymentHoldChanged", invoice.Reference, cmd.Envelope.CommandId.ToString(), new { cmd.Hold });
             return CommandResult<InvoiceVm>.Accepted(await ws.ToVmAsync(invoice, token));
         }, ct: ct);
-
-    private static DistributionInput ToInput(DistributionCommand d) => new(AccountCode.Parse(d.Account), Money.Of(d.Amount), d.PoLineNo);
-
-    /// <summary>Spec §5, правило 6: демо поддерживает только InvoiceDate = ServiceDate = PostingDate; иное отклоняется с объяснением.</summary>
-    private static string? DemoDatesProblem(DateOnly invoice, DateOnly service, DateOnly posting) =>
-        invoice == service && service == posting
-            ? null
-            : "This demo supports only InvoiceDate = ServiceDate = PostingDate; accrual across periods is out of scope.";
 }
 ```
 
-`Invoices/Presets.cs` — `public const string VendorCode = "ACME";` и `Presets.For(InvoicePreset, CommandEnvelope, Guid vendorId) → CreateInvoiceCommand`: три команды по spec §2.3, даты 2026-06-15 (due 2026-07-15), **уникальный и идемпотентный** номер `$"{prefix}-{envelope.CommandId:N}"[..16]` (тот же CommandId → тот же номер; префиксы `NPO`, `PO`, `MF`). `NonPoGrant` — 160,000 на `701-6000-53100-G-COPS-26`; `PoBackedGrant` — `PO-2026-0451`, 160,000 на `701-3000-53100-G-COPS-26`, строка PO 1; `MultiFund` — 30,000 = 12,000 `101-6000-53100` + 8,000 `202-4000-53100` + 10,000 `501-5000-53100`. Vendor id приходит параметром: Application не ссылается на `SpringfieldData`.
+`Invoices/Presets.cs`:
+- `public const string VendorCode = "ACME";`
+- `Presets.For(InvoicePreset, CommandEnvelope, Guid vendorId) → CreateInvoiceCommand` — три команды по spec §2.3. Даты 2026-06-15, due 2026-07-15.
+- Номер **уникальный и идемпотентный**: `$"{prefix}-{envelope.CommandId:N}"[..16]`. Тот же CommandId даёт тот же номер. Префиксы `NPO`, `PO`, `MF`.
+- `NonPoGrant` — 160,000 на `701-6000-53100-G-COPS-26`.
+- `PoBackedGrant` — `PoRef = "PO-2026-0451"`, 160,000 на `701-3000-53100-G-COPS-26`, строка PO 1.
+- `MultiFund` — 30,000 = 12,000 `101-6000-53100` + 8,000 `202-4000-53100` + 10,000 `501-5000-53100`.
+
+Vendor id приходит параметром: Application не ссылается на `SpringfieldData`.
 
 - [ ] **Step 4: ApprovalAppService**
 
@@ -2056,24 +2379,39 @@ public sealed class ApprovalAppService(ITenantOperationRunner runner) : IApprova
         {
             var ws = sp.GetRequiredService<InvoiceWorkspace>();
             var items = new List<ApprovalQueueItemVm>();
-            foreach (var inv in (await ws.Invoices.ListAsync(token)).Where(i => i.Status == InvoiceStatus.Submitted))
+            foreach (var inv in (await ws.Invoices.ListAsync(token)).Where(i => i.Status is InvoiceStatus.Submitted or InvoiceStatus.Approved))
             {
-                if (inv.LastEvaluationId is not { } id || await ws.Evaluations.FindAsync(id, token) is not { } last)
+                if (await ws.LastEvaluationAsync(inv, token) is not { } last)
                 {
                     continue;
                 }
 
-                var vendor = await ws.Vendors.FindAsync(inv.VendorId, token);
-                items.AddRange(last.ApprovalRoute
-                    .Where(r => !r.IsSatisfied && actor.IsInRole(r.Role.ToString()) && (r.Department is null || r.Department == actor.DepartmentCode))
-                    .Select(r => new ApprovalQueueItemVm(inv.Id, inv.Reference, vendor?.Name ?? "?", inv.Total.Amount, last.Overall.ToString(),
-                        r.Role.ToString(), r.Department, r.Reason)));
+                var vendor = (await ws.Vendors.FindAsync(inv.VendorId, token))?.Name ?? "?";
+                bool Mine(string role, string? department) => actor.IsInRole(role) && (department is null || department == actor.DepartmentCode);
+                if (inv.Status == InvoiceStatus.Submitted && inv.CreatedBy != actor.UserId)
+                {
+                    var satisfied = last.ApprovalRoute.Where(r => r.IsSatisfied).Select(r => (r.Role.ToString(), r.Department)).ToHashSet();
+                    items.AddRange((await ws.RouteForAsync(last, token))
+                        .Select(r => (Role: r.Role.ToString(), Department: r.Department?.Value))
+                        .Where(r => !satisfied.Contains(r) && Mine(r.Role, r.Department))
+                        .Select(r => new ApprovalQueueItemVm(inv.Id, inv.Reference, vendor, inv.Total.Amount, last.Overall.ToString(),
+                            "Approve", r.Role, r.Department, "Approval required.", last.Id, null, null)));
+                }
+
+                items.AddRange(last.Outcomes
+                    .Where(o => o.Severity == Severity.SoftStop && !o.IsOverridden && inv.CreatedBy != actor.UserId)
+                    .SelectMany(o => o.OverridableBy.Where(r => Mine(r.ToString(), null)).Take(1).Select(r => (o, r)))
+                    .Select(x => new ApprovalQueueItemVm(inv.Id, inv.Reference, vendor, inv.Total.Amount, last.Overall.ToString(),
+                        "Override", x.r.ToString(), null, x.o.Message, last.Id, x.o.RuleId, x.o.DistributionLine)));
             }
 
             return items;
         }, ct);
 
-    /// <summary>Spec §5, правило 2: смена fingerprint или версии содержания открывает новый цикл; новый HardStop или неснятый SoftStop блокируют согласование.</summary>
+    /// <summary>
+    /// Spec §5, правило 2: перед согласованием — оценка; смена fingerprint или маршрута уже открыла новый цикл внутри
+    /// EvaluateAsync. Неснятый Soft Stop или Hard Stop блокирует (CanApprove). Согласование пишется по шагу базового маршрута.
+    /// </summary>
     public Task<CommandResult<InvoiceVm>> ApproveAsync(InvoiceActionCommand cmd, ActorContext actor, CancellationToken ct = default) =>
         runner.ExecuteAsync(actor, cmd.Envelope, "ApproveInvoice", cmd, async (sp, token) =>
         {
@@ -2095,14 +2433,10 @@ public sealed class ApprovalAppService(ITenantOperationRunner runner) : IApprova
             }
 
             ws.Concurrency.Expect(invoice, cmd.Envelope.ExpectedRowVersion);
-            var (record, subject, rules) = await ws.EvaluateAsync(invoice, EvaluationTrigger.Approve, actor, token);
-            if (subject.ApprovalBaseline is { } baseline
-                && (baseline.RuleSetFingerprint != rules.Fingerprint || baseline.ContentVersion != invoice.ContentVersion))
+            var (record, restarted) = await ws.EvaluateAsync(invoice, EvaluationTrigger.Approve, actor, token);
+            if (restarted)
             {
-                invoice.OpenNewApprovalCycle();
-                ws.Audit.Record(actor, "ApprovalCycleRestarted", invoice.Reference, record.Id.ToString(),
-                    new { Previous = baseline.RuleSetFingerprint, Current = rules.Fingerprint });
-                (record, _, _) = await ws.EvaluateAsync(invoice, EvaluationTrigger.Approve, actor, token);
+                ws.Audit.Record(actor, "ApprovalCycleRestarted", invoice.Reference, record.Id.ToString(), new { invoice.ApprovalCycleId, record.RuleFingerprint });
             }
 
             if (!record.Capabilities.CanApprove)
@@ -2111,42 +2445,55 @@ public sealed class ApprovalAppService(ITenantOperationRunner runner) : IApprova
                 return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), InvoiceWorkspace.ReasonOf(record));
             }
 
-            var step = record.ApprovalRoute.FirstOrDefault(r => !r.IsSatisfied && actor.IsInRole(r.Role.ToString())
-                && (r.Department is null || r.Department == actor.DepartmentCode));
+            var route = await ws.RouteForAsync(record, token);
+            var satisfied = record.ApprovalRoute.Where(r => r.IsSatisfied).Select(r => (r.Role.ToString(), r.Department)).ToHashSet();
+            var pending = route.Where(r => !satisfied.Contains((r.Role.ToString(), r.Department?.Value))).ToList();
+            var step = pending.FirstOrDefault(r => actor.IsInRole(r.Role.ToString()) && (r.Department is null || r.Department.Value == actor.DepartmentCode));
             if (step is null)
             {
                 return CommandResult<InvoiceVm>.Forbidden($"{actor.UserName} is not a pending approver for {invoice.Reference}.");
             }
 
-            invoice.RecordApproval(RoleMapping.ToPayables(step.Role), step.Department, actor.UserId, record.Id, ws.Clock.Now);
-            if (record.ApprovalRoute.Count(r => !r.IsSatisfied) == 1)
+            invoice.RecordApproval(step.Role, step.Department, actor.UserId, record.Id, ws.Clock.Now);
+            if (pending.Count == 1)
             {
                 invoice.MarkApproved();
             }
 
             ws.Audit.Record(actor, "InvoiceApproved", invoice.Reference, record.Id.ToString(),
-                new { Role = step.Role.ToString(), step.Department, invoice.ApprovalCycleId, Status = invoice.Status.ToString() });
+                new { Role = step.Role.ToString(), Department = step.Department?.Value, invoice.ApprovalCycleId, Status = invoice.Status.ToString() });
             return CommandResult<InvoiceVm>.Accepted(await ws.ToVmAsync(invoice, token));
         }, ct: ct);
 
     public Task<CommandResult<InvoiceVm>> RejectAsync(ReasonedActionCommand cmd, ActorContext actor, CancellationToken ct = default) =>
         runner.ExecuteAsync(actor, cmd.Envelope, "RejectInvoice", cmd, async (sp, token) =>
         {
-            if (RoleMapping.PayablesRoleOf(actor) is not { } role)
-            {
-                return CommandResult<InvoiceVm>.Forbidden("Only approvers reject.");
-            }
-
             var ws = sp.GetRequiredService<InvoiceWorkspace>();
             var invoice = await ws.LoadAsync(cmd.InvoiceId, token);
+            if (await ws.LastEvaluationAsync(invoice, token) is not { } last || invoice.LastEvaluationRef is null)
+            {
+                return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), $"Invoice is {invoice.Status}.");
+            }
+
+            var step = (await ws.RouteForAsync(last, token))
+                .FirstOrDefault(r => actor.IsInRole(r.Role.ToString()) && (r.Department is null || r.Department.Value == actor.DepartmentCode));
+            if (step is null)
+            {
+                return CommandResult<InvoiceVm>.Forbidden("Only an approver on this invoice's route rejects it.");
+            }
+
             ws.Concurrency.Expect(invoice, cmd.Envelope.ExpectedRowVersion);
-            await ws.ReleaseAllAsync(invoice, token);
-            invoice.Reject(role, actor.UserId, cmd.Reason, ws.Clock.Now);
-            ws.Audit.Record(actor, "InvoiceRejected", invoice.Reference, cmd.Envelope.CommandId.ToString(), new { cmd.Reason, Role = role.ToString() });
+            var release = invoice.Reject(step.Role, step.Department, actor.UserId, cmd.Reason, ws.Clock.Now);
+            await ws.ReleaseAsync(release, token);
+            ws.Audit.Record(actor, "InvoiceRejected", invoice.Reference, cmd.Envelope.CommandId.ToString(),
+                new { cmd.Reason, Role = step.Role.ToString(), Department = step.Department?.Value });
             return CommandResult<InvoiceVm>.Accepted(await ws.ToVmAsync(invoice, token));
         }, ct: ct);
 
-    /// <summary>Override привязан к оценке, правилу, его версии и строке (spec §4.1); чужую или устаревшую оценку не принимает.</summary>
+    /// <summary>
+    /// Override выдаётся только на outcome последней оценки инвойса (spec §4.3, OutcomeRef): чужую или устаревшую
+    /// оценку домен не примет. После override — переоценка: её результат — новая последняя оценка.
+    /// </summary>
     public Task<CommandResult<InvoiceVm>> OverrideAsync(OverrideCommand cmd, ActorContext actor, CancellationToken ct = default) =>
         runner.ExecuteAsync(actor, cmd.Envelope, "OverrideRule", cmd, async (sp, token) =>
         {
@@ -2157,14 +2504,7 @@ public sealed class ApprovalAppService(ITenantOperationRunner runner) : IApprova
 
             var ws = sp.GetRequiredService<InvoiceWorkspace>();
             var invoice = await ws.LoadAsync(cmd.InvoiceId, token);
-            if (invoice.Status != InvoiceStatus.Submitted)
-            {
-                return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), $"Invoice is {invoice.Status}.");
-            }
-
-            ws.Concurrency.Expect(invoice, cmd.Envelope.ExpectedRowVersion);
-            var basis = await ws.Evaluations.FindAsync(cmd.EvaluationId, token);
-            if (basis is null || basis.InvoiceId != invoice.Id || basis.ContentVersion != invoice.ContentVersion || basis.ApprovalCycleId != invoice.ApprovalCycleId)
+            if (invoice.LastEvaluationRef != cmd.EvaluationId || await ws.Evaluations.FindAsync(cmd.EvaluationId, token) is not { } basis)
             {
                 return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), "The evaluation is not current for this invoice; reload and retry.");
             }
@@ -2176,15 +2516,18 @@ public sealed class ApprovalAppService(ITenantOperationRunner runner) : IApprova
                 return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), $"No open soft stop {cmd.RuleId} on that line.");
             }
 
-            if (!outcome.OverridableBy.Any(r => actor.IsInRole(r.ToString())))
+            // Cast к nullable: FirstOrDefault по enum вернул бы DepartmentHead вместо «нет совпадения».
+            if (outcome.OverridableBy.Cast<ApproverRole?>().FirstOrDefault(r => actor.IsInRole(r!.Value.ToString())) is not { } role)
             {
                 return CommandResult<InvoiceVm>.Forbidden($"{cmd.RuleId} cannot be overridden by {actor.UserName}.");
             }
 
-            invoice.Override(basis.Id, outcome.RuleId, outcome.RuleVersion, outcome.DistributionLine, actor.UserId, cmd.Reason, ws.Clock.Now);
-            var (record, _, _) = await ws.EvaluateAsync(invoice, EvaluationTrigger.Override, actor, token);
+            ws.Concurrency.Expect(invoice, cmd.Envelope.ExpectedRowVersion);
+            invoice.Override(new OverrideTarget(basis.Id, outcome.OutcomeRef, outcome.RuleId, outcome.RuleVersion, outcome.DistributionLine,
+                invoice.ContentVersion, invoice.ApprovalCycleId!.Value), RoleMapping.ToPayables(role), actor.UserId, cmd.Reason, ws.Clock.Now);
+            var (record, _) = await ws.EvaluateAsync(invoice, EvaluationTrigger.Manual, actor, token);
             ws.Audit.Record(actor, "OverrideRecorded", invoice.Reference, record.Id.ToString(),
-                new { outcome.RuleId, outcome.RuleVersion, outcome.DistributionLine, cmd.Reason, Overall = record.Overall.ToString() });
+                new { outcome.RuleId, outcome.RuleVersion, outcome.DistributionLine, Role = role.ToString(), cmd.Reason, Overall = record.Overall.ToString() });
             return CommandResult<InvoiceVm>.Accepted(await ws.ToVmAsync(invoice, token));
         }, ct: ct);
 }
@@ -2195,7 +2538,10 @@ public sealed class ApprovalAppService(ITenantOperationRunner runner) : IApprova
 ```csharp
 public sealed class PostingAppService(ITenantOperationRunner runner) : IPostingAppService
 {
-    /// <summary>Spec §5.4: Serializable-транзакция — перевалидация, погашение своих резервов и claims, журнал, статус, аудит, receipt.</summary>
+    /// <summary>
+    /// Spec §5.4: Serializable-транзакция — перевалидация; при смене правил или маршрута инвойс уходит в новый цикл
+    /// согласования (Reevaluate) и Post отклоняется; иначе погашение своих резервов и claims, ликвидация, журнал, статус.
+    /// </summary>
     public Task<CommandResult<InvoiceVm>> PostAsync(InvoiceActionCommand cmd, ActorContext actor, CancellationToken ct = default) =>
         runner.ExecuteAsync(actor, cmd.Envelope, "PostInvoice", cmd, async (sp, token) =>
         {
@@ -2212,72 +2558,60 @@ public sealed class PostingAppService(ITenantOperationRunner runner) : IPostingA
             }
 
             ws.Concurrency.Expect(invoice, cmd.Envelope.ExpectedRowVersion);
-            var (record, subject, _) = await ws.EvaluateAsync(invoice, EvaluationTrigger.Post, actor, token);
-            if (record.PostingCheck is not { Passed: true } check)
+            var (record, restarted) = await ws.EvaluateAsync(invoice, EvaluationTrigger.Post, actor, token);
+            if (restarted)
             {
-                if (record.PostingCheck?.Failures.Any(f => f.StartsWith(PostingEligibility.RevalidationRequired, StringComparison.Ordinal)) == true)
-                {
-                    invoice.OpenNewApprovalCycle();   // повторное согласование по актуальным правилам — затем Post возможен
-                    ws.Audit.Record(actor, "ApprovalCycleRestarted", invoice.Reference, record.Id.ToString(), new { Reason = "rule set or content changed" });
-                    // Последняя оценка должна отражать новый цикл: её маршрут — основа для очереди согласующих.
-                    await ws.EvaluateAsync(invoice, EvaluationTrigger.Manual, actor, token);
-                }
+                // Новая оценка и новый цикл сохраняются: согласующие увидят инвойс снова (REVALIDATION_REQUIRED).
+                ws.Audit.Record(actor, "ApprovalCycleRestarted", invoice.Reference, record.Id.ToString(), new { Reason = "rule set or route changed since approval" });
+                return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token),
+                    "REVALIDATION_REQUIRED: rules or the approval route changed since approval; the invoice returned to approval.");
+            }
 
+            if (record.PostingCheck is not { Passed: true })
+            {
                 ws.Audit.Record(actor, "PostRefused", invoice.Reference, record.Id.ToString(), new { record.PostingCheck?.Failures });
                 return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), string.Join(" ", record.PostingCheck?.Failures ?? []));
             }
 
-            if (await ws.Journal.ExistsAsync(invoice.Reference, PostingKind.InvoicePosting, token))
-            {
-                return new CommandResult<InvoiceVm>(CommandStatus.Conflict, null, "The invoice has already been posted.", false);
-            }
-
-            var (py, pm) = FiscalPeriod.KeyFor(invoice.Dates.Posting);
-            var period = await ws.Periods.FindAsync(py, pm, token) ?? throw new NotFoundException($"Fiscal period {py}-{pm:00} not found.");
             var cv = invoice.ContentVersion;
+            var fy = FiscalYear.FromDate(invoice.PostingDate);
             var charged = Money.Zero;
-
-            foreach (var line in await ws.BudgetLines.ListHeldForInvoiceAsync(invoice.Id, token))
+            foreach (var id in invoice.ReservationRefs)
             {
-                foreach (var reservation in line.Reservations.Where(r => r.Status == ReservationStatus.Held && r.InvoiceId == invoice.Id && r.ContentVersion == cv).ToList())
-                {
-                    line.Commit(reservation.Id);
-                    charged += reservation.Amount;
-                }
+                var line = await ws.BudgetLines.FindByReservationAsync(id, token) ?? throw new LedgerException($"Reservation {id} not found.");
+                charged += line.Reservations.Single(r => r.Id == id).Amount;
+                line.Commit(id, invoice.Id, cv);
             }
 
-            foreach (var enc in await ws.Encumbrances.ListClaimedByInvoiceAsync(invoice.Id, token))
+            foreach (var id in invoice.EncumbranceClaimRefs)
             {
-                if (enc.ClaimOf(invoice.Id, cv) is not { } claim)
-                {
-                    continue;
-                }
-
-                var liquidated = enc.ConsumeClaim(claim.Id);
-                var line = await ws.BudgetLines.FindAsync(enc.Account, enc.FiscalYear, token)
-                    ?? throw new InvalidOperationException($"Budget line {enc.Account} {enc.FiscalYear} not found.");
-                line.RecordLiquidation(liquidated);
-                charged += liquidated;
+                var encumbrance = await ws.Encumbrances.FindByClaimAsync(id, token) ?? throw new LedgerException($"Claim {id} not found.");
+                var amount = encumbrance.Claims.Single(c => c.Id == id).Amount;
+                encumbrance.ConsumeClaim(id, invoice.Id, cv);
+                var line = await ws.BudgetLines.FindAsync(encumbrance.Account, fy, token)
+                    ?? throw new LedgerException($"Budget line {encumbrance.Account} {fy} not found.");
+                line.RecordLiquidation(amount);
+                charged += amount;
             }
 
-            if (invoice.PoNumber is not null && await ws.PurchaseOrders.FindByNumberAsync(invoice.PoNumber, token) is { } order)
+            foreach (var id in invoice.PoBillingClaimRefs)
             {
-                foreach (var claim in order.BillingClaimsOf(invoice.Id, cv))
-                {
-                    order.ConsumeBillingClaim(claim.Id);
-                }
+                (await ws.Encumbrances.FindByClaimAsync(id, token) ?? throw new LedgerException($"Billing claim {id} not found."))
+                    .ConsumeBillingClaim(id, invoice.Id, cv);
             }
 
-            // Инвариант consistency §4: actuals растут ровно на сумму инвойса.
+            // Инвариант consistency §4: actuals растут ровно на сумму инвойса. Нарушение — ошибка программы, не отказ.
             if (charged != invoice.Total)
             {
                 throw new InvalidOperationException($"Posting would change actuals by {charged}, expected {invoice.Total}.");
             }
 
-            var lines = record.PostingPreview.Select(p => new JournalLine(p.Account,
-                p.Family == PostingPreviewComposer.Budgetary ? LedgerFamily.Budgetary : LedgerFamily.Financial, p.Debit, p.Credit, p.Description)).ToList();
-            await ws.Journal.AddAsync(JournalEntry.Create(invoice.Reference, PostingKind.InvoicePosting, lines, period, invoice.Dates.Posting, actor.UserId, ws.Clock.Now), token);
-            invoice.Post(record.Id, ws.Clock.Now);
+            var (py, pm) = FiscalPeriod.KeyFor(invoice.PostingDate);
+            var period = await ws.Periods.FindAsync(py, pm, token) ?? throw new NotFoundException($"Fiscal period {py}-{pm:00} not found.");
+            var lines = record.PostingPreview
+                .Select(p => new JournalLine(p.Account, Enum.Parse<LedgerFamily>(p.Family), p.Debit, p.Credit, p.Description)).ToList();
+            await ws.Journal.AddAsync(JournalEntry.Create(invoice.Reference, lines, period, actor.UserId, ws.Clock.Now), token);
+            invoice.Post(record.Id, cv, invoice.ApprovalCycleId!.Value, record.RuleFingerprint, ws.Clock.Now);
             ws.Audit.Record(actor, "InvoicePosted", invoice.Reference, record.Id.ToString(), new { Charged = charged.Amount, Lines = lines.Count });
             return CommandResult<InvoiceVm>.Accepted(await ws.ToVmAsync(invoice, token));
         }, System.Data.IsolationLevel.Serializable, ct);
@@ -2294,7 +2628,7 @@ public sealed class PostingAppService(ITenantOperationRunner runner) : IPostingA
         }, ct);
 }
 ```
-Ошибка на любом шаге (включая журнал) — исключение из тела; runner не вызывает `SaveChanges`, транзакция откатывается: ни бюджет, ни claims, ни статус не меняются (`AtomicPostFailure`).
+Любая ошибка после первого изменения агрегата выбрасывается исключением: отказ периода в `JournalEntry.Create`, несбалансированный журнал, чужой claim. Runner не вызывает `SaveChanges`, транзакция откатывается, и ни бюджет, ни claims, ни статус не меняются (`AtomicPostFailure`). Повторный Post одного инвойса невозможен: статус уже `Posted`, а если два Post пришли одновременно, второй упадёт на уникальном `JournalEntries.SourceRef` → `Conflict`.
 
 - [ ] **Step 6: Budget, Reference, Explanation**
 
@@ -2317,7 +2651,13 @@ public Task<CommandResult<BudgetLineVm>> AmendAsync(AmendBudgetCommand cmd, Acto
         return CommandResult<BudgetLineVm>.Accepted(await BudgetMapping.ToVmAsync(line, sp.GetRequiredService<IOpeningBalanceRepository>(), token));
     }, ct: ct);
 ```
-`ListAsync(fiscalYear)` — `QueryAsync`: строки + opening balances (`BudgetMapping.ToVmAsync` находит opening по ключу). `ReferenceAppService` — чтение и маппинг (`Attributes` фонда: `Type`, `Basis`, `ControlMode`, `GrantPolicy`; гранта: `Sponsor`, `IsFederal`, `PeriodFrom`, `PeriodTo`, `Status`); `GetRulesAsync` возвращает `RuleSetVm` с `RuleResolution.Resolve(all, clock.BusinessDate).Fingerprint`.
+`ListAsync(fiscalYear)` работает через `QueryAsync`: строки плюс opening balances. `BudgetMapping.ToVmAsync` находит opening по `line.OpeningBalanceId` среди `IOpeningBalanceRepository.ListAsync(fy)`.
+
+`ReferenceAppService` читает данные и маппит их:
+- `Attributes` фонда: `Type`, `Basis`, `ControlMode`, `GrantPolicy`;
+- `Attributes` гранта: `Sponsor`, `IsFederal`, `PeriodFrom`, `PeriodTo`, `Status`;
+- `GetPurchaseOrdersAsync` дополняет строку PO данными `Encumbrance` из `FindByPoLineAsync(po.LineRef(no))`: `AuthorizedPoAmount`, `AlreadyPostedAgainstPo`, `Remaining`;
+- `GetRulesAsync` возвращает `RuleSetVm` с `RuleResolution.Resolve(all, clock.BusinessDate).Fingerprint` — это отпечаток общего набора без scope; scoped-правила показываются с `ScopeFund` и `ScopeGrant`.
 
 `ExplanationAppService(ITenantOperationRunner runner, IExplanationGenerator generator)` — **LLM вне транзакции** (consistency §4):
 ```csharp
@@ -2342,7 +2682,7 @@ public async Task<CommandResult<ExplanationVm>> ExplainAsync(Guid evaluationId, 
     }, ct: ct);
 }
 ```
-`ListAsync`, `GetEvaluationHistoryAsync` (по `invoice.Reference`), `GetAuditTrailAsync` (по `invoice.Reference`) — `QueryAsync`.
+`ListAsync`, `GetEvaluationHistoryAsync` и `GetAuditTrailAsync` работают через `QueryAsync`; последние два ищут по `invoice.Reference`.
 
 - [ ] **Step 7: Регистрация и архитектурный тест**
 
@@ -2388,7 +2728,7 @@ public void Ui_facing_app_services_do_not_expose_entities()
 
 ```bash
 git add -A
-git commit -m "Application: atomic lifecycle commands (submit, approve, override, reject, withdraw, post), budget, reference, explanation services
+git commit -m "Application: atomic lifecycle commands (submit, approve, override, reject, withdraw, return to draft, post), budget, reference, explanation services
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -2404,7 +2744,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Produces:
   - `TenantProvisioner.ProvisionAsync(string tenantId, string name, string databaseName, string credentialKey, bool isDemo, TenantSeed seed, CancellationToken)` — создаёт/мигрирует БД тенанта **migration-пользователем**, создаёт runtime-login/пользователя с правами spec §6.2, засевает (только пустую БД), регистрирует тенанта в Master. `enum TenantSeed { Springfield, ReferenceOnly }`.
   - `DatabaseSecurity.EnsureRuntimeUserAsync(string migrationConnection, string database, string login, string password, CancellationToken)`.
-  - `DatabaseInitializer.InitializeAsync(IServiceProvider, CancellationToken)` — ожидание SQL, миграция Master, master-runtime-пользователь (только чтение), seed Master, провижининг `springfield` и `shelbyville`, проверка `RuleSetGuard` для каждого тенанта (нарушение — исключение при старте).
+  - `DatabaseInitializer.InitializeAsync(IServiceProvider, CancellationToken)` — ожидание SQL, миграция Master, master-runtime-пользователь (только чтение), seed Master, провижининг `springfield` и `shelbyville`, проверка набора правил каждого тенанта: `RuleResolution.Resolve` на бизнес-дату и наличие `RuleCatalog.MandatoryRuleIds` (нарушение — исключение при старте; во время работы конвейер всё равно отказывает с `RULE_CONFIGURATION`).
   - `DemoReset.RunAsync(string[] args, IServiceProvider, IHostEnvironment, CancellationToken) → int` (код выхода).
 - Конфигурация (`StartupOptions`, секция `Startup`): `MigrationConnectionTemplate` (`…;Database={0};User Id=sa;Password=…`), `MasterDatabase` (`GovErp_Master`), `MasterRuntimeLogin`/`MasterRuntimePassword`, `DemoResetAllowlist` (`["GovErp_Springfield"]`).
 
@@ -2516,7 +2856,7 @@ public static class TenantSeeder
 
 `Startup/TenantProvisioner.cs`:
 ```csharp
-public sealed class TenantProvisioner(IOptions<StartupOptions> startup, IOptions<TenancyOptions> tenancy)
+public sealed class TenantProvisioner(IOptions<StartupOptions> startup, IOptions<TenancyOptions> tenancy, IClock clock)
 {
     /// <summary>Реестр тенантов пишется migration-пользователем: runtime-пользователь Master только читает.</summary>
     private MasterDbContext MasterForWrite() => new(new DbContextOptionsBuilder<MasterDbContext>()
@@ -2529,10 +2869,12 @@ public sealed class TenantProvisioner(IOptions<StartupOptions> startup, IOptions
         {
             await db.Database.MigrateAsync(ct);
             await TenantSeeder.SeedAsync(db, seed, ct);
-            var violations = RuleSetGuard.FindViolations(await db.RuleDefinitions.ToListAsync(ct), RuleCatalog.Default);
-            if (violations.Count > 0)
+            // Неразрешимый набор (конфликт слоёв, ослабление) — ValidationException из Resolve; пропуск обязательного правила — ниже.
+            var effective = RuleResolution.Resolve(await db.RuleDefinitions.ToListAsync(ct), clock.BusinessDate);
+            var missing = RuleCatalog.Default.MandatoryRuleIds.Where(id => effective.Find(id) is null).ToList();
+            if (missing.Count > 0)
             {
-                throw new InvalidOperationException($"Tenant {tenantId} rule set is invalid: {string.Join("; ", violations)}");
+                throw new InvalidOperationException($"Tenant {tenantId} rule set lacks mandatory rules: {string.Join(", ", missing)}");
             }
         }
 
@@ -2763,7 +3105,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Interfaces:**
 - `SqlServerFixture : IAsyncLifetime` (xUnit collection fixture `"sql"`): поднимает `MsSqlContainer`, строит `ServiceProvider` из `AddApplication` + `AddInfrastructure` + `AddStartup` на конфигурации, указывающей на контейнер (migration = `sa`; runtime-учётки `test` → `goverp_test`), подменяет декораторы из `TestHooks`, выполняет `DatabaseInitializer`. `CreateTenantAsync()` — **новая** tenant-БД `GovErp_T_{guid:N}` с полным seed Springfield (consistency §7: тесты не делят изменяемые остатки).
 - `TenantDriver` — акторы тенанта (`Clerk`, `FireChief`, `PoliceChief`, `PwDirector`, `WaterDirector`, `GrantsManager`, `BudgetOfficer`, `FinanceDirector`, конструируются как `ActorContext` с id из `SpringfieldData`/`MasterSeed`), сервисы и помощники: `Env()`, `CreateAsync(...)`, `SubmitAsync`, `ApproveThroughAsync` (override всех открытых Soft Stop директором, затем согласование каждого шага маршрута подходящим актором), `PostAsync`, `BudgetAsync(account)`, `WithDbAsync(...)`.
-- `TestHooks` — синглтон с точками вмешательства: `SyncPoint? AfterBudgetRead`, `SyncPoint? AfterPoRead`, `SyncPoint? AfterDuplicateCheck` (гонки синхронизируются барьером **после чтения**, каждая операция — в своём scope; consistency §7), `string? FailOnSecondLookupOf` (ошибка при втором чтении бюджетной строки с этим счётом в scope), `bool FailJournalWrite`. Декораторы `Hooked*Repository` оборачивают `Ef*Repository`.
+- `TestHooks` — синглтон с точками вмешательства: `SyncPoint? AfterBudgetRead`, `SyncPoint? AfterEncumbranceRead`, `SyncPoint? AfterDuplicateCheck` (гонки синхронизируются барьером **после чтения**, каждая операция — в своём scope; consistency §7), `string? FailOnSecondLookupOf` (ошибка при втором чтении бюджетной строки с этим счётом в scope), `bool FailJournalWrite`. Декораторы `Hooked*Repository` оборачивают `Ef*Repository`.
 
 - [ ] **Step 1: Фикстура, драйвер, хуки**
 
@@ -2797,12 +3139,12 @@ public sealed class SyncPoint(int participants)
 public sealed class TestHooks
 {
     public SyncPoint? AfterBudgetRead { get; set; }
-    public SyncPoint? AfterPoRead { get; set; }
+    public SyncPoint? AfterEncumbranceRead { get; set; }
     public SyncPoint? AfterDuplicateCheck { get; set; }
     public string? FailOnSecondLookupOf { get; set; }
     public bool FailJournalWrite { get; set; }
 
-    public void Reset() { AfterBudgetRead = AfterPoRead = AfterDuplicateCheck = null; FailOnSecondLookupOf = null; FailJournalWrite = false; }
+    public void Reset() { AfterBudgetRead = AfterEncumbranceRead = AfterDuplicateCheck = null; FailOnSecondLookupOf = null; FailJournalWrite = false; }
 }
 
 public sealed class HookedBudgetLineRepository(IBudgetLineRepository inner, TestHooks hooks) : IBudgetLineRepository
@@ -2823,11 +3165,11 @@ public sealed class HookedBudgetLineRepository(IBudgetLineRepository inner, Test
     }
 
     public Task<IReadOnlyList<BudgetLine>> ListAsync(FiscalYear fy, CancellationToken ct = default) => inner.ListAsync(fy, ct);
-    public Task<IReadOnlyList<BudgetLine>> ListHeldForInvoiceAsync(Guid invoiceId, CancellationToken ct = default) => inner.ListHeldForInvoiceAsync(invoiceId, ct);
+    public Task<BudgetLine?> FindByReservationAsync(Guid reservationId, CancellationToken ct = default) => inner.FindByReservationAsync(reservationId, ct);
     public Task AddAsync(BudgetLine line, CancellationToken ct = default) => inner.AddAsync(line, ct);
 }
 ```
-По тому же образцу: `HookedPurchaseOrderRepository` (`hooks.AfterPoRead?.Arrive()` после `FindByNumberAsync`), `HookedVendorInvoiceRepository` (`hooks.AfterDuplicateCheck?.Arrive()` после `ExistsDuplicateAsync`), `HookedJournalRepository` (`AddAsync` бросает `InvalidOperationException`, если `FailJournalWrite`). Первые два прибытия в точку — чтения сборщика снимка у двух участников; повторные чтения (резервирование, повтор после конфликта) проходят без ожидания.
+По тому же образцу: `HookedEncumbranceRepository` (`hooks.AfterEncumbranceRead?.Arrive()` после `FindByPoLineAsync`: сборщик читает строку PO через encumbrance), `HookedVendorInvoiceRepository` (`hooks.AfterDuplicateCheck?.Arrive()` после `ExistsDuplicateAsync`), `HookedJournalRepository` (`AddAsync` бросает `InvalidOperationException`, если `FailJournalWrite`). Первые два прибытия в точку — чтения сборщика снимка у двух участников; повторные чтения (резервирование, повтор после конфликта) проходят без ожидания.
 
 `Support/SqlServerFixture.cs`:
 ```csharp
@@ -2880,8 +3222,8 @@ public sealed class SqlServerFixture : IAsyncLifetime
         services.AddSingleton(Hooks);
         services.AddScoped<EfBudgetLineRepository>().AddScoped<IBudgetLineRepository>(sp =>
             new HookedBudgetLineRepository(sp.GetRequiredService<EfBudgetLineRepository>(), Hooks));
-        services.AddScoped<EfPurchaseOrderRepository>().AddScoped<IPurchaseOrderRepository>(sp =>
-            new HookedPurchaseOrderRepository(sp.GetRequiredService<EfPurchaseOrderRepository>(), Hooks));
+        services.AddScoped<EfEncumbranceRepository>().AddScoped<IEncumbranceRepository>(sp =>
+            new HookedEncumbranceRepository(sp.GetRequiredService<EfEncumbranceRepository>(), Hooks));
         services.AddScoped<EfVendorInvoiceRepository>().AddScoped<IVendorInvoiceRepository>(sp =>
             new HookedVendorInvoiceRepository(sp.GetRequiredService<EfVendorInvoiceRepository>(), Hooks));
         services.AddScoped<EfJournalRepository>().AddScoped<IJournalRepository>(sp =>
@@ -3040,7 +3382,7 @@ public sealed class ConcurrencyAndAtomicityTests(SqlServerFixture fixture)
         amend.IsAccepted.Should().BeTrue(amend.Reason);                // свободный бюджет Police = 0
         var a = await t.CreateAsync(160_000m, "PO-2026-0451", (Police, 160_000m, 1));
         var b = await t.CreateAsync(160_000m, "PO-2026-0451", (Police, 160_000m, 1));
-        t.Hooks.AfterPoRead = new SyncPoint(2);
+        t.Hooks.AfterEncumbranceRead = new SyncPoint(2);
         var results = await Task.WhenAll(Task.Run(() => t.SubmitAsync(a.Id)), Task.Run(() => t.SubmitAsync(b.Id)));
         t.Hooks.Reset();
         results.Count(r => r.IsAccepted).Should().Be(1);
@@ -3209,7 +3551,7 @@ public sealed class LifecycleTests(SqlServerFixture fixture)
         await t.WithDbAsync(async db =>
         {
             db.RuleDefinitions.Add(new Domain.Validation.Entities.RuleDefinition("BUDGET_LOW_REMAINING", 2,
-                Domain.Validation.ValueObjects.ValidationStep.BudgetAvailability, Domain.Validation.ValueObjects.RuleLayer.Tenant, true,
+                Domain.Validation.ValueObjects.ValidationStep.BudgetAvailability, Domain.Validation.ValueObjects.RuleLayer.Tenant,
                 Domain.Validation.ValueObjects.Severity.Warning, new Dictionary<string, string> { ["pct"] = "0.12" }, [],
                 new DateOnly(2025, 7, 1), null, "Little budget remains after this invoice.", "No action required."));
             return await db.SaveChangesAsync();
@@ -3267,8 +3609,8 @@ public sealed class LifecycleTests(SqlServerFixture fixture)
             .IsAccepted.Should().BeTrue();
         (await t.BudgetAsync(Police)).Held.Should().Be(0m);
         (await t.WithDbAsync(db => db.Encumbrances.SelectMany(e => e.Claims).CountAsync(c => c.Status == Domain.Ledger.Entities.ClaimStatus.Held))).Should().Be(0);
-        (await t.WithDbAsync(db => db.PurchaseOrders.SelectMany(p => p.Lines).SelectMany(l => l.BillingClaims)
-            .CountAsync(c => c.Status == Domain.Payables.Entities.ClaimStatus.Held))).Should().Be(0);
+        (await t.WithDbAsync(db => db.Encumbrances.SelectMany(e => e.BillingClaims)
+            .CountAsync(c => c.Status == Domain.Ledger.Entities.ClaimStatus.Held))).Should().Be(0);
         (await t.GetAsync(inv.Id)).Status.Should().Be("Draft");
         (await t.WithDbAsync(db => db.JournalEntries.CountAsync())).Should().Be(0);
         (await t.Service<IExplanationAppService>().GetAuditTrailAsync(inv.Id, t.Clerk)).Should().Contain(e => e.Action == "InvoiceWithdrawn");
@@ -3313,7 +3655,7 @@ public sealed class LifecycleTests(SqlServerFixture fixture)
 
         var a = await t.CreateAsync(5_000m, "PO-2026-0451", (Police, 5_000m, 1));   // по отдельности 3.125% — в допуске
         var b = await t.CreateAsync(5_000m, "PO-2026-0451", (Police, 5_000m, 1));   // вместе 6.25% — сверх 5%
-        t.Hooks.AfterPoRead = new SyncPoint(2);
+        t.Hooks.AfterEncumbranceRead = new SyncPoint(2);
         var results = await Task.WhenAll(Task.Run(() => t.SubmitAsync(a.Id)), Task.Run(() => t.SubmitAsync(b.Id)));
         t.Hooks.Reset();
         results.Count(r => r.IsAccepted).Should().Be(1);
@@ -3407,10 +3749,10 @@ public sealed class PlatformTests(SqlServerFixture fixture)
         var t = await fixture.CreateTenantAsync();
         var inv = await t.CreateAsync(10m, null, ("101-6000-53100", 10m, null));
         var stale = (await t.GetAsync(inv.Id)).RowVersion;
-        (await t.Service<IInvoiceAppService>().UpdateDraftAsync(new UpdateInvoiceCommand(TenantDriver.Env(stale), inv.Id, SpringfieldData.AcmeId,
+        (await t.Service<IInvoiceAppService>().UpdateDraftAsync(new UpdateInvoiceCommand(TenantDriver.Env(stale), inv.Id, inv.Number, SpringfieldData.AcmeId,
             SpringfieldData.Jun15, SpringfieldData.Jun15, SpringfieldData.Jun15, new DateOnly(2026, 7, 15), 20m, null,
             [new DistributionCommand("101-6000-53100", 20m, null)]), t.Clerk)).IsAccepted.Should().BeTrue();
-        var second = await t.Service<IInvoiceAppService>().UpdateDraftAsync(new UpdateInvoiceCommand(TenantDriver.Env(stale), inv.Id, SpringfieldData.AcmeId,
+        var second = await t.Service<IInvoiceAppService>().UpdateDraftAsync(new UpdateInvoiceCommand(TenantDriver.Env(stale), inv.Id, inv.Number, SpringfieldData.AcmeId,
             SpringfieldData.Jun15, SpringfieldData.Jun15, SpringfieldData.Jun15, new DateOnly(2026, 7, 15), 30m, null,
             [new DistributionCommand("101-6000-53100", 30m, null)]), t.Clerk);
         second.Status.Should().Be(CommandStatus.Conflict);
@@ -3434,7 +3776,7 @@ public sealed class PlatformTests(SqlServerFixture fixture)
 ```
 Тест `ExplanationLlmFailureFallsBack` — в плане 4 (там появляется LLM-генератор).
 
-- [ ] **Step 3:** `dotnet test tests/GovErp.Application.Web.Tests` — Expected: все тесты проекта зелёные (unit + 10 + 11 + 5). Если какой-то тест не выявляет отсутствующее поведение при намеренно сломанной реализации (например, закомментировать `ReleaseAllAsync` в Withdraw), тест недостаточен — усилить.
+- [ ] **Step 3:** `dotnet test tests/GovErp.Application.Web.Tests` — Expected: все тесты проекта зелёные (unit + 10 + 11 + 5). Если какой-то тест не выявляет отсутствующее поведение при намеренно сломанной реализации (например, закомментировать `ReleaseAsync` в Withdraw), тест недостаточен — усилить.
 - [ ] **Step 4: Commit и push**
 
 ```bash
@@ -3451,8 +3793,14 @@ git push
 
 **Покрытие спеки:** §3.6 и порты — задача 1; §3.7 / GE-9 (сборщик, собственные резервы и claims, базовая линия согласования) — задача 2; §6.2 (схемы, owned-таблицы, уникальные индексы, rowversion, ChangeStamp) — задача 3; runner команд, receipts, concurrency guard, tenancy per operation, append-only на EF-пути, шаблонное объяснение — задача 4; §5.1–5.5 и правила жизненного цикла 1–9 (атомарные Submit/Approve/Override/Reject/Withdraw/Post, повторное согласование, SoftStop-резерв, накопительный допуск PO, дубликаты, даты, opening balances, готовность к оплате) — задача 5; правило 10 (demo-reset) и права runtime-пользователей — задача 6; Docker с постоянным томом — задача 7; матрица spec §7 и consistency §7 — задачи 8–9.
 
-**Решения, фиксируемые планом:** (1) все мутации идут через `ITenantOperationRunner`: один `SaveChanges`, receipt в той же транзакции, повтор только целиком в новом scope; (2) `Refused` сохраняет оценку, аудит и receipt, но тело сценария обязано не менять финансовое состояние до решения об отказе; (3) `RowVersion` в ответе команды не заполняется — UI перечитывает инвойс (`GetAsync`); (4) заголовок инвойса и номер после создания не меняются: номер — идентичность для проверки дубликатов; (5) даты документа в демо обязаны совпадать, иначе отказ с объяснением (spec §5, правило 6); (6) `Validate` — тоже команда с receipt: она пишет оценку и аудит.
+**Решения, фиксируемые планом:** (1) все мутации идут через `ITenantOperationRunner`: один `SaveChanges`, receipt в той же транзакции, повтор только целиком в новом scope; (2) `Refused` сохраняет оценку, аудит и receipt, но тело сценария обязано не менять финансовое состояние до решения об отказе; (3) `RowVersion` в ответе команды не заполняется — UI перечитывает инвойс (`GetAsync`); (4) заголовок и номер инвойса меняются только в Draft (`UpdateHeader`); уникальность номера у поставщика держит индекс по вычисляемой колонке `NormalizedNumber`; (5) несовпадающие даты документа не отклоняются при вводе, их отклоняет конвейер (`VALIDATION_INPUT`, spec §5, правило 6) — правило живёт в одном месте; (6) `Validate` — тоже команда с receipt: она пишет оценку и аудит; (7) инвойс хранит базовый маршрут без требований override (D-6), снятие Soft Stop проверяется через `CanApprove`; (8) оценка активного инвойса всегда проходит через `Reevaluate`, и смена правил или маршрута сама открывает новый цикл.
 
-**Согласованность имён с планами 1–2:** `BudgetLine.Reserve(invoiceId, contentVersion, amount)`, `HeldFor`, `ReleaseAllFor`, `Commit`, `RecordLiquidation`; `Encumbrance.Claim/ClaimOf/ConsumeClaim/ReleaseAllFor`, `HeldClaims`; `PurchaseOrder.ClaimBilling/BillingClaimsOf/ConsumeBillingClaim/ReleaseBillingClaimsFor/OtherActiveBillingClaims/LineRef/Lines`; `VendorInvoice.ReplaceContent/Submit/RecordEvaluation/RecordApproval/MarkApproved/Override/OpenNewApprovalCycle/Reject/Withdraw/Post/SetPaymentHold/IsReadyForPaymentHandoff`, `ActiveApprovals`, `ActiveOverrides`, `Dates`, `NormalizedNumber`, `VendorInvoice.Normalize`; `ValidationSubject.BudgetKeys/RequiredNewBudget/EligibleLiquidation/PoAmount`; `EvaluationRecord.ContentVersion/ApprovalCycleId/RuleSetFingerprint/PostingCheck`; `PostingEligibility.RevalidationRequired`; `PostingPreviewComposer.Budgetary`.
+**Согласованность с кодом домена (ветка `codex/foundation`, 344 теста до задачи 3):**
+- `BudgetLine`: `Reserve(invoiceId, cv, amount, sourceRef) → ReservationResult`, `Commit/Release(id, invoiceId, cv)`, `RecordLiquidation`, `ApplyOpeningBalance`, `OwnHeld`, `Amend`.
+- `Encumbrance`: `Claim`, `ClaimBilling(…, tolerance)`, `ConsumeClaim/ReleaseClaim`, `ConsumeBillingClaim/ReleaseBillingClaim`, `Claims`, `BillingClaims`, `AuthorizedPoAmount`, `AlreadyPostedAgainstPo`.
+- Порты: `IBudgetLineRepository.FindByReservationAsync`, `IEncumbranceRepository.FindByPoLineAsync/FindByClaimAsync`, `IOpeningBalanceRepository`, `IJournalRepository.ListBySourceAsync`, `IVendorInvoiceRepository.ExistsDuplicateAsync(vendor, normalized, Guid? excluding)`.
+- `VendorInvoice`: ctor + `AddDistribution/RemoveDistribution/UpdateHeader`, `Submit(evaluationRef, fingerprint, route, reservations, claims, billingClaims)`, `Reevaluate`, `RecordApproval`, `MarkApproved`, `Override(target, role, user, reason, at)`, `HasCurrentOverride`, `Reject/Withdraw → InvoiceRelease`, `ReturnToDraft`, `Post(evaluationRef, cv, cycle, fingerprint, at)`, `SetPaymentHold`, `ReadyForPaymentHandoff`, `ReservationRefs/EncumbranceClaimRefs/PoBillingClaimRefs`, `LastEvaluationRef`, `NormalizedInvoiceNumber`, `Reference`.
+- Validation: `ValidationPipeline.Evaluate(subject, definitions, trigger, actor, at)`, `RuleResolution.Resolve/ResolveForSubject`, `BudgetAllocation.Allocate`, `ApprovalRouteResolver.Build`, `EvaluationRecord.TransactionVersion/ApprovalCycleId/RuleFingerprint/Steps/InputSnapshot/PostingCheck`, `RuleOutcome.OutcomeRef`.
+- Изменения домена, которые вносит этот план (задача 3, шаг 0): приватные конструкторы и `private set` для EF, `PurchaseOrder._lines`, `VendorInvoice.ChangeStamp`, `RuleOutcome.Restore`.
 
 **Сознательные упрощения:** reconciler висящих резервов не нужен — частичных резервов не бывает (атомарный Submit); outbox и доменные события — только на слайде (GE-7); interceptor + DENY защищают append-only, но администратор сервера БД технически может изменить данные — это вне модели угроз прототипа.
