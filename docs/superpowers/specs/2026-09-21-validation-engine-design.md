@@ -20,10 +20,10 @@
 **Сценарии демо** (все на seed-данных):
 
 1. Non-PO инвойс $160,000 по `701-6000-53100-G-COPS-26` → **Hard Stop, превышение $13,000** (сценарий задания)
-2. Тот же после budget amendment +$13,000 → **Soft Stop** (procurement threshold) → override → Submit → Approve → Post
+2. Тот же после budget amendment +$13,000 → **Soft Stop** (procurement threshold) → Submit → override → **Warning** (остаток 0 < 10%) → Approve → Post
 3. PO-backed инвойс $160,000 → **Allowed**, encumbrance ликвидирована, available не изменился
 4. Мультифондовый инвойс $30,000 на три фонда (101 / 202 / 501) → баланс по фондам, Soft Stop на 101, Expense vs Expenditure
-5. Concurrency-тест: два параллельных Submit на одну бюджетную строку — проходит ровно один
+5. Concurrency-тесты: два параллельных Submit на одну бюджетную строку и на один остаток PO — проходит ровно один
 
 **Не делаем** (описывается на слайдах): платёж и банковская интеграция; payroll; receipts / three-way
 match; UI управления справочниками и правилами; закрытие года (lapse / carryforward); внешние
@@ -75,8 +75,10 @@ allowed departments 3000 и 6000. `G-FEMA-24` — закрыт.
 
 - Уровень бюджетного контроля — полная комбинация из четырёх сегментов.
 - Non-PO инвойс не ликвидирует encumbrance.
-- PO-backed: ликвидация в пределах остатка PO-строки; излишек ≤ 5% — Warning, излишек проверяется
-  против available; > 5% — Hard Stop.
+- PO-backed: ликвидация в пределах свободного (не захваченного другими инвойсами) остатка encumbrance;
+  излишек над ликвидацией проверяется против available. Допуск считается накопительно от **утверждённой**
+  суммы PO-строки (§5, правило 4): накопленное превышение ≤ 5% — Warning; > 5% — Hard Stop.
+- Бюджетный ключ — `(AccountCode, FiscalYear)`; distributions одного инвойса с одним ключом проверяются суммарно.
 - Year-end policy — вне scope.
 
 ### 2.4 Пороги и маршруты согласования
@@ -91,8 +93,11 @@ allowed departments 3000 и 6000. `G-FEMA-24` — закрыт.
 - Проводка инвойса по каждой distribution: Дт Expenditure (governmental) / Expense (enterprise) по
   комбинации; Кт AP `<fund>-2100`. Баланс проверяется по каждому фонду отдельно.
 - PO-backed добавляет бюджетную пару: Дт Reserve for Encumbrances `<fund>-2900` / Кт Encumbrances по комбинации.
-- Payment — только флаг eligibility; проводок оплаты нет.
-- Fiscal periods: 2026-09 открыт; 2026-08 закрыт.
+- Payment — только вычисляемый `ReadyForPaymentHandoff` (§5, правило 9); проводок оплаты нет.
+- Демо-дата документа (InvoiceDate = ServiceDate = PostingDate) и BusinessDate — **2026-06-15**, FY2026.
+  Fiscal periods: 2026-06 открыт; 2026-05 закрыт.
+- Seed-остатки таблицы 2.3 загружаются как `OpeningBalance` (AsOfDate 2026-06-01), а не как вымышленные проводки.
+- Суммы — только USD, `decimal(18,2)`; значение с более чем двумя знаками после запятой отклоняется, не округляется.
 
 ### 2.6 Вопросы к SME (на слайд)
 
@@ -110,7 +115,7 @@ year-end lapse vs carryforward для грантов; pooled cash и due to/from
 
 | Value object | Правила |
 |---|---|
-| `Money` | `decimal(18,2)`; арифметика возвращает новые значения; для сумм ≥ 0, для дельт — любой знак |
+| `Money` | `decimal(18,2)`, USD; больше двух знаков после запятой — ошибка создания; арифметика возвращает новые значения; для сумм ≥ 0, для дельт — любой знак |
 | `FundCode`, `DepartmentCode`, `ObjectCode`, `GrantCode` | непустая строка фиксированного формата |
 | `AccountCode` | `Fund`, `Department`, `Object`, `Grant?`; `ToString()` → `701-6000-53100-G-COPS-26` |
 | `FiscalYear` | `Start`, `End`, `Contains(date)`; из даты по правилу «1 июля» |
@@ -122,8 +127,12 @@ year-end lapse vs carryforward для грантов; pooled cash и due to/from
 |---|---|---|---|
 | `Fund` | `Code`, `Name`, `FundType`, `AccountingBasis`, `BudgetControlMode`, `GrantPolicy`, `AllowedDepartments`, `AllowedObjects`, `IsActive` | анемичный | — |
 | `Department`, `ObjectCode` | код, имя, `IsActive`; `ObjectCode.Category` (Expenditure / Asset / Liability / Budgetary) | анемичные | — |
-| `Grant` | `Code`, `Sponsor`, `IsFederal`, `Period`, `AllowedDepartments`, `AllowableObjects`, `Status` | `IsEligible(date, dept, object)` | — |
+| `Grant` | `Code`, `Sponsor`, `IsFederal`, `Period`, `AllowedDepartments`, `AllowableObjects`, `Status` | `CheckEligibility(serviceDate, dept, object)` | — |
 | `AccountCombination` | `Code: AccountCode`, `Status` (Pending / Active / Inactive), `EffectiveFrom/To`, `ApprovedBy` | `Approve(user)`, `Deactivate(date)` | нельзя `Approve` активную; `EffectiveTo ≥ EffectiveFrom` |
+
+Правила сочетаний выражены атрибутами `Fund` (`GrantPolicy`, `AllowedDepartments`, `AllowedObjects`) и
+`Grant` (`AllowedDepartments`, `AllowableObjects`) плюс whitelist `AccountCombination`; отдельная сущность
+`CombinationRule` и её интерпретатор не вводятся.
 
 Репозитории: `IFundRepository`, `IGrantRepository`, `IAccountCombinationRepository`,
 `IReferenceDataRepository`.
@@ -132,25 +141,32 @@ year-end lapse vs carryforward для грантов; pooled cash и due to/from
 
 | Агрегат | Состояние | Методы | Инварианты |
 |---|---|---|---|
-| `BudgetLine` | `Account`, `FiscalYear`, `ControlMode`, `Adopted`, `Amendments[]`, `Actuals`, `Encumbered`, `Reservations[]` (`Id`, `SourceRef`, `Amount`, `Status: Held / Committed / Released`), `RowVersion` | `Amend`, `Reserve → ReservationResult`, `Commit(reservationId)`, `Release(reservationId)`, `Snapshot()` | `Amended = Adopted + ΣAmendments`; `Available = Amended − Actuals − Encumbered − ΣHeld`; при Hard `Reserve` отказывает, если `Available < amount`; при Soft — резервирует с флагом `Overage`; `Commit`: Held → Committed, `Actuals += amount`; повторный `Commit` — ошибка |
-| `Encumbrance` | `PoLineRef`, `Account`, `Original`, `Liquidated`, `Released`, `Status`, `RowVersion` | `Liquidate(amount, sourceRef)`, `ReleaseRemainder(reason)` | `Remaining = Original − Liquidated − Released ≥ 0`; `Liquidate > Remaining` — ошибка |
-| `JournalEntry` | `SourceRef`, `PostedAt`, `PostedBy`, `Lines[]` (`Account`, `LedgerFamily: Financial / Budgetary`, `Debit`, `Credit`, `Description`) | фабрика `Create(lines, period, actor)`; неизменяем | по каждому фонду `ΣDebit = ΣCredit`; ≥ 2 строк; период открыт |
+| `BudgetLine` | `Account`, `FiscalYear`, `ControlMode`, `Adopted`, `Amendments[]`, `Actuals`, `Encumbered`, `Reservations[]` (`Id`, `InvoiceId`, `ContentVersion`, `Amount`, `IsOverage`, `Status: Held / Committed / Released`), `ChangeStamp`, `RowVersion` | `Open(OpeningBalance)`, `Amend`, `Reserve(invoiceId, contentVersion, amount) → ReservationResult`, `Commit(reservationId)`, `Release(reservationId)`, `ReleaseAllFor(invoiceId)`, `RecordLiquidation(amount)`, `HeldFor(invoiceId, contentVersion)`, `AvailableFor(invoiceId, contentVersion)` | `Amended = Adopted + ΣAmendments`; `Available = Amended − Actuals − Encumbered − ΣHeld`; `AvailableFor = Available + OwnHeld`; при Hard `Reserve` отказывает, если `AvailableFor < amount`; при Soft резервирует с `IsOverage`; `Commit`: Held → Committed, `Actuals += amount`; `RecordLiquidation`: `Encumbered −= amount`, `Actuals += amount`; любое изменение увеличивает `ChangeStamp` |
+| `Encumbrance` | `PoLineRef`, `Account`, `FiscalYear`, `Original`, `Liquidated`, `Released`, `Claims[]` (`Id`, `InvoiceId`, `ContentVersion`, `Amount`, `Status: Held / Consumed / Released`), `ChangeStamp`, `RowVersion` | `Claim(invoiceId, contentVersion, amount)`, `ConsumeClaim(claimId)`, `ReleaseClaim(claimId)`, `ReleaseAllFor(invoiceId)`, `ClaimableFor(invoiceId)`, `ReleaseRemainder(reason)` | `Remaining = Original − Liquidated − Released ≥ 0`; `Σ Held claims ≤ Remaining`; `ConsumeClaim`: `Liquidated += claim.Amount`; claim меняет только владелец (InvoiceId) |
+| `OpeningBalance` | `Account`, `FiscalYear`, `AsOfDate`, `InitialActuals`, `InitialEncumbered`, `SourceReference` | анемичный, неизменяемый | — |
+| `JournalEntry` | `SourceRef`, `PostingKind`, `PostingDate`, `PostedAt`, `PostedBy`, `Lines[]` (`Account`, `LedgerFamily: Financial / Budgetary`, `Debit`, `Credit`, `Description`) | фабрика `Create(sourceRef, kind, lines, period, actor, at)`; неизменяем | по каждой паре (фонд, семейство) `ΣDebit = ΣCredit`; ≥ 2 строк; период открыт; `(SourceRef, PostingKind)` уникален |
 | `FiscalPeriod` | `Year`, `Month`, `Status` | `Close()` | — |
 
-`BudgetLine.Encumbered` — денормализованная сумма, обновляется тем же сценарием, что ликвидирует
-`Encumbrance`.
+`BudgetLine.Encumbered` — денормализованная сумма; сверка: `Encumbered = Σ Encumbrance.Remaining` по ключу.
+`Actuals = OpeningBalance.InitialActuals + Σ` проведённых в прототипе расходов.
 
-Репозитории: `IBudgetLineRepository`, `IEncumbranceRepository`, `IJournalRepository`, `IFiscalPeriodRepository`.
+Инвариант Post по каждой бюджетной строке: `Actuals` растёт ровно на сумму distributions инвойса
+(`Commit` собственного резерва + `RecordLiquidation` захваченной части); `Encumbered` уменьшается на
+погашенные encumbrance claims; `Held` — на собственные резервы.
+
+Репозитории: `IBudgetLineRepository`, `IEncumbranceRepository`, `IOpeningBalanceRepository`, `IJournalRepository`, `IFiscalPeriodRepository`.
 
 ### 3.4 Payables
 
 | Агрегат | Состояние | Методы | Инварианты |
 |---|---|---|---|
-| `Vendor` | `Code`, `Name`, `Status` (Active / Debarred), `SamRegistered` | анемичный | — |
-| `PurchaseOrder` | `Number`, `VendorId`, `Status`, `Lines[]` (`LineNo`, `Account`, `Amount`) | анемичный (seed) | — |
-| `VendorInvoice` | `Number`, `VendorId`, `InvoiceDate`, `Total`, `PoRef?`, `Distributions[]` (`LineNo`, `Account`, `Amount`, `PoLineRef?`), `Status`, `Approvals[]` (`Role`, `UserId`, `Decision`, `At`, `EvaluationRef`), `Overrides[]` (`RuleId`, `UserId`, `Reason`, `At`), `LastEvaluationRef`, `ReservationRefs[]`, `CreatedBy`, `RowVersion` | `AddDistribution`, `RemoveDistribution`, `Submit(evalRef, reservations)`, `Approve(role, user, evalRef)`, `Override(ruleId, user, reason)`, `Reject`, `Post(evalRef)`, `MarkPayable()` | `ΣDistributions = Total` при `Submit`; редактируем только `Draft`; `Approve` — только ожидаемой ролью и не автором; `Post` — только из `Approved` |
+| `Vendor` | `Code`, `Name`, `Status` (Active / Inactive / Debarred), `SamRegistered` | анемичный | — |
+| `PurchaseOrder` | `Number`, `VendorId`, `Status`, `Lines[]` (`LineNo`, `Account`, `AuthorizedAmount`, `PostedAmount`, `BillingClaims[]` (`Id`, `InvoiceId`, `ContentVersion`, `Amount`, `Status: Held / Consumed / Released`)), `ChangeStamp`, `RowVersion` | `ClaimBilling(lineNo, invoiceId, contentVersion, amount)`, `ConsumeBillingClaim(claimId)`, `ReleaseBillingClaimsFor(invoiceId)`, `OtherActiveBillingClaims(lineNo, invoiceId)`, `LineRef(lineNo)` | `AuthorizedAmount > 0`; `ConsumeBillingClaim`: `PostedAmount += claim.Amount`; допустимость суммы проверяет конвейер (правило `PO_LIQUIDATION`) в той же транзакции под `RowVersion` |
+| `VendorInvoice` | `Number`, `NormalizedNumber`, `VendorId`, `InvoiceDate`, `ServiceDate`, `PostingDate`, `DueDate`, `Total`, `PoNumber?`, `Distributions[]` (`LineNo`, `Account`, `Amount`, `PoLineNo?`), `Status`, `ContentVersion`, `ApprovalCycleId`, `Approvals[]` (`CycleId`, `Role`, `Department?`, `UserId`, `Decision`, `EvaluationId`, `Reason?`, `At`), `Overrides[]` (`CycleId`, `EvaluationId`, `RuleId`, `RuleVersion`, `DistributionLine?`, `ContentVersion`, `UserId`, `Reason`, `At`), `PaymentHold`, `LastEvaluationId`, `CreatedBy`, `RowVersion` | `ReplaceContent(...)`, `Submit(evaluationId)`, `RecordApproval(role, department, user, evaluationId, at)`, `MarkApproved()`, `Override(...)`, `OpenNewApprovalCycle(reason)`, `Reject(user, reason, at)`, `Withdraw(user, reason, at)`, `Post(evaluationId, at)`, `SetPaymentHold(bool)`, `IsReadyForPaymentHandoff(vendorActive, businessDate)` | `ΣDistributions = Total` при `Submit`; содержимое меняется только в `Draft` и увеличивает `ContentVersion`; согласует не автор, одна роль+департамент — один раз за цикл; `Withdraw` — только автор, до `Post`; `Post` — только из `Approved`; история approvals/overrides не удаляется |
 
-Статусы: `Draft → Submitted → Approved → Posted → Payable`; `Rejected` из `Submitted` / `Approved`; `Rejected → Draft`.
+Статусы: `Draft → Submitted → Approved → Posted`; `Reject` и `Withdraw` из `Submitted` / `Approved` возвращают
+в `Draft`, закрывают цикл и открывают новый `ApprovalCycleId`. Статуса `Payable` нет — готовность к оплате
+вычисляется.
 
 Репозитории: `IVendorInvoiceRepository`, `IPurchaseOrderRepository`, `IVendorRepository`.
 
@@ -158,14 +174,17 @@ year-end lapse vs carryforward для грантов; pooled cash и due to/from
 
 | Тип | Что это | Состояние |
 |---|---|---|
-| `RuleDefinition` (агрегат, анемичный) | Запись о правиле: включённость, версия, параметры | `RuleId`, `Version`, `Step (1..8)`, `Layer (Core / Federal / State / Tenant)`, `Scope`, `Severity`, `Parameters` (json), `OverridableBy[]`, `Effective*`, `Message`, `Resolution` |
-| `ValidationSubject` (value object) | Все входы конвейера — снимки | `TransactionSnapshot` (тип, дата, сумма, vendor status, PO?, distributions); по distribution — `CombinationSnapshot`, `FundSnapshot`, `GrantSnapshot?`, `BudgetSnapshot`, `EncumbranceSnapshot?` (с `AmountToCheck`); `ApprovalsSoFar`, `OverridesSoFar`, `PeriodStatus`, `ExistingInvoiceNumbers` |
-| `ValidationPipeline` (доменный сервис) | `Evaluate(subject, rules, trigger) → EvaluationRecord` | без состояния; шаги — `IValidationStep` в `DomainServices/Steps/`; правила — классы в `DomainServices/Rules/` |
+| `RuleDefinition` (агрегат, анемичный) | Запись о правиле: включённость, версия, параметры | `RuleId`, `Version`, `Step (1..8)`, `Layer (Core / Federal / State / Tenant)`, `IsLocallyAdjustable`, `Severity?`, `Parameters` (json), `OverridableBy[]`, `Effective*`, `Message`, `Resolution` |
+| `ValidationSubject` (value object) | Все входы конвейера — снимки | `TransactionSnapshot` (ref, ContentVersion, ApprovalCycleId, даты, сумма, vendor, PO?, признак дубликата); по distribution — `CombinationSnapshot`, `FundSnapshot`, `GrantSnapshot?`, `EncumbranceSnapshot?`; по бюджетному ключу — `BudgetSnapshot` (`Amended`, `Actuals`, `Encumbered`, `Held`, `OwnHeld`, `AvailableForInvoice`, `RequiredNewBudget`, `ProjectedAvailable`); по PO-строке — `PoLineSnapshot` (`AuthorizedAmount`, `AlreadyPosted`, `OtherActiveClaims`, `CurrentInvoicePoAmount`, `CumulativeExcessPct`); `ActiveApprovals`, `ActiveOverrides`, `PeriodIsOpen`, `FingerprintAtLastApproval?` |
+| `ValidationPipeline` (доменный сервис) | `Evaluate(subject, ruleSet, trigger, actor, at) → EvaluationRecord` | без состояния; правила — классы в `DomainServices/Rules/` |
 | `ApprovalRouting`, `PostingEligibility` (доменные сервисы) | шаги 7 и 8 | без состояния |
-| `EvaluationRecord` (агрегат, неизменяемый) | Результат оценки | `Id`, `TransactionRef`, `TransactionVersion`, `Trigger`, `EvaluatedAt`, `EvaluatedBy`, `RuleSetVersions` (по слоям), `Outcomes[]`, `Overall`, `Capabilities`, `ApprovalRoute[]`, `PostingPreview[]`, `InputSnapshot` |
+| `EvaluationRecord` (агрегат, неизменяемый) | Результат оценки | `Id`, `TransactionRef`, `ContentVersion`, `ApprovalCycleId`, `Trigger`, `EvaluatedAt`, `EvaluatedBy`, `EngineVersion`, `AppliedRules[]` (`RuleId`, `Layer`, `Version`, `ParametersHash`), `RuleSetFingerprint`, `Outcomes[]`, `Overall`, `Capabilities`, `ApprovalRoute[]`, `PostingPreview[]`, `PostingCheck?`, `InputSnapshot` |
 
-Инварианты `EvaluationRecord`: `Overall = max(Outcomes.Severity)` с учётом overrides; `Capabilities` —
-функция от `Overall`; создаётся один раз, не изменяется.
+Инварианты `EvaluationRecord`: `Overall = max(Outcomes.Severity)` без применённых overrides; `Capabilities` —
+функция от `Overall` и `PostingCheck`; создаётся один раз, не изменяется.
+
+`RuleSetFingerprint` — SHA-256 по упорядоченному списку `(RuleId, Layer, Version, canonical Parameters)`
+всех применённых правил, включая не сработавшие, плюс `EngineVersion`.
 
 Репозитории: `IRuleDefinitionRepository`, `IEvaluationRecordRepository`.
 
@@ -189,48 +208,60 @@ year-end lapse vs carryforward для грантов; pooled cash и due to/from
 ### 4.1 Алгоритм
 
 ```
-Evaluate(subject, rules, trigger):
+Evaluate(subject, ruleSet, trigger, actor, at):
   for step in 1..6:
-      outcomes += step.Run(subject, rules.ForStep(step))
+      outcomes += rules of step (subject)
       if outcomes.Any(HardStop): break
-  route    = ApprovalRouting.Build(subject, outcomes)              // шаг 7, всегда
-  overall  = Aggregate(outcomes, subject.OverridesSoFar)
+  (outcomes, overall) = Aggregate(outcomes, subject.ActiveOverrides)   // override снимает только свой SoftStop
+  route    = ApprovalRouting.Build(subject, outcomes)                   // шаг 7, всегда
   preview  = overall ≤ SoftStop ? PostingPreview.Build(subject) : []
-  eligible = PostingEligibility.Check(...)                          // шаг 8, при trigger = Post
-  return EvaluationRecord(...)
+  check    = trigger == Post ? PostingEligibility.Check(...) : null      // шаг 8
+  return EvaluationRecord(..., ruleSet.AppliedRules, ruleSet.Fingerprint, ...)
 ```
 
 Разрешение конфликтов:
 1. Внутри шага — все правила шага выполняются, результат = строжайший.
 2. Между шагами — Hard Stop на шагах 1–6 прерывает; Soft / Warning накапливаются.
-3. Одинаковый `RuleId` в разных слоях — побеждает более специфичный: `Tenant > State > Federal > Core`.
-   Ослаблять severity правил `Federal` / `Core` нельзя.
+3. Одинаковый `RuleId` в нескольких слоях:
+   - правило с `IsLocallyAdjustable = false` (обязательные ограничения `Core` / `Federal`) не заменяется:
+     выполняются **все** действующие определения, итог — строжайший;
+   - правило с `IsLocallyAdjustable = true` заменяется определением более специфичного слоя
+     (`Tenant > State > Federal > Core`), внутри слоя — старшей версией. Ослабление запрещено и проверяется
+     типом правила при сохранении/seed (например, повышение `PROCUREMENT_THRESHOLD.threshold` над
+     вышестоящим слоем — отказ), а не только сравнением severity.
+   Это допущение демо, а не утверждение о правовой иерархии США.
 
-Override меняет агрегацию, не outcome: outcome остаётся `SoftStop`, `Overall` считается без него,
-override фиксируется в записи.
+Override меняет агрегацию, не outcome. Override привязан к `EvaluationId`, `RuleId` + `RuleVersion`,
+строке distribution, `ContentVersion` и активному `ApprovalCycleId`; на другую строку, версию содержания
+или цикл не переносится.
 
-Шаг 6 (encumbrance impact) вычислительно предшествует шагу 5: `AmountToCheck = amount − min(amount, remaining)`
-считается в `ValidationSubjectAssembler` и лежит в `EncumbranceSnapshot`; правило шага 6 отчитывается
-о ликвидации и излишке, правило шага 5 использует `AmountToCheck`.
+Шаг 6 (encumbrance impact) вычислительно предшествует шагу 5: сборщик снимков считает по каждой PO-строке
+`EligibleLiquidation = min(сумма distributions на PO-строку, ClaimableForInvoice)`, а по каждому бюджетному
+ключу `RequiredNewBudget = Σ amount − Σ EligibleLiquidation` и
+`ProjectedAvailable = AvailableForInvoice − RequiredNewBudget`. Правило шага 6 отчитывается о ликвидации и
+допуске, правило шага 5 использует `RequiredNewBudget` и `ProjectedAvailable`.
 
 ### 4.2 Правила демо
 
-| # | RuleId | Шаг | Layer | Severity | Проверяет | Параметры |
-|---|---|---|---|---|---|---|
-| 1 | `SEG_REQUIRED` | 1 | Core | Hard | Fund, Dept, Object заполнены; Grant — по `GrantPolicy` | — |
-| 2 | `SEG_GRANT_FORBIDDEN` | 1 | Core | Hard | Grant при `GrantPolicy = Forbidden` | — |
-| 3 | `COA_COMBINATION_ACTIVE` | 2 | Core | Hard | комбинация в whitelist, Active, в effective-окне | — |
-| 4 | `FUND_DEPT_OBJECT_ALLOWED` | 3 | Tenant | Hard | dept ∈ `Fund.AllowedDepartments`, object ∈ `Fund.AllowedObjects` | — |
-| 5 | `GRANT_ELIGIBLE` | 3 | Federal | Hard | грант активен, дата в периоде, dept и object разрешены | — |
-| 6 | `VENDOR_ELIGIBLE` | 4 | Federal | Hard | vendor не Debarred; для федерального гранта — `SamRegistered` | — |
-| 7 | `PROCUREMENT_THRESHOLD` | 4 | State | Soft | non-PO и total ≥ threshold | `threshold: 25000`; override `FinanceDirector` |
-| 8 | `INVOICE_DUPLICATE` | 4 | Core | Hard | vendor + номер уже есть (не Rejected) | — |
-| 9 | `BUDGET_AVAILABILITY` | 5 | Core | по фонду | `available < AmountToCheck` → Hard при `ControlMode = Hard`, Soft при Soft | override (Soft): `BudgetOfficer`, `FinanceDirector` |
-| 10 | `BUDGET_LOW_REMAINING` | 5 | Tenant | Warning | `(available − amount) / amended < pct` | `pct: 0.10` |
-| 11 | `PO_LIQUIDATION` | 6 | Core | Warning / Hard | излишек ≤ tolerance → Warning; > tolerance → Hard | `tolerance_pct: 0.05` |
+| # | RuleId | Шаг | Layer | Adjustable | Severity | Проверяет | Параметры |
+|---|---|---|---|---|---|---|---|
+| 1 | `SEG_REQUIRED` | 1 | Core | нет | Hard | Grant — по `GrantPolicy` (Fund/Dept/Object гарантированы типом) | — |
+| 2 | `SEG_GRANT_FORBIDDEN` | 1 | Core | нет | Hard | Grant при `GrantPolicy = Forbidden` | — |
+| 3 | `COA_COMBINATION_ACTIVE` | 2 | Core | нет | Hard | комбинация в whitelist, Active, в effective-окне на InvoiceDate | — |
+| 4 | `FUND_DEPT_OBJECT_ALLOWED` | 3 | Tenant | нет | Hard | dept ∈ `Fund.AllowedDepartments`, object ∈ `Fund.AllowedObjects` | — |
+| 5 | `GRANT_ELIGIBLE` | 3 | Federal | нет | Hard | грант активен, ServiceDate в периоде, dept и object разрешены | — |
+| 6 | `VENDOR_ELIGIBLE` | 4 | Federal | нет | Hard | vendor Active (не Debarred / Inactive); для федерального гранта — `SamRegistered` | — |
+| 7 | `PROCUREMENT_THRESHOLD` | 4 | State | да | Soft | non-PO и total ≥ threshold | `threshold: 25000`; override `FinanceDirector` |
+| 8 | `INVOICE_DUPLICATE` | 4 | Core | нет | Hard | тот же vendor + `NormalizedNumber` у другого инвойса (любой статус) | — |
+| 9 | `BUDGET_AVAILABILITY` | 5 | Core | нет | по фонду | `ProjectedAvailable < 0` по бюджетному ключу → Hard при `ControlMode = Hard`, Soft при Soft; нет бюджетной строки → Hard | override (Soft): `BudgetOfficer`, `FinanceDirector` |
+| 10 | `BUDGET_LOW_REMAINING` | 5 | Tenant | да | Warning | `0 ≤ ProjectedAvailable / Amended < pct` | `pct: 0.10` |
+| 11 | `PO_LIQUIDATION` | 6 | Core | да (только tolerance) | Allowed / Warning / Hard | PO-строка открыта, `AuthorizedAmount > 0`; `CumulativeExcessPct` = 0 → Allowed (информационный), ≤ tolerance → Warning, > tolerance → Hard | `tolerance_pct: 0.05` |
+| 12 | `APPROVAL_ROUTE` | 7 | Tenant | да | — | параметры маршрута | `finance_director_threshold: 50000` |
 
-Синтетический outcome `BUDGET_CONCURRENCY` (Hard) — при конфликте резервирования на Submit.
-Синтетический outcome `REVALIDATION_REQUIRED` (Hard) — при смене версий правил после Approve.
+Синтетический outcome `REVALIDATION_REQUIRED` (Hard) выдаёт `PostingEligibility`, если fingerprint или
+`ContentVersion` отличаются от активного цикла согласования. Он снимается новым согласованием
+по актуальному fingerprint, а не является вечным блоком. Конфликт конкурентности не превращается в outcome:
+команда возвращает retryable `Conflict`.
 
 ### 4.3 Result model
 
@@ -238,28 +269,29 @@ override фиксируется в записи.
 Severity: Allowed < Warning < SoftStop < HardStop
 
 RuleOutcome
-  RuleId, RuleVersion, Step, Layer, DistributionLine?
+  RuleId, RuleVersion, Step, Layer, DistributionLine?, BudgetKey?
   Severity
-  Inputs   (json)     { amended, actuals, encumbered, held, amount }
-  Computed (json)     { available, overage }
+  Inputs   (json)     { amended, actuals, encumbered, held, ownHeld, requiredNewBudget, ... }
+  Computed (json)     { availableForInvoice, projectedAvailable, overage, ... }
   Message, Resolution
-  FinancialImpact     { available_after }
-  OverridableBy[], OverriddenBy? { user, reason, at }
+  OverridableBy[], OverriddenBy? { evaluationId, user, reason, at }
 ```
 
-| Overall | Save | Submit | Approve | Post | Pay |
+| Overall | Save | Submit | Approve | Post | Payment handoff |
 |---|---|---|---|---|---|
-| Allowed | ✓ | ✓ | ✓ | ✓ при eligibility | ✓ при Posted ∧ vendor payable |
-| Warning | ✓ | ✓ | ✓ | ✓ при eligibility | ✓ при Posted ∧ vendor payable |
-| SoftStop (не снят) | ✓ | ✓ | ✗ | ✗ | ✗ |
-| SoftStop (снят) | ✓ | ✓ | ✓ | ✓ при eligibility | ✓ при Posted ∧ vendor payable |
+| Allowed | ✓ | ✓ | ✓ | ✓ при `PostingCheck` | вычисляется: Posted ∧ vendor Active ∧ ¬PaymentHold ∧ DueDate ≤ BusinessDate |
+| Warning | ✓ | ✓ | ✓ | ✓ при `PostingCheck` | то же |
+| SoftStop (не снят) | ✓ | ✓ (Soft-фонд удерживает резерв с дефицитом) | ✗ | ✗ | ✗ |
+| SoftStop (снят) | ✓ | ✓ | ✓ | ✓ при `PostingCheck` | то же |
 | HardStop | ✓ | ✗ | ✗ | ✗ | ✗ |
 
-`PostingEligibility`: `Overall ≤ Warning` (с overrides) ∧ все роли маршрута дали Approved ∧ период
-открыт ∧ preview сбалансирован по фондам ∧ `RuleSetVersions` совпадают с оценкой при последнем Approve.
+`PostingEligibility`: `Overall ≤ Warning` (с overrides) ∧ каждый шаг маршрута удовлетворён согласованием
+**активного** цикла (DepartmentHead — только своего департамента) ∧ период PostingDate открыт ∧ preview
+сбалансирован по каждой паре (фонд, семейство) ∧ `ContentVersion` и `RuleSetFingerprint` совпадают с теми,
+по которым было последнее согласование цикла.
 
-`ApprovalRouting`: по правилам 2.4; для каждого согласующего — `WhatTheySee` (distributions, бюджетный
-результат, сработавшие правила).
+`ApprovalRouting`: по правилам 2.4; шаг маршрута = (роль, департамент?); для каждого — причина и признак
+удовлетворённости согласованием активного цикла.
 
 ### 4.4 Explanation — отдельно от решения
 
@@ -288,12 +320,15 @@ RuleOutcome
 
 | Сервис | Методы |
 |---|---|
-| `IInvoiceAppService` | `CreateDraft`, `CreateFromPreset`, `UpdateDraft`, `Validate`, `Submit`, `GetInvoice`, `ListInvoices` |
-| `IApprovalAppService` | `GetQueue`, `Approve`, `Reject`, `Override` |
-| `IPostingAppService` | `Post`, `GetPostingPreview` |
-| `IExplanationAppService` | `Explain(evaluationId, audience)`, `GetAuditTrail(invoiceId)` |
-| `IBudgetAppService` | `Amend(account, amount, reference)`, `ListBudgetLines`, `GetBudgetLine` |
-| `IReferenceAppService` | `GetSegments`, `GetCombinations`, `GetRules` |
+| `IInvoiceAppService` | `CreateDraft`, `CreateFromPreset`, `UpdateDraft`, `Validate`, `Submit`, `Withdraw`, `SetPaymentHold`, `GetInvoice`, `ListInvoices` |
+| `IApprovalAppService` | `GetQueue`, `Approve`, `Reject`, `Override(evaluationId, ruleId, distributionLine?, expectedRowVersion, reason)` |
+| `IPostingAppService` | `Post`, `GetJournal` |
+| `IExplanationAppService` | `Explain(evaluationId, audience)`, `GetEvaluationHistory(invoiceId)`, `GetAuditTrail(invoiceId)` |
+| `IBudgetAppService` | `Amend(account, fiscalYear, amount, reference, effectiveDate)`, `ListBudgetLines` |
+| `IReferenceAppService` | `GetSegments`, `GetCombinations`, `GetRules`, `GetVendors`, `GetPurchaseOrders` |
+
+Каждая mutating-команда несёт `CommandId` и `ExpectedRowVersion` и возвращает `CommandResult`:
+`Accepted` / `Refused` (бизнес-отказ с оценкой) / `Conflict` (retryable) / `Forbidden`.
 
 `ValidationSubjectAssembler` — вспомогательный компонент Application, собирает снимки из четырёх контекстов.
 
@@ -362,47 +397,60 @@ tests/
 | Схема | Таблицы |
 |---|---|
 | `coa` | Funds, Departments, ObjectCodes, Grants, AccountCombinations |
-| `ledger` | BudgetLines, BudgetAmendments, BudgetReservations, Encumbrances, JournalEntries, JournalLines, FiscalPeriods |
-| `ap` | Vendors, PurchaseOrders, PurchaseOrderLines, VendorInvoices, InvoiceDistributions, InvoiceApprovals, InvoiceOverrides |
-| `validation` | RuleDefinitions, EvaluationRecords (json-колонки: Outcomes, InputSnapshot, PostingPreview, ApprovalRoute), Explanations |
+| `ledger` | BudgetLines, BudgetAmendments, BudgetReservations, Encumbrances, EncumbranceClaims, OpeningBalances, JournalEntries, JournalLines, FiscalPeriods |
+| `ap` | Vendors, PurchaseOrders, PurchaseOrderLines, PoBillingClaims, VendorInvoices, InvoiceDistributions, InvoiceApprovals, InvoiceOverrides, ProcessedCommands |
+| `validation` | RuleDefinitions, EvaluationRecords (json-колонки: AppliedRules, Outcomes, InputSnapshot, PostingPreview, ApprovalRoute, PostingCheck), Explanations |
 | `audit` | Events |
 
-FK — только внутри схемы. `rowversion` на BudgetLines, Encumbrances, VendorInvoices. `EvaluationRecords`
-и `audit.Events` — только INSERT.
-Value objects — `OwnsOne` / `HasConversion`; `AccountCode` — четыре колонки + вычисляемая `FullCode`.
+FK — только внутри схемы. `rowversion` на BudgetLines, Encumbrances, PurchaseOrders, VendorInvoices;
+`ChangeStamp` на корнях с owned-коллекциями гарантирует UPDATE корня при добавлении резерва/claim.
+Уникальные индексы: `ap.VendorInvoices (VendorId, NormalizedNumber)`, `ledger.JournalEntries (SourceRef, PostingKind)`,
+`ap.ProcessedCommands (CommandId)`. `EvaluationRecords`, `Explanations`, `audit.Events`, `JournalEntries` —
+только INSERT: interceptor защищает EF-путь, права runtime-пользователя БД запрещают UPDATE/DELETE
+(interceptor не объявляется полной защитой). `AccountCode` — одна колонка `nvarchar(64)` через конвертер.
 
-**Tenancy:** БД `GovErp_Master` (тенанты, пользователи, роли, connection strings); БД `GovErp_Springfield`,
-`GovErp_Shelbyville`. `ITenantContext { TenantId, ConnectionString }` — scoped, из claims после логина;
-`GovErpDbContext` конфигурируется из него. Миграции при старте — Master, затем цикл по тенантам; seed.
+**Tenancy:** БД `GovErp_Master` (тенанты, пользователи, роли, имя БД тенанта); БД `GovErp_Springfield`,
+`GovErp_Shelbyville`. Это логическая изоляция на одном сервере, не физическая. `TenantContext`
+инициализируется один раз на операцию из аутентифицированного principal и серверного каталога; tenantId из
+формы/URL не определяет connection string. Runtime-пользователь БД на тенанта имеет доступ только к своей БД;
+миграции выполняются отдельным migration-пользователем. Миграции и seed при старте — Master, затем цикл по
+тенантам; seed только в пустую БД.
+
+**Operation scope:** `DbContext` не живёт весь Blazor circuit — scope и `DbContext` создаются на каждую
+команду/запрос; повтор после конфликта — в новом scope.
 
 **Auth:** cookie auth, `IUserRepository` в Master, `PasswordHasher<T>`, роли → claims, `AuthorizeView`.
 Без регистрации и восстановления.
 
 **Explanation:** см. 4.4. Ключи из env; провайдер из конфигурации.
 
-**Docker:** `docker-compose.yml` — `sqlserver` (mssql/server:2022, healthcheck) + `web` (multi-stage
-Dockerfile). Web ждёт healthcheck, при старте выполняет миграции и seed. Порт 8080. `.env`:
-`SA_PASSWORD`, опционально `ANTHROPIC_API_KEY`, `Explanation__Provider`.
+**Docker:** `docker-compose.yml` — `sqlserver` (mssql/server:2022, healthcheck, именованный volume) + `web`
+(multi-stage Dockerfile). Web ждёт healthcheck, при старте применяет миграции и seed только в пустые БД.
+Порт 8080. `.env`: `SA_PASSWORD` (только для migration-пользователя), пароли runtime-пользователей тенантов,
+опционально `ANTHROPIC_API_KEY`, `Explanation__Provider`. Обычный restart сохраняет данные; `docker compose down -v`
+удаляет их и в штатную проверку не входит. Сброс демо — только команда `demo-reset`.
 
 ### 6.3 UI (Blazor Server, Bootstrap из шаблона)
 
 | Страница | Роли | Содержание |
 |---|---|---|
 | `/login` | все | форма; список seed-пользователей |
-| `/invoices` | все | список; кнопки пресетов «Non-PO», «PO-backed», «Multi-fund» → Draft |
-| `/invoices/{id}` | ApClerk — правка; остальные — просмотр | header, distributions с живым итогом, действия по статусу; вкладки **Results**, **Posting Preview**, **Approval Route**, **Audit**, **Explain** |
-| `/approvals` | согласующие роли | очередь; Approve / Reject / Override с причиной; предупреждение с diff, если оценка изменилась |
-| `/budget` | BudgetOfficer, FinanceDirector | строки с amended / actuals / encumbered / held / available; «Amend» |
-| `/rules` | все | RuleDefinition по шагам и слоям — только чтение |
+| `/invoices` | все | список; кнопки пресетов «Non-PO», «PO-backed», «Multi-fund» → Draft с уникальным номером |
+| `/invoices/{id}` | ApClerk — правка и Withdraw; остальные — просмотр | header (три даты, DueDate, PaymentHold), distributions с живым итогом, действия по статусу и Capabilities; вкладки **Results**, **Posting Preview**, **Approval Route**, **Audit**, **Explain** |
+| `/approvals` | согласующие роли | очередь по своей роли и департаменту; Approve / Reject / Override с причиной; если оценка изменилась — показ разницы outcome'ов, а не только severity |
+| `/budget` | BudgetOfficer, FinanceDirector | строки с opening / amended / actuals / encumbered / held / available; «Amend» с FY и effective date |
+| `/rules` | все | RuleDefinition по шагам и слоям, adjustable-флаг, текущий fingerprint — только чтение |
+
+Все кнопки действий удерживают `CommandId` до получения ответа; повторное нажатие не создаёт вторую мутацию.
 
 ### 6.4 Демо-путь (5 минут)
 
-1. ApClerk → пресет Non-PO → Validate → Hard Stop −13,000 → Explain
-2. BudgetOfficer → `/budget` → Amend +13,000 → Validate → Soft Stop (procurement) → Submit
-3. FinanceDirector → Override + Approve; DepartmentHead (Fire), GrantsManager → Approve → Post → журнал, `/budget`: actuals 292k / available 0
-4. Пресет PO-backed → Validate → Allowed, две пары проводок, available не изменился
+1. `ap.clerk` → пресет Non-PO → Validate → Hard Stop, превышение 13,000 → Explain
+2. `budget.officer` → `/budget` → Amend +13,000 (FY2026, 2026-06-15) → `ap.clerk`: Validate → Soft Stop (procurement) → Submit (резерв 160,000)
+3. `finance.director` → Override `PROCUREMENT_THRESHOLD` → итог **Warning** (остаток 0 < 10%) → Approve; `fire.chief`, `grants.manager` → Approve → `finance.director` → Post → журнал, `/budget`: actuals 292,000 / held 0 / available 0
+4. Пресет PO-backed → Validate → Allowed, две пары проводок (Budgetary + Financial), после Post: actuals 260,000, encumbered 0, available 240,000
 5. Пресет Multi-fund → три баланса, Expense vs Expenditure, Soft Stop на 101
-6. Audit по инвойсу из 1–3: четыре оценки, версии, override, кто и когда
+6. Audit по инвойсу из 1–3: оценки с fingerprint, override, согласования цикла, кто и когда; `ReadyForPaymentHandoff` на BusinessDate 2026-06-15
 
 ---
 
@@ -421,23 +469,41 @@ Dockerfile). Web ждёт healthcheck, при старте выполняет м
 `Scenario_NonPo_701_AfterAmendment13000_IsSoftStop_ProcurementThreshold`,
 `Scenario_NonPo_701_AfterAmendment_WithOverride_IsWarning`,
 `Scenario_PoBacked_WithinRemaining_IsAllowed_AvailableUnchanged`,
-`Scenario_PoBacked_Excess3Pct_IsWarning`, `Scenario_PoBacked_Excess8Pct_IsHardStop`,
+`Scenario_PoBacked_CumulativeExcess3Pct_IsWarning`, `Scenario_PoBacked_CumulativeExcess8Pct_IsHardStop`,
 `Scenario_MultiFund_101_Overage_IsSoftStop_202_501_Allowed`, `Scenario_MultiFund_501_UsesExpenseNotExpenditure`,
+`Scenario_SameBudgetAcrossDistributions_IsHardStop13000`, `Scenario_OwnReservationIsNotChargedTwice`,
 по одному `Rule_*` на каждое правило, `Pipeline_HardStopAtStep2_SkipsSteps3To6_StillBuildsRoute`,
-`Pipeline_SameRuleId_TenantLayer_OverridesStateLayer`, `Pipeline_Override_ChangesOverall_NotOutcome`,
-`Capabilities_*`, `PostingEligibility_RuleSetVersionChanged_RequiresRevalidation`,
-`PostingPreview_BalancedPerFund`, `PostingPreview_PoBacked_HasBudgetaryReversalLines`.
+`Resolution_AdjustableRule_TenantLayerReplacesState`, `Resolution_NonAdjustableRule_AllLayersEvaluated`,
+`Resolution_WeakeningThreshold_IsRejected`, `Fingerprint_ChangesWithParameters_NotWithOrder`,
+`Pipeline_Override_ChangesOverall_NotOutcome`, `Override_OtherLineOrContentVersion_DoesNotApply`,
+`Capabilities_*`, `PostingEligibility_FingerprintChanged_RequiresReapproval`,
+`PostingEligibility_DepartmentHeadOfOtherDepartment_DoesNotSatisfyStep`,
+`PostingPreview_BalancedPerFundAndFamily`, `PostingPreview_PoBacked_HasBudgetaryReversalLines`.
 
-Ключевые Application-тесты: `Submit_TwoParallelInvoices_OneBudgetLine_ExactlyOneSucceeds` (10 повторов),
-`Submit_HardStop_CreatesNoReservation`, `Submit_Then_Reject_ReleasesReservations`,
-`Post_Commits_Liquidates_WritesJournal_InOneTransaction`, `Post_JournalUnbalanced_RollsBackEverything`,
-`Post_WhenRuleVersionChangedAfterApprove_IsRefused`, `Approve_ByAuthor_IsRefused`,
-`Approve_WhenEvaluationWorsened_IsRefused`, `Tenant_Shelbyville_CannotSeeSpringfieldInvoices`,
-`EvaluationRecord_Update_IsRejected`, `Explanation_LlmFails_FallsBackToTemplate_AndRecordsReason`,
-`Explanation_ProviderTemplate_NeverCallsChatClient`.
+Обязательные интеграционные тесты (настоящий SQL Server; гонки синхронизируются барьером после чтения,
+операции — в независимых scope):
+
+| Тест | Условия | Ожидаемый результат |
+|---|---|---|
+| `OwnReservationIsNotChargedTwice` | Hard, available 147,000; Submit 100,000; Approve; Post | нет повторного дефицита; после Post available 47,000 |
+| `SameBudgetAcrossDistributions` | две строки по 80,000 на один бюджетный ключ, available 147,000 | HardStop 13,000; ни одного Held |
+| `ParallelBudgetSubmits` | два инвойса по 100,000 при available 147,000 | один Submitted; Held 100,000; второй — отказ или Conflict |
+| `ParallelPoClaims` | два инвойса на 96,000 при остатке PO 96,000 и свободном бюджете 0 | только один захватывает PO |
+| `PoPostingTotals` | 500,000 / 100,000 / 160,000; инвойс 160,000 | actuals 260,000; encumbered 0; available 240,000 |
+| `MixedPostingTotals` | остаток PO 96,000; инвойс 100,000; излишек в допуске | actuals +100,000; encumbered −96,000; available −4,000 |
+| `AtomicSubmitFailure` | ошибка на второй бюджетной строке | нет частичных резервов/claims/Submitted |
+| `AtomicPostFailure` | ошибка при записи журнала | бюджет, PO, статус не изменились |
+| `SameCommandRepeated` | тот же CommandId + payload дважды | одна мутация, один receipt, один журнал |
+| `SameCommandDifferentPayload` | тот же CommandId, другой payload | Conflict |
+| `ReapprovalAfterRuleChange` | Approve v1; новое правило; Approve v2; Post | Post возможен после актуального согласования |
+| `WithdrawReleasesEverything` | Submitted PO-backed инвойс; Withdraw автором | Held, encumbrance и billing claims освобождены; статус Draft; история согласований сохранена |
+| `DuplicateNumberRace` | два Create с одним vendor + номером (разный регистр/пробелы) | один успешен, второй — отказ по уникальному индексу |
+| `TenantIsolation` | `shelby.clerk` читает инвойсы / Id из Springfield | пусто / NotFound |
+| `AppendOnlyViaEf` | изменение EvaluationRecord через DbContext | исключение interceptor'а |
+| `ExplanationTemplateNeverCallsChatClient`, `ExplanationLlmFailureFallsBack` | Template / сбой LLM | текст Template, `FallbackReason` записан |
 
 Архитектурные: Domain не ссылается на EF / ASP.NET и на другие контексты; `ValueObjects/` — неизменяемые
-records; `DomainServices/` — без изменяемых полей; Application не отдаёт наружу `Entities/`;
+records; `DomainServices/` — без изменяемых полей; UI-facing app-сервисы не отдают наружу `Entities/` (порты репозиториев и генератора доменные типы принимают закономерно);
 Infrastructure ссылается только из Web и тестов.
 
 Blazor-компоненты не тестируются; демо-путь проверяется вручную по чеклисту.
