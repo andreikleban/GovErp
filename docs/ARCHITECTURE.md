@@ -31,10 +31,14 @@ Save → Submit → Approve → Post с перевалидацией; пишет
 | **GE-8** | Маркерные интерфейсы `IEntity` / `IAggregateRoot` не вводятся | Нет механизма, который бы на них опирался (`DDD-11`). Пересмотреть при введении обобщённых ограничений на репозитории |
 | **GE-9** | Конвейер валидации — чистый доменный сервис: вход `ValidationSubject` (снимки), выход `EvaluationRecord`; репозитории других контекстов читает `ValidationSubjectAssembler` в слое сценариев | Конкретизирует `DDD-13.1`, `DDD-14.3`. Делает решение детерминированным и тестируемым без базы |
 | **GE-10** | Правила — типизированный код с параметрами из `RuleDefinition`; DSL и интерпретатор правил не вводятся | Объяснимость и тестируемость важнее гибкости. Пересмотреть, если тенанты потребуют собственные правила без релиза |
-| **GE-11** | Порядок шагов конвейера фиксирован (1..8); конфигурируется включённость, severity и параметры правил по слоям `Core / Federal / State / Tenant` | Конфликт одного `RuleId` в разных слоях — побеждает более специфичный; ослаблять `Core` / `Federal` нельзя |
-| **GE-12** | `EvaluationRecord` и `audit.Events` — только добавление; UPDATE / DELETE отклоняются interceptor'ом | Воспроизводимость решения через годы — требование, не пожелание |
+| **GE-11** | Порядок шагов конвейера фиксирован (1..8); конфигурируются включённость, severity и параметры правил по слоям `Core / Federal / State / Tenant` | Правило с `IsLocallyAdjustable = false` не заменяется локальным слоем — выполняются все действующие определения, побеждает строжайший результат. Адаптируемое правило заменяется более специфичным слоем; ослабление параметров проверяет тип правила при сохранении. Допущение демо, не правовая иерархия |
+| **GE-12** | `EvaluationRecord`, `Explanations`, `JournalEntries`, `audit.Events` — только добавление | Interceptor защищает EF-путь; права runtime-пользователя БД запрещают UPDATE/DELETE этих таблиц. Interceptor не объявляется полной защитой |
 | **GE-13** | Объяснения генерируются только из сохранённого `EvaluationRecord` через порт `IExplanationGenerator`; LLM-провайдер — через `Microsoft.Extensions.AI.IChatClient`, выбирается конфигурацией | Текст объяснения архитектурно не может повлиять на решение. Свой интерфейс над `IChatClient` не вводится (`DDD-15`) |
-| **GE-14** | Резервирование бюджета (`BudgetLine.Reserve`) происходит на Submit, фиксация (`Commit`) — на Post | Защита от двойного списания не зависит от транзакционности Post |
+| **GE-14** | Submit атомарно создаёт бюджетные резервы, encumbrance claims и PO billing claims, принадлежащие `InvoiceId + ContentVersion`; Post погашает именно их; Reject/Withdraw освобождают | Собственный резерв не вычитается повторно при Approve/Post (`AvailableForInvoice = Available + OwnHeld`). Конфликт `rowversion` — rollback и один повтор в новом scope, затем retryable Conflict |
+| **GE-15** | Версия набора правил — `RuleSetFingerprint` (SHA-256 по всем применённым `RuleId/Layer/Version/Parameters` + версия engine), а не максимум версии по слою | Смена fingerprint или `ContentVersion` открывает новый `ApprovalCycleId`; Post возможен после согласования по актуальному fingerprint |
+| **GE-16** | Mutating-команды идемпотентны по `CommandId` + `RequestHash`; receipt в `ap.ProcessedCommands` сохраняется в той же транзакции | Тот же payload — сохранённый результат; другой payload под тем же ключом — Conflict. Проверки статуса недостаточно |
+| **GE-17** | PO billing claim (полная сумма PO-backed инвойса) живёт в Payables на `PurchaseOrderLine`; encumbrance claim (ликвидируемая часть) — в Ledger на `Encumbrance` | Утверждённая и выставленная сумма PO — понятия закупки; остаток резерва бюджета — понятие книги. Обе меняются в одной транзакции Submit/Post (GE-E1) |
+| **GE-18** | `DbContext` и tenant scope создаются на каждую операцию, не на Blazor circuit; тенант берётся только из аутентифицированного principal и серверного каталога | БД на тенанта — логическая изоляция на одном сервере; runtime-пользователь БД видит только свою БД, миграции — отдельным пользователем |
 
 ---
 
@@ -42,9 +46,9 @@ Save → Submit → Approve → Post с перевалидацией; пишет
 
 | Контекст | Предметная область | Хранилище |
 |---|---|---|
-| `ChartOfAccounts` | Сегменты плана счетов, гранты, допустимые комбинации, правила комбинаций | схема `coa` |
-| `Ledger` | Бюджетные строки и резервы, encumbrances, журнал проводок, финансовые периоды | схема `ledger` |
-| `Payables` | Поставщики, PO, инвойсы с распределениями, согласованиями и статусом | схема `ap` |
+| `ChartOfAccounts` | Сегменты плана счетов, гранты, допустимые комбинации (whitelist); ограничения сочетаний — атрибуты фондов и грантов | схема `coa` |
+| `Ledger` | Бюджетные строки и резервы, encumbrances и их claims, начальные остатки, журнал проводок, финансовые периоды | схема `ledger` |
+| `Payables` | Поставщики, PO с billing claims, инвойсы с распределениями, циклами согласований, статусом; receipts команд | схема `ap` |
 | `Validation` | Определения правил, конвейер, записи оценок | схема `validation` |
 
 Ссылок между контекстами нет (`DDD-6`). Обмен — оркестрацией в слое сценариев (`DDD-14.3`).
@@ -123,11 +127,13 @@ Domain.Shared ──► BCL
 | Domain без фреймворков (`CA-2`) | `Architecture.Tests`: Domain не ссылается на `Microsoft.EntityFrameworkCore*`, `Microsoft.AspNetCore*` |
 | Неизменяемость значений (`DDD-7.2`) | `Architecture.Tests`: типы в `ValueObjects/` — records без изменяемых свойств |
 | Доменные сервисы без состояния (`DDD-13.1`) | `Architecture.Tests`: типы в `DomainServices/` без изменяемых полей экземпляра |
-| DTO наружу (`CA-10`) | `Architecture.Tests`: публичные методы Application не возвращают типы из `Entities/` |
+| DTO наружу (`CA-10`) | `Architecture.Tests`: методы UI-facing `I*AppService` не принимают и не возвращают типы из `Entities/` |
 | Инварианты агрегатов (`DDD-8`) | `Domain.*.Tests` |
-| Append-only (`GE-12`) | `Application.Web.Tests`: `EvaluationRecord_Update_IsRejected` |
-| Конкурентность (`GE-1`, `GE-14`) | `Application.Web.Tests`: `Submit_TwoParallelInvoices_OneBudgetLine_ExactlyOneSucceeds` |
-| Изоляция тенантов (`GE-6`) | `Application.Web.Tests`: `Tenant_Shelbyville_CannotSeeSpringfieldInvoices` |
+| Append-only (`GE-12`) | `Application.Web.Tests`: `AppendOnlyViaEf`; скрипт прав runtime-пользователя БД |
+| Конкурентность и атомарность (`GE-1`, `GE-14`, `GE-E1`) | `Application.Web.Tests`: `ParallelBudgetSubmits`, `ParallelPoClaims`, `AtomicSubmitFailure`, `AtomicPostFailure`, `OwnReservationIsNotChargedTwice` |
+| Идемпотентность (`GE-16`) | `Application.Web.Tests`: `SameCommandRepeated`, `SameCommandDifferentPayload` |
+| Повторное согласование (`GE-15`) | `Application.Web.Tests`: `ReapprovalAfterRuleChange` |
+| Изоляция тенантов (`GE-6`, `GE-18`) | `Application.Web.Tests`: `TenantIsolation` |
 | Форматирование | `.editorconfig`, `dotnet format --verify-no-changes` в сборке |
 
 ---

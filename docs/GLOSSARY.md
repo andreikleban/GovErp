@@ -17,7 +17,11 @@
 | **Encumbrance** | `Encumbrance` | Резерв бюджета под принятое обязательство (PO), по которому счёт ещё не пришёл |
 | **Outstanding encumbrances** | `BudgetLine.Encumbered` | Сумма открытых encumbrances по бюджетной строке |
 | **Liquidation** | `Encumbrance.Liquidate` | Снятие резерва при приходе инвойса по PO; резерв превращается в actuals |
-| **Reservation** (Held) | `BudgetLine.Reservations`, `ReservationStatus.Held` | Внутренний резерв движка под инвойс, взятый на Submit до Post. Не бухгалтерский термин, а механизм защиты от двойного списания |
+| **Reservation** (Held) | `BudgetLine.Reservations`, `ReservationStatus.Held` | Резерв бюджета под новую (не ликвидируемую) часть инвойса, взятый на Submit и принадлежащий `InvoiceId + ContentVersion`. Не бухгалтерский термин, а механизм защиты от двойного списания |
+| **Own held** | `BudgetLine.HeldFor` | Резервы этого же инвойса; при перевалидации прибавляются к available, чтобы не вычесть резерв дважды |
+| **Encumbrance claim** | `Encumbrance.Claims` | Захват части остатка encumbrance инвойсом на Submit; погашается на Post (ликвидация) |
+| **PO billing claim** | `PurchaseOrderLine.BillingClaims` | Захват полной суммы PO-backed инвойса по PO-строке; защищает накопительный допуск от утверждённой суммы PO |
+| **Opening balance** | `OpeningBalance` | Начальный снимок actuals и encumbrances на дату загрузки; не проводка |
 | **Available budget** | `BudgetLine.Available` | `Amended − Actuals − Encumbered − ΣHeld` |
 | **Hard / Soft budget control** | `BudgetControlMode` | Hard — превышение блокирует; Soft — превышение даёт Soft Stop, снимаемый уполномоченным |
 | **General Ledger (GL)** | `JournalEntry`, `JournalLine` | Главная книга; проводки по двойной записи |
@@ -35,7 +39,7 @@
 | **Object (code)** | `ObjectCode` | Вид расхода / дохода / актива (53100 Professional Services) |
 | **Account code / combination** | `AccountCode` | Полный адрес: `Fund-Department-Object-Grant` |
 | **Valid combination** | `AccountCombination` | Заведённая и утверждённая комбинация сегментов с effective dates и статусом |
-| **Combination rule** | `CombinationRule` | Правило допустимости сочетаний: «если Fund = 701, Grant обязателен» |
+| **Combination rule** | `Fund.GrantPolicy`, `Fund.AllowedDepartments`, `Fund.AllowedObjects`, `Grant.AllowedDepartments`, `Grant.AllowableObjects` | Ограничения сочетаний сегментов, заданные атрибутами фонда и гранта; отдельной сущности нет |
 | **Grant** | `Grant` | Целевое финансирование с периодом, спонсором, allowable costs и разрешёнными департаментами |
 | **Allowable cost** | `Grant.AllowableObjects` | Категория расходов, которую грант разрешает оплачивать |
 | **Effective dating** | `EffectiveFrom / EffectiveTo` | Период, в течение которого запись (правило, комбинация, версия) действует |
@@ -48,11 +52,17 @@
 | **Distribution** | `InvoiceDistribution` | Строка инвойса: сумма на конкретный `AccountCode` |
 | **Purchase Order (PO)** | `PurchaseOrder` | Заказ / контракт, создающий encumbrance |
 | **PO-backed / Non-PO invoice** | `VendorInvoice.PoRef` | Инвойс, ссылающийся на PO (ликвидирует encumbrance) / без PO (весь проверяется против available) |
-| **Amount to check** | `EncumbranceSnapshot.AmountToCheck` | Часть суммы distribution, проверяемая против available: `amount − min(amount, PO remaining)` |
+| **Required new budget** | `BudgetSnapshot.RequiredNewBudget` | Часть суммы инвойса по бюджетному ключу, не покрытая ликвидацией encumbrance: `Σ amount − Σ eligible liquidation` |
+| **Projected available** | `BudgetSnapshot.ProjectedAvailable` | `AvailableForInvoice − RequiredNewBudget`; отрицательное значение — дефицит |
+| **Content version** | `VendorInvoice.ContentVersion` | Номер версии содержания инвойса; растёт только при изменении сумм, поставщика, дат, PO или distributions. Не путать с SQL `RowVersion` |
+| **Approval cycle** | `VendorInvoice.ApprovalCycleId` | Цикл согласования; закрывается при Reject/Withdraw или смене содержания/fingerprint; решения прошлых циклов остаются историей |
+| **Withdraw** | `VendorInvoice.Withdraw` | Отзыв автором до Post: освобождает резервы и claims, возвращает в Draft |
+| **Payment handoff readiness** | `VendorInvoice.IsReadyForPaymentHandoff` | Posted ∧ vendor Active ∧ нет PaymentHold ∧ DueDate ≤ BusinessDate; вычисляется, статуса Payable нет |
+| **Command receipt** | `ap.ProcessedCommands` | Запись о выполненной команде по `CommandId`; повтор возвращает её, а не выполняет заново |
 | **Debarred vendor** | `VendorStatus.Debarred` | Поставщик, которому запрещены государственные контракты |
 | **SAM registration** | `Vendor.SamRegistered` | Регистрация в федеральной системе SAM.gov; обязательна для федеральных грантов |
 | **Save / Submit / Approve / Post / Pay** | `InvoiceStatus`, `Capabilities` | Стадии жизненного цикла: черновик / на согласовании / согласован / проведён в GL / оплачен |
-| **Override** | `VendorInvoice.Override` | Снятие Soft Stop уполномоченной ролью с указанием причины |
+| **Override** | `VendorInvoice.Override` | Снятие Soft Stop уполномоченной ролью с причиной; привязан к оценке, правилу и его версии, строке, версии содержания и циклу согласования |
 | **Separation of duties** | инвариант `VendorInvoice.Approve` | Автор не согласует; согласующий не оплачивает |
 
 ## Валидация
@@ -66,7 +76,8 @@
 | **Hard Stop** | `Severity.HardStop` | Блокировка без возможности override; требуется исправить данные или бюджет |
 | **Soft Stop** | `Severity.SoftStop` | Блокировка, снимаемая override уполномоченной роли |
 | **Rule outcome** | `RuleOutcome` | Результат одного правила: входы, расчёт, severity, сообщение, resolution |
-| **Evaluation record** | `EvaluationRecord` | Неизменяемая запись одной оценки: снимок входов, версии правил, outcomes, overall, capabilities, маршрут, preview |
+| **Evaluation record** | `EvaluationRecord` | Неизменяемая запись одной оценки: снимок входов, применённые правила и их fingerprint, outcomes, overall, capabilities, маршрут, preview |
+| **Rule set fingerprint** | `EvaluationRecord.RuleSetFingerprint` | SHA-256 по всем применённым правилам (id, слой, версия, параметры) и версии engine; смена открывает новый цикл согласования |
 | **Validation subject** | `ValidationSubject` | Снимки всего, что нужно конвейеру; собирается в слое сценариев |
 | **Capabilities** | `Capabilities` | Что можно сделать с транзакцией при данном результате: save / submit / approve / post / pay |
 | **Approval route** | `ApprovalRouting` | Список согласующих ролей и что каждой показывается |
