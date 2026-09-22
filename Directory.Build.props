@@ -8,7 +8,7 @@
     <DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
-  <ItemGroup Condition="$(MSBuildProjectName.StartsWith('GovErp.Domain.'))">
+  <ItemGroup Condition="$(MSBuildProjectName.StartsWith('GovErp.Domain.')) or $(MSBuildProjectName.StartsWith('GovErp.Application.')) or '$(MSBuildProjectName)' == 'GovErp.Infrastructure'">
     <Using Include="GovErp.Domain.Shared.ValueObjects" />
   </ItemGroup>
   <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.Tests'))">

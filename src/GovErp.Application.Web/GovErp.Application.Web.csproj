@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../GovErp.Domain.Shared/GovErp.Domain.Shared.csproj" />
     <ProjectReference Include="../GovErp.Domain.ChartOfAccounts/GovErp.Domain.ChartOfAccounts.csproj" />
     <ProjectReference Include="../GovErp.Domain.Ledger/GovErp.Domain.Ledger.csproj" />
