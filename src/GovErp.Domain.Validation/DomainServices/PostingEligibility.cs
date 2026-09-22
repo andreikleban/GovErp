@@ -11,7 +11,8 @@ public static class PostingEligibility
         if (subject.Transaction.Status != "Approved") failures.Add("Only Approved invoices can post.");
         if (overall is not (Severity.Allowed or Severity.Warning)) failures.Add("Validation is missing or has unresolved stops.");
         if (!subject.PeriodIsOpen) failures.Add("Posting period is closed.");
-        if (string.IsNullOrWhiteSpace(effectiveRules.Fingerprint) || subject.Transaction.RuleFingerprint != effectiveRules.Fingerprint)
+        if (string.IsNullOrWhiteSpace(effectiveRules.Fingerprint) || subject.Transaction.RuleFingerprint != effectiveRules.Fingerprint
+            || subject.VersionsAtLastApproval is { Fingerprint.Length: > 0 } approved && approved.Fingerprint != effectiveRules.Fingerprint)
             failures.Add("REVALIDATION_REQUIRED: current rule fingerprint differs from approval.");
         if (route is null || route.Count == 0) failures.Add("Approval route is missing.");
         else
