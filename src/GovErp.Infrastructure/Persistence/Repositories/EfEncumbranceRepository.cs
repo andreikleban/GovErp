@@ -1,0 +1,18 @@
+using GovErp.Domain.Ledger.Entities;
+using GovErp.Domain.Ledger.Repositories;
+using Microsoft.EntityFrameworkCore;
+
+namespace GovErp.Infrastructure.Persistence.Repositories;
+
+public sealed class EfEncumbranceRepository(GovErpDbContext db) : IEncumbranceRepository
+{
+    public Task<Encumbrance?> FindByPoLineAsync(string poLineRef, CancellationToken ct = default) =>
+        db.Encumbrances.SingleOrDefaultAsync(e => e.PoLineRef == poLineRef, ct);
+
+    /// <summary>Владелец claim ликвидации или billing claim.</summary>
+    public Task<Encumbrance?> FindByClaimAsync(Guid claimId, CancellationToken ct = default) =>
+        db.Encumbrances.SingleOrDefaultAsync(e => e.Claims.Any(c => c.Id == claimId) || e.BillingClaims.Any(c => c.Id == claimId), ct);
+
+    public async Task AddAsync(Encumbrance encumbrance, CancellationToken ct = default) =>
+        await db.Set<Encumbrance>().AddAsync(encumbrance, ct);
+}
