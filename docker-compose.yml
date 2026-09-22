@@ -1,0 +1,29 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${SA_PASSWORD}"
+    ports: ["127.0.0.1:1433:1433"]   # только для локальных инструментов; наружу не публикуется
+    volumes: ["sqldata:/var/opt/mssql"]
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  web:
+    build: { context: ., dockerfile: src/GovErp.Web/Dockerfile }
+    depends_on: { sqlserver: { condition: service_healthy } }
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Demo"
+      Startup__MigrationConnectionTemplate: "Server=sqlserver;Database={0};User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True"
+      Startup__MasterRuntimePassword: "${MASTER_RO_PASSWORD}"
+      ConnectionStrings__Master: "Server=sqlserver;Database=GovErp_Master;User Id=goverp_master_ro;Password=${MASTER_RO_PASSWORD};TrustServerCertificate=True"
+      Tenancy__RuntimeConnectionTemplate: "Server=sqlserver;Database={0};User Id={1};Password={2};TrustServerCertificate=True"
+      Tenancy__Credentials__springfield__Password: "${SPRINGFIELD_DB_PASSWORD}"
+      Tenancy__Credentials__shelbyville__Password: "${SHELBYVILLE_DB_PASSWORD}"
+      Explanation__Provider: "${EXPLANATION_PROVIDER:-Template}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+    ports: ["127.0.0.1:8080:8080"]
+volumes:
+  sqldata:
