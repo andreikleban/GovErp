@@ -2696,7 +2696,7 @@ services:
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: "${SA_PASSWORD}"
-    ports: ["1433:1433"]
+    ports: ["127.0.0.1:1433:1433"]   # только для локальных инструментов; наружу не публикуется
     volumes: ["sqldata:/var/opt/mssql"]
     healthcheck:
       test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
@@ -2716,7 +2716,7 @@ services:
       Tenancy__Credentials__shelbyville__Password: "${SHELBYVILLE_DB_PASSWORD}"
       Explanation__Provider: "${EXPLANATION_PROVIDER:-Template}"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
-    ports: ["8080:8080"]
+    ports: ["127.0.0.1:8080:8080"]
 volumes:
   sqldata:
 ```
