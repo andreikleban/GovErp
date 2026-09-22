@@ -99,6 +99,10 @@ public sealed class ApprovalAppService(ITenantOperationRunner runner) : IApprova
                 invoice.MarkApproved();
             }
 
+            // Согласование привязано к оценке до решения; последняя оценка должна отражать уже записанное решение —
+            // иначе маршрут в карточке, очередь согласующих и CanPost видят шаг несогласованным. Маршрут и fingerprint
+            // не меняются, поэтому новый цикл здесь не открывается.
+            _ = await ws.EvaluateAsync(invoice, EvaluationTrigger.Approve, actor, token);
             ws.Audit.Record(actor, "InvoiceApproved", invoice.Reference, record.Id.ToString(),
                 new { Role = step.Role.ToString(), Department = step.Department?.Value, invoice.ApprovalCycleId, Status = invoice.Status.ToString() });
             return CommandResult<InvoiceVm>.Accepted(await ws.ToVmAsync(invoice, token));
