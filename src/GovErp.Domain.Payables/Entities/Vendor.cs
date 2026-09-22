@@ -2,11 +2,12 @@ namespace GovErp.Domain.Payables.Entities;
 
 public sealed class Vendor
 {
-    public Guid Id { get; }
-    public string Code { get; }
-    public string Name { get; }
-    public VendorStatus Status { get; }
-    public bool SamRegistered { get; }
+    public Guid Id { get; private set; }
+    public string Code { get; private set; }
+    public string Name { get; private set; }
+    public VendorStatus Status { get; private set; }
+    public bool SamRegistered { get; private set; }
+    private Vendor() { Code = null!; Name = null!; }
     public Vendor(Guid id, string code, string name, VendorStatus status, bool samRegistered)
     {
         if (id == Guid.Empty) throw new ArgumentException("Vendor ID required.", nameof(id));

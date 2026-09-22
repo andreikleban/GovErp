@@ -20,6 +20,8 @@ public sealed class BudgetLine
     public Money Held => _reservations.Where(r => r.Status == ReservationStatus.Held).Aggregate(Money.Zero, (s, r) => s + r.Amount);
     public Money Available => Amended - Actuals - Encumbered - Held;
 
+    private BudgetLine() { Account = null!; }
+
     public BudgetLine(AccountCode account, FiscalYear fiscalYear, BudgetControlMode controlMode, Money adopted)
     {
         ArgumentNullException.ThrowIfNull(account);

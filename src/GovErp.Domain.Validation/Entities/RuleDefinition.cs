@@ -7,21 +7,30 @@ namespace GovErp.Domain.Validation.Entities;
 
 public sealed class RuleDefinition
 {
-    public Guid Id { get; }
-    public string RuleId { get; }
-    public int Version { get; }
-    public ValidationStep Step { get; }
-    public RuleLayer Layer { get; }
-    public string? ScopeFund { get; }
-    public string? ScopeGrant { get; }
-    public Severity? Severity { get; }
-    public IReadOnlyDictionary<string, string> Parameters { get; }
-    public IReadOnlyList<ApproverRole> OverridableBy { get; }
-    public DateOnly EffectiveFrom { get; }
-    public DateOnly? EffectiveTo { get; }
-    public string Message { get; }
-    public string Resolution { get; }
-    public bool IsEnabled { get; }
+    public Guid Id { get; private set; }
+    public string RuleId { get; private set; }
+    public int Version { get; private set; }
+    public ValidationStep Step { get; private set; }
+    public RuleLayer Layer { get; private set; }
+    public string? ScopeFund { get; private set; }
+    public string? ScopeGrant { get; private set; }
+    public Severity? Severity { get; private set; }
+    public IReadOnlyDictionary<string, string> Parameters { get; private set; }
+    public IReadOnlyList<ApproverRole> OverridableBy { get; private set; }
+    public DateOnly EffectiveFrom { get; private set; }
+    public DateOnly? EffectiveTo { get; private set; }
+    public string Message { get; private set; }
+    public string Resolution { get; private set; }
+    public bool IsEnabled { get; private set; }
+
+    private RuleDefinition()
+    {
+        RuleId = null!;
+        Parameters = null!;
+        OverridableBy = null!;
+        Message = null!;
+        Resolution = null!;
+    }
 
     public RuleDefinition(string ruleId, int version, ValidationStep step, RuleLayer layer, Severity? severity,
         IReadOnlyDictionary<string, string> parameters, IReadOnlyList<ApproverRole> overridableBy,

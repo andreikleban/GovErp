@@ -3,13 +3,14 @@ namespace GovErp.Domain.Ledger.Entities;
 
 public sealed class OpeningBalance
 {
-    public Guid Id { get; } = Guid.NewGuid();
-    public AccountCode Account { get; }
-    public FiscalYear FiscalYear { get; }
-    public DateOnly AsOfDate { get; }
-    public Money InitialActuals { get; }
-    public Money InitialEncumbered { get; }
-    public string SourceReference { get; }
+    public Guid Id { get; private set; } = Guid.NewGuid();
+    public AccountCode Account { get; private set; }
+    public FiscalYear FiscalYear { get; private set; }
+    public DateOnly AsOfDate { get; private set; }
+    public Money InitialActuals { get; private set; }
+    public Money InitialEncumbered { get; private set; }
+    public string SourceReference { get; private set; }
+    private OpeningBalance() { Account = null!; SourceReference = null!; }
     public OpeningBalance(AccountCode account, FiscalYear fiscalYear, DateOnly asOfDate, Money initialActuals, Money initialEncumbered, string sourceReference)
     {
         ArgumentNullException.ThrowIfNull(account); ArgumentException.ThrowIfNullOrWhiteSpace(sourceReference);

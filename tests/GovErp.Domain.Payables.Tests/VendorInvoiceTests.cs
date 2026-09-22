@@ -280,4 +280,13 @@ public class VendorInvoiceTests
         invoice.Status.Should().Be(InvoiceStatus.Posted);
         invoice.ContentVersion.Should().Be(2);
     }
+
+    [Fact]
+    public void Changes_to_owned_collections_advance_change_stamp()
+    {
+        var inv = Submitted();
+        var before = inv.ChangeStamp;
+        inv.RecordApproval(Head.Role, Head.Department, Chief, inv.LastEvaluationRef!.Value, At);
+        inv.ChangeStamp.Should().BeGreaterThan(before);
+    }
 }

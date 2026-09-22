@@ -29,4 +29,15 @@ public class OutcomeTests
         Capabilities.For(Severity.SoftStop, true).CanPost.Should().BeFalse();
         Capabilities.For(Severity.Allowed, true).CanPay.Should().BeFalse();
     }
+
+    [Fact]
+    public void Restore_reproduces_every_persisted_field()
+    {
+        var o = RuleOutcome.From(DemoRules.Rule("P", ValidationStep.TransactionPurpose, RuleLayer.State, Severity.SoftStop,
+            overridableBy: [ApproverRole.FinanceDirector]), Severity.SoftStop, 1,
+            new Dictionary<string, string> { ["amount"] = "1" }, new Dictionary<string, string> { ["x"] = "2" });
+        var back = RuleOutcome.Restore(o.OutcomeRef, o.RuleId, o.RuleVersion, o.Step, o.Layer, o.DistributionLine, o.Severity,
+            o.Inputs, o.Computed, o.Message, o.Resolution, o.OverridableBy, null);
+        back.Should().BeEquivalentTo(o);
+    }
 }

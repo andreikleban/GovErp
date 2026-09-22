@@ -23,6 +23,7 @@ public sealed class Encumbrance
     public IReadOnlyList<PoBillingClaim> BillingClaims => _billingClaims.AsReadOnly();
     private Money Held => _claims.Where(c => c.Status == ClaimStatus.Held).Aggregate(Money.Zero, (s, c) => s + c.Amount);
 
+    private Encumbrance() { PoLineRef = null!; Account = null!; }
     public Encumbrance(string poLineRef, AccountCode account, Money original) : this(poLineRef, account, original, original, Money.Zero) { }
     public Encumbrance(string poLineRef, AccountCode account, Money original, Money authorizedPoAmount, Money alreadyPostedAgainstPo)
     {

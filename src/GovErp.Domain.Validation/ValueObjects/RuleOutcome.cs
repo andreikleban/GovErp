@@ -5,7 +5,7 @@ namespace GovErp.Domain.Validation.ValueObjects;
 
 public sealed record RuleOutcome
 {
-    public Guid OutcomeRef { get; } = Guid.NewGuid();
+    public Guid OutcomeRef { get; private init; } = Guid.NewGuid();
     public string RuleId { get; }
     public int RuleVersion { get; }
     public ValidationStep Step { get; }
@@ -36,7 +36,32 @@ public sealed record RuleOutcome
         OverridableBy = Array.AsReadOnly(severity == Severity.SoftStop ? rule.OverridableBy.ToArray() : []);
     }
 
+    private RuleOutcome(Guid outcomeRef, string ruleId, int ruleVersion, ValidationStep step, RuleLayer layer, int? line,
+        Severity severity, IReadOnlyDictionary<string, string> inputs, IReadOnlyDictionary<string, string> computed,
+        string message, string resolution, IReadOnlyList<ApproverRole> overridableBy)
+    {
+        OutcomeRef = outcomeRef;
+        RuleId = ruleId;
+        RuleVersion = ruleVersion;
+        Step = step;
+        Layer = layer;
+        DistributionLine = line;
+        Severity = severity;
+        Inputs = new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(inputs));
+        Computed = new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(computed));
+        Message = message;
+        Resolution = resolution;
+        OverridableBy = Array.AsReadOnly(overridableBy.ToArray());
+    }
+
     public static RuleOutcome From(RuleDefinition rule, Severity severity, int? line,
         IReadOnlyDictionary<string, string> inputs, IReadOnlyDictionary<string, string> computed, string? message = null) =>
         new(rule, severity, line, inputs, computed, message);
+
+    /// <summary>Восстановление сохранённого outcome (JSON-колонки оценки). Не вычисляет ничего заново.</summary>
+    public static RuleOutcome Restore(Guid outcomeRef, string ruleId, int ruleVersion, ValidationStep step, RuleLayer layer,
+        int? distributionLine, Severity severity, IReadOnlyDictionary<string, string> inputs, IReadOnlyDictionary<string, string> computed,
+        string message, string resolution, IReadOnlyList<ApproverRole> overridableBy, OverrideSnapshot? overriddenBy) =>
+        new(outcomeRef, ruleId, ruleVersion, step, layer, distributionLine, severity, inputs, computed, message, resolution, overridableBy)
+        { OverriddenBy = overriddenBy };
 }

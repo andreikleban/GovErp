@@ -30,6 +30,8 @@ public sealed class VendorInvoice
     public Guid? LastEvaluationRef { get; private set; }
     public string? RuleFingerprint { get; private set; }
     public bool PaymentHold { get; private set; }
+    /// <summary>Растёт при любом изменении, включая owned-коллекции: хранилище всегда обновляет корень и проверяет конкурентную версию.</summary>
+    public long ChangeStamp { get; private set; }
     public IReadOnlyList<InvoiceDistribution> Distributions => _distributions.AsReadOnly();
     public IReadOnlyList<InvoiceApproval> Approvals => _approvals.AsReadOnly();
     public IReadOnlyList<InvoiceOverride> Overrides => _overrides.AsReadOnly();
@@ -38,6 +40,8 @@ public sealed class VendorInvoice
     public IReadOnlyList<Guid> EncumbranceClaimRefs { get; private set; } = Array.Empty<Guid>();
     public IReadOnlyList<Guid> PoBillingClaimRefs { get; private set; } = Array.Empty<Guid>();
     public Money DistributedTotal => _distributions.Aggregate(Money.Zero, (s, d) => s + d.Amount);
+
+    private VendorInvoice() { Number = null!; }
 
     public VendorInvoice(string number, Guid vendorId, DateOnly invoiceDate, DateOnly serviceDate, DateOnly postingDate,
         DateOnly dueDate, Money total, string? poRef, UserId createdBy, DateTimeOffset createdAt)
@@ -60,7 +64,7 @@ public sealed class VendorInvoice
             (number, vendorId, invoiceDate, serviceDate, postingDate, dueDate, total, poRef)) return;
         Number = number; VendorId = vendorId; InvoiceDate = invoiceDate; ServiceDate = serviceDate;
         PostingDate = postingDate; DueDate = dueDate; Total = total; PoRef = poRef;
-        ContentVersion++;
+        ContentVersion++; ChangeStamp++;
     }
 
     public void AddDistribution(AccountCode account, Money amount, int? poLineNo)
@@ -70,7 +74,7 @@ public sealed class VendorInvoice
         if (amount <= Money.Zero || poLineNo is <= 0) throw new PayablesException("Distribution amount and PO line must be positive.");
         _ = DistributedTotal + amount;
         _distributions.Add(new(_distributions.Count + 1, account, amount, poLineNo));
-        ContentVersion++;
+        ContentVersion++; ChangeStamp++;
     }
 
     public void RemoveDistribution(int lineNo)
@@ -80,7 +84,7 @@ public sealed class VendorInvoice
         if (index < 0) throw new PayablesException("Distribution not found.");
         _distributions.RemoveAt(index);
         for (var i = index; i < _distributions.Count; i++) _distributions[i] = _distributions[i] with { LineNo = i + 1 };
-        ContentVersion++;
+        ContentVersion++; ChangeStamp++;
     }
 
     public void Submit(Guid evaluationRef, string ruleFingerprint, IReadOnlyList<ApprovalRequirement> requirements,
@@ -96,7 +100,7 @@ public sealed class VendorInvoice
         ReservationRefs = held; EncumbranceClaimRefs = enc; PoBillingClaimRefs = bill;
         _requirements = route;
         ApprovalCycleId = Guid.NewGuid(); LastEvaluationRef = evaluationRef; RuleFingerprint = ruleFingerprint;
-        Status = InvoiceStatus.Submitted;
+        Status = InvoiceStatus.Submitted; ChangeStamp++;
     }
 
     public void RecordApproval(ApproverRole role, DepartmentCode? department, UserId user, Guid evaluationRef, DateTimeOffset at)
@@ -107,6 +111,7 @@ public sealed class VendorInvoice
         if (CurrentApprovals().Any(a => a.Role == role && a.Department == department)) throw new PayablesException("Already approved.");
         _approvals.Add(new(role, department, user, ApprovalDecision.Approved, evaluationRef,
             ContentVersion, ApprovalCycleId!.Value, RuleFingerprint!, null, at));
+        ChangeStamp++;
     }
 
     public void MarkApproved()
@@ -114,7 +119,7 @@ public sealed class VendorInvoice
         Require(InvoiceStatus.Submitted);
         if (!_requirements.All(r => CurrentApprovals().Any(a => a.Role == r.Role && a.Department == r.Department)))
             throw new PayablesException("Required approvals are missing.");
-        Status = InvoiceStatus.Approved;
+        Status = InvoiceStatus.Approved; ChangeStamp++;
     }
 
     public void Override(OverrideTarget target, ApproverRole role, UserId user, string reason, DateTimeOffset at)
@@ -127,7 +132,7 @@ public sealed class VendorInvoice
             string.IsNullOrWhiteSpace(target.RuleId) || (target.DistributionLine.HasValue && !_distributions.Any(d => d.LineNo == target.DistributionLine)))
             throw new PayablesException("Override does not match this invoice outcome or actor.");
         if (HasCurrentOverride(target)) throw new PayablesException("Outcome already overridden.");
-        _overrides.Add(new(target, role, user, reason, at));
+        _overrides.Add(new(target, role, user, reason, at)); ChangeStamp++;
     }
 
     public bool HasCurrentOverride(OverrideTarget target) => Status is InvoiceStatus.Submitted or InvoiceStatus.Approved && target.ContentVersion == ContentVersion &&
@@ -144,6 +149,7 @@ public sealed class VendorInvoice
             Status = InvoiceStatus.Submitted;
         }
         LastEvaluationRef = evaluationRef; RuleFingerprint = fingerprint; _requirements = route;
+        ChangeStamp++;
     }
 
     public InvoiceRelease Reject(ApproverRole role, DepartmentCode? department, UserId user, string reason, DateTimeOffset at)
@@ -152,14 +158,14 @@ public sealed class VendorInvoice
         var release = CaptureRelease();
         _approvals.Add(new(role, department, user, ApprovalDecision.Rejected, LastEvaluationRef!.Value,
             ContentVersion, ApprovalCycleId!.Value, RuleFingerprint!, reason, at));
-        Status = InvoiceStatus.Rejected;
+        Status = InvoiceStatus.Rejected; ChangeStamp++;
         return release;
     }
 
     public void ReturnToDraft()
     {
         Require(InvoiceStatus.Rejected);
-        ClearCycle();
+        ClearCycle(); ChangeStamp++;
     }
 
     public InvoiceRelease Withdraw(UserId user, string reason, DateTimeOffset at, CancellationToken ct = default)
@@ -169,7 +175,7 @@ public sealed class VendorInvoice
         if (user != CreatedBy) throw new PayablesException("Only the author may withdraw an invoice.");
         var release = CaptureRelease();
         _withdrawals.Add(new(user, ApprovalCycleId!.Value, reason, at));
-        ClearCycle();
+        ClearCycle(); ChangeStamp++;
         return release;
     }
 
@@ -178,10 +184,10 @@ public sealed class VendorInvoice
         Require(InvoiceStatus.Approved);
         if (evaluationRef != LastEvaluationRef || contentVersion != ContentVersion || cycle != ApprovalCycleId || fingerprint != RuleFingerprint)
             throw new PayablesException("Posting requires the approved content, cycle and rules.");
-        Status = InvoiceStatus.Posted; PostedAt = at;
+        Status = InvoiceStatus.Posted; PostedAt = at; ChangeStamp++;
     }
 
-    public void SetPaymentHold(bool hold) => PaymentHold = hold;
+    public void SetPaymentHold(bool hold) { PaymentHold = hold; ChangeStamp++; }
     public bool ReadyForPaymentHandoff(bool vendorActive, DateOnly businessDate) =>
         Status == InvoiceStatus.Posted && vendorActive && !PaymentHold && DueDate <= businessDate;
 
