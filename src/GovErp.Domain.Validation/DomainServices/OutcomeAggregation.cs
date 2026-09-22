@@ -37,7 +37,7 @@ public static class OutcomeAggregation
         if (o.RuleId != current.RuleId || o.RuleVersion != current.RuleVersion || o.DistributionLine != current.DistributionLine
             || o.ContentVersion != transaction.ContentVersion || o.ApprovalCycleId != transaction.ApprovalCycleId
             || string.IsNullOrWhiteSpace(versions.Fingerprint) || o.RuleFingerprint != versions.Fingerprint
-            || o.EvaluationId == Guid.Empty || o.EvaluationId != subject.PreviousEvaluationId
+            || o.EvaluationId == Guid.Empty
             || o.Role is not { } role || !current.OverridableBy.Contains(role)
             || o.UserId.Value == Guid.Empty || o.UserId == transaction.CreatedBy
             || string.IsNullOrWhiteSpace(o.Reason))
@@ -45,7 +45,10 @@ public static class OutcomeAggregation
             return false;
         }
 
-        var previous = subject.PreviousOutcomes.SingleOrDefault(p => p.OutcomeRef == o.OutcomeRef);
+        var evidence = o.EvaluationId == subject.PreviousEvaluationId
+            ? subject.PreviousOutcomes
+            : subject.PreviousEvaluations.FirstOrDefault(e => e.EvaluationId == o.EvaluationId)?.Outcomes ?? [];
+        var previous = evidence.SingleOrDefault(p => p.OutcomeRef == o.OutcomeRef);
         return previous is not null
             && previous.Severity == Severity.SoftStop
             && previous.RuleId == current.RuleId && previous.RuleVersion == current.RuleVersion

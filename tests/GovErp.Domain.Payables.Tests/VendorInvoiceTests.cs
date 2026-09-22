@@ -41,7 +41,7 @@ public class VendorInvoiceTests
     {
         var invoice = Submitted();
         var target = Target(invoice);
-        invoice.Override(target, Chief, "exception", At);
+        invoice.Override(target, ApproverRole.FinanceDirector, Chief, "exception", At);
         invoice.Reject(Head.Role, Head.Department, Chief, "wrong coding", At);
         Assert.False(invoice.HasCurrentOverride(target));
         Assert.Single(invoice.Overrides);
@@ -155,7 +155,7 @@ public class VendorInvoiceTests
     {
         var invoice = Submitted();
         var target = Target(invoice);
-        invoice.Override(target, Chief, "Budget exception approved", At);
+        invoice.Override(target, ApproverRole.FinanceDirector, Chief, "Budget exception approved", At);
         var decision = invoice.Overrides.Single();
         decision.Target.Should().Be(target);
         decision.Reason.Should().Be("Budget exception approved");
@@ -163,11 +163,11 @@ public class VendorInvoiceTests
         invoice.HasCurrentOverride(target with { OutcomeRef = Guid.NewGuid() }).Should().BeFalse();
         invoice.HasCurrentOverride(target with { RuleVersion = 2 }).Should().BeFalse();
         invoice.ContentVersion.Should().Be(2);
-        FluentActions.Invoking(() => invoice.Override(target, Chief, " ", At)).Should().Throw<PayablesException>();
-        FluentActions.Invoking(() => invoice.Override(target with { ContentVersion = 1 }, Chief, "reason", At)).Should().Throw<PayablesException>();
-        FluentActions.Invoking(() => invoice.Override(target with { ApprovalCycleId = Guid.NewGuid() }, Chief, "reason", At)).Should().Throw<PayablesException>();
-        FluentActions.Invoking(() => invoice.Override(target with { DistributionLine = 9 }, Chief, "reason", At)).Should().Throw<PayablesException>();
-        FluentActions.Invoking(() => invoice.Override(target, Author, "reason", At)).Should().Throw<PayablesException>();
+        FluentActions.Invoking(() => invoice.Override(target, ApproverRole.FinanceDirector, Chief, " ", At)).Should().Throw<PayablesException>();
+        FluentActions.Invoking(() => invoice.Override(target with { ContentVersion = 1 }, ApproverRole.FinanceDirector, Chief, "reason", At)).Should().Throw<PayablesException>();
+        FluentActions.Invoking(() => invoice.Override(target with { ApprovalCycleId = Guid.NewGuid() }, ApproverRole.FinanceDirector, Chief, "reason", At)).Should().Throw<PayablesException>();
+        FluentActions.Invoking(() => invoice.Override(target with { DistributionLine = 9 }, ApproverRole.FinanceDirector, Chief, "reason", At)).Should().Throw<PayablesException>();
+        FluentActions.Invoking(() => invoice.Override(target, ApproverRole.FinanceDirector, Author, "reason", At)).Should().Throw<PayablesException>();
     }
 
     [Theory]
@@ -177,7 +177,7 @@ public class VendorInvoiceTests
     {
         var invoice = Submitted();
         var target = Target(invoice);
-        invoice.Override(target, Chief, "exception", At);
+        invoice.Override(target, ApproverRole.FinanceDirector, Chief, "exception", At);
         if (approved) Approve(invoice);
         var cycle = invoice.ApprovalCycleId;
         var reservations = invoice.ReservationRefs.ToArray();
@@ -206,7 +206,7 @@ public class VendorInvoiceTests
     public void Withdraw_is_author_only_cancellable_and_closes_cycle(bool approved)
     {
         var invoice = Submitted();
-        invoice.Override(Target(invoice), Chief, "exception", At);
+        invoice.Override(Target(invoice), ApproverRole.FinanceDirector, Chief, "exception", At);
         if (approved) Approve(invoice);
         FluentActions.Invoking(() => invoice.Withdraw(Chief, "correction", At)).Should().Throw<PayablesException>();
         FluentActions.Invoking(() => invoice.Withdraw(Author, " ", At)).Should().Throw<PayablesException>();
@@ -228,7 +228,7 @@ public class VendorInvoiceTests
     {
         var invoice = Submitted();
         var oldTarget = Target(invoice);
-        invoice.Override(oldTarget, Chief, "exception", At);
+        invoice.Override(oldTarget, ApproverRole.FinanceDirector, Chief, "exception", At);
         Approve(invoice);
         var cycle = invoice.ApprovalCycleId;
         var evaluation = Guid.NewGuid();

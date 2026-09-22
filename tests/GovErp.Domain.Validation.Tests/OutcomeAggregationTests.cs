@@ -75,6 +75,26 @@ public class OutcomeAggregationTests
     }
 
     [Fact]
+    public void Overrides_issued_against_different_evaluations_both_bind()
+    {
+        var (s, _) = Bound();
+        var first = s.OverridesSoFar[0];
+        var olderOutcome = Outcome(line: 2);
+        var olderEvaluation = Guid.NewGuid();
+        var second = first with { EvaluationId = olderEvaluation, OutcomeRef = olderOutcome.OutcomeRef, DistributionLine = 2 };
+        s = s with
+        {
+            OverridesSoFar = [first, second],
+            PreviousEvaluations = [new PreviousEvaluation(olderEvaluation, [olderOutcome])],
+        };
+
+        var result = OutcomeAggregation.Apply([Outcome(line: 1), Outcome(line: 2)], s, Versions);
+
+        result.Overall.Should().Be(Severity.Allowed);
+        result.WithOverrides.Should().OnlyContain(o => o.IsOverridden);
+    }
+
+    [Fact]
     public void Hard_stop_always_wins_and_empty_outcomes_are_allowed()
     {
         var (s, current) = Bound();

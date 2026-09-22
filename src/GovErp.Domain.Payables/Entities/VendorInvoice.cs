@@ -117,16 +117,17 @@ public sealed class VendorInvoice
         Status = InvoiceStatus.Approved;
     }
 
-    public void Override(OverrideTarget target, UserId user, string reason, DateTimeOffset at)
+    public void Override(OverrideTarget target, ApproverRole role, UserId user, string reason, DateTimeOffset at)
     {
         RequireActive(); CheckUser(user); RequireReason(reason);
+        if (!Enum.IsDefined(role)) throw new PayablesException("Override requires a valid role.");
         ArgumentNullException.ThrowIfNull(target);
         if (user == CreatedBy || target.EvaluationRef != LastEvaluationRef || target.OutcomeRef == Guid.Empty ||
             target.ContentVersion != ContentVersion || target.ApprovalCycleId != ApprovalCycleId || target.RuleVersion < 1 ||
             string.IsNullOrWhiteSpace(target.RuleId) || (target.DistributionLine.HasValue && !_distributions.Any(d => d.LineNo == target.DistributionLine)))
             throw new PayablesException("Override does not match this invoice outcome or actor.");
         if (HasCurrentOverride(target)) throw new PayablesException("Outcome already overridden.");
-        _overrides.Add(new(target, user, reason, at));
+        _overrides.Add(new(target, role, user, reason, at));
     }
 
     public bool HasCurrentOverride(OverrideTarget target) => Status is InvoiceStatus.Submitted or InvoiceStatus.Approved && target.ContentVersion == ContentVersion &&

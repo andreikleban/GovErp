@@ -7,6 +7,7 @@ public sealed record ValidationSubject
     private readonly IReadOnlyList<OverrideSnapshot> _overrides = Array.Empty<OverrideSnapshot>();
     private readonly IReadOnlyList<ApprovalSnapshot> _detailedApprovals = Array.Empty<ApprovalSnapshot>();
     private readonly IReadOnlyList<RuleOutcome> _previousOutcomes = Array.Empty<RuleOutcome>();
+    private readonly IReadOnlyList<PreviousEvaluation> _previousEvaluations = Array.Empty<PreviousEvaluation>();
 
     public ValidationSubject(TransactionSnapshot Transaction, IReadOnlyList<DistributionSnapshot> Distributions,
         IReadOnlyList<ApproverRole> ApprovalsSoFar, IReadOnlyList<OverrideSnapshot> OverridesSoFar,
@@ -55,6 +56,16 @@ public sealed record ValidationSubject
         init => _previousOutcomes = Array.AsReadOnly(value.ToArray());
     }
     public Guid? PreviousEvaluationId { get; init; }
+
+    /// <summary>
+    /// Оценки, на которые ссылаются действующие overrides, если их больше одной (Soft Stop'ы сняты в разные моменты).
+    /// Пара PreviousEvaluationId / PreviousOutcomes — частный случай одной оценки.
+    /// </summary>
+    public IReadOnlyList<PreviousEvaluation> PreviousEvaluations
+    {
+        get => _previousEvaluations;
+        init => _previousEvaluations = Array.AsReadOnly(value.ToArray());
+    }
     public RuleSetVersions? VersionsAtLastApproval { get; init; }
     public PostingAccounts PostingAccounts { get; init; }
     public DateOnly? BusinessDate { get; init; }
