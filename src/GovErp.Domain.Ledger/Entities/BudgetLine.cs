@@ -69,8 +69,6 @@ public sealed class BudgetLine
             throw new LedgerException("Opening balance requires a pristine matching budget line.");
         Actuals = opening.InitialActuals; Encumbered = opening.InitialEncumbered; OpeningBalanceId = opening.Id; ChangeStamp++;
     }
-    public void RecordActuals(Money amount) { LedgerGuard.Positive(amount); Actuals += amount; ChangeStamp++; }
-    public void RecordEncumbrance(Money amount) { LedgerGuard.Positive(amount); Encumbered += amount; ChangeStamp++; }
     public void RecordLiquidation(Money amount)
     {
         LedgerGuard.Positive(amount);

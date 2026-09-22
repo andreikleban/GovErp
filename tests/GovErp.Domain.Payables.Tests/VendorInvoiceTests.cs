@@ -48,12 +48,21 @@ public class VendorInvoiceTests
     }
 
     [Fact]
+    public void Due_date_before_invoice_date_is_rejected()
+    {
+        FluentActions.Invoking(() => new VendorInvoice("I-1", VendorId, Date, Date, Date, Date.AddDays(-1), Money.Of(100), null, Author, At))
+            .Should().Throw<PayablesException>();
+        var invoice = Draft();
+        FluentActions.Invoking(() => invoice.UpdateHeader(invoice.Number, VendorId, Date, Date, Date, Date.AddDays(-1), Money.Of(100), null))
+            .Should().Throw<PayablesException>();
+    }
+
+    [Fact]
     public void Draft_normalizes_number_and_keeps_dates_distinct()
     {
         var invoice = Draft();
         invoice.NormalizedInvoiceNumber.Should().Be("INV-I");
         invoice.ContentVersion.Should().Be(1);
-        invoice.RowVersion.Should().BeEmpty();
         invoice.InvoiceDate.Should().Be(Date);
         invoice.ServiceDate.Should().Be(Date.AddDays(-1));
         invoice.PostingDate.Should().Be(Date);

@@ -23,7 +23,7 @@ public class LifecycleTests
     [Fact]
     public void Mixed_post_counts_full_invoice_exactly_once()
     {
-        var b = Budget(); b.RecordActuals(Money.Of(100000)); b.RecordEncumbrance(Money.Of(96000));
+        var b = Budget(); b.ApplyOpeningBalance(new OpeningBalance(Account, new FiscalYear(2026), new DateOnly(2026, 6, 1), Money.Of(100000), Money.Of(96000), "opening"));
         var id = Guid.NewGuid(); var r = b.Reserve(id, 1, Money.Of(4000), "INV");
         b.Commit(r.ReservationId!.Value, id, 1); b.RecordLiquidation(Money.Of(96000));
         b.Actuals.Should().Be(Money.Of(200000)); b.Encumbered.Should().Be(Money.Zero);
@@ -58,14 +58,14 @@ public class LifecycleTests
     [Fact]
     public void Full_billing_claims_protect_cumulative_tolerance_on_authorized_amount()
     {
-        var e = Po(); var first = e.ClaimBilling(Guid.NewGuid(), 1, Money.Of(100000));
+        var e = Po(); var first = e.ClaimBilling(Guid.NewGuid(), 1, Money.Of(100000), .05m);
         var stamp = e.ChangeStamp;
-        Action tooMuch = () => e.ClaimBilling(Guid.NewGuid(), 1, Money.Of(5000.01m));
+        Action tooMuch = () => e.ClaimBilling(Guid.NewGuid(), 1, Money.Of(5000.01m), .05m);
         tooMuch.Should().Throw<LedgerException>(); e.ChangeStamp.Should().Be(stamp);
-        var second = e.ClaimBilling(Guid.NewGuid(), 1, Money.Of(5000));
+        var second = e.ClaimBilling(Guid.NewGuid(), 1, Money.Of(5000), .05m);
         e.ConsumeBillingClaim(first); e.ConsumeBillingClaim(second);
         e.AlreadyPostedAgainstPo.Should().Be(Money.Of(105000));
-        Action further = () => e.ClaimBilling(Guid.NewGuid(), 1, Money.Of(.01m));
+        Action further = () => e.ClaimBilling(Guid.NewGuid(), 1, Money.Of(.01m), .05m);
         further.Should().Throw<LedgerException>();
     }
 
@@ -84,10 +84,10 @@ public class LifecycleTests
     public void Released_claims_free_capacity_and_reject_consumption()
     {
         var e = Po(); var id = Guid.NewGuid(); var claim = e.Claim(id, 1, Money.Of(50));
-        var billing = e.ClaimBilling(id, 1, Money.Of(100000));
+        var billing = e.ClaimBilling(id, 1, Money.Of(100000), .05m);
         e.ReleaseClaim(claim, id, 1); e.ReleaseBillingClaim(billing, id, 1);
         e.ClaimableForInvoice(Guid.NewGuid(), 1).Should().Be(Money.Of(96000));
-        e.ClaimBilling(Guid.NewGuid(), 1, Money.Of(105000));
+        e.ClaimBilling(Guid.NewGuid(), 1, Money.Of(105000), .05m);
         Action consume = () => e.ConsumeBillingClaim(billing); consume.Should().Throw<LedgerException>();
         e.ChangeStamp.Should().Be(5);
     }

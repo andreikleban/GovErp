@@ -9,7 +9,6 @@ public sealed class VendorInvoice
     private readonly List<InvoiceOverride> _overrides = [];
     private readonly List<InvoiceWithdrawal> _withdrawals = [];
     private IReadOnlyList<ApprovalRequirement> _requirements = Array.Empty<ApprovalRequirement>();
-    private byte[] _rowVersion = [];
     public Guid Id { get; private set; } = Guid.NewGuid();
     public string Number { get; private set; }
     public string NormalizedInvoiceNumber => Number.Trim().ToUpperInvariant();
@@ -27,7 +26,6 @@ public sealed class VendorInvoice
     public DateTimeOffset? PostedAt { get; private set; }
     public InvoiceStatus Status { get; private set; } = InvoiceStatus.Draft;
     public int ContentVersion { get; private set; } = 1;
-    public byte[] RowVersion => (byte[])_rowVersion.Clone();
     public Guid? ApprovalCycleId { get; private set; }
     public Guid? LastEvaluationRef { get; private set; }
     public string? RuleFingerprint { get; private set; }
@@ -45,6 +43,7 @@ public sealed class VendorInvoice
         DateOnly dueDate, Money total, string? poRef, UserId createdBy, DateTimeOffset createdAt)
     {
         CheckHeader(number, vendorId, total, poRef);
+        CheckDates(invoiceDate, dueDate);
         CheckUser(createdBy);
         Number = number; VendorId = vendorId; InvoiceDate = invoiceDate; ServiceDate = serviceDate;
         PostingDate = postingDate; DueDate = dueDate; Total = total; PoRef = poRef;
@@ -56,6 +55,7 @@ public sealed class VendorInvoice
     {
         Require(InvoiceStatus.Draft);
         CheckHeader(number, vendorId, total, poRef);
+        CheckDates(invoiceDate, dueDate);
         if ((Number, VendorId, InvoiceDate, ServiceDate, PostingDate, DueDate, Total, PoRef) ==
             (number, vendorId, invoiceDate, serviceDate, postingDate, dueDate, total, poRef)) return;
         Number = number; VendorId = vendorId; InvoiceDate = invoiceDate; ServiceDate = serviceDate;
@@ -218,6 +218,10 @@ public sealed class VendorInvoice
         ArgumentException.ThrowIfNullOrWhiteSpace(number);
         if (vendor == Guid.Empty || total <= Money.Zero || po is not null && string.IsNullOrWhiteSpace(po))
             throw new PayablesException("Invoice requires vendor, positive total and a valid optional PO.");
+    }
+    private static void CheckDates(DateOnly invoiceDate, DateOnly dueDate)
+    {
+        if (dueDate < invoiceDate) throw new PayablesException("Due date cannot precede the invoice date.");
     }
     private static void CheckEvaluation(Guid id, string fingerprint)
     {

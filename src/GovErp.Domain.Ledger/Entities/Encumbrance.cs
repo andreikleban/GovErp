@@ -45,7 +45,7 @@ public sealed class Encumbrance
         var claim = new EncumbranceClaim(invoiceId, contentVersion, amount);
         _claims.Add(claim); ChangeStamp++; return claim.Id;
     }
-    public Guid ClaimBilling(Guid invoiceId, int contentVersion, Money amount, decimal tolerance = .05m)
+    public Guid ClaimBilling(Guid invoiceId, int contentVersion, Money amount, decimal tolerance)
     {
         LedgerGuard.Owner(invoiceId, contentVersion); LedgerGuard.Positive(amount);
         if (tolerance is < 0 or > 1) throw new LedgerException("Invalid tolerance.");

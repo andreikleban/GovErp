@@ -13,8 +13,7 @@ public class BudgetLineTests
     private static BudgetLine ExerciseLine(BudgetControlMode mode = BudgetControlMode.Hard)
     {
         var line = new BudgetLine(Cops, Fy, mode, adopted: Money.Of(375_000m));
-        line.RecordActuals(Money.Of(132_000m));
-        line.RecordEncumbrance(Money.Of(96_000m));
+        line.ApplyOpeningBalance(new OpeningBalance(Cops, Fy, new DateOnly(2026, 6, 1), Money.Of(132_000m), Money.Of(96_000m), "FY2026 opening load"));
         return line;
     }
 
@@ -126,6 +125,6 @@ public class BudgetLineTests
         var line = ExerciseLine();
         FluentActions.Invoking(() => line.Reserve(Guid.NewGuid(), 1, Money.Zero, "X")).Should().Throw<LedgerException>();
         FluentActions.Invoking(() => line.Amend(Money.Zero, "X", Today)).Should().Throw<LedgerException>();
-        FluentActions.Invoking(() => line.RecordEncumbrance(Money.Of(-1))).Should().Throw<LedgerException>();
+        FluentActions.Invoking(() => line.RecordLiquidation(Money.Of(-1))).Should().Throw<LedgerException>();
     }
 }
