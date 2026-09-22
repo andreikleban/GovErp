@@ -1,6 +1,131 @@
 @page "/invoices"
+@page "/invoices/{Id:guid}"
 @attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Commands
+@using GovErp.Application.Web.Invoices
+@using GovErp.Application.Web.Invoices.Commands
+@using GovErp.Application.Web.Invoices.Contracts
+@using GovErp.Application.Web.Reference
+@using GovErp.Application.Web.Reference.Contracts
+@using GovErp.Web.Authentication
+@using GovErp.Web.Components.Invoices
 @using Microsoft.AspNetCore.Authorization
+@inject IInvoiceAppService InvoiceService
+@inject IReferenceAppService Reference
+@inject CurrentActor CurrentActor
+@inject NavigationManager Navigation
 
 <PageTitle>Invoices</PageTitle>
-<h1>Invoices</h1>
+@if (Id is null)
+{
+    <h1>Invoices</h1>
+    <p>
+        <button type="button" disabled="@_busy" @onclick="NewDraftAsync">New</button>
+        <button type="button" disabled="@_busy" @onclick="() => PresetAsync(InvoicePreset.NonPoGrant)">Non-PO</button>
+        <button type="button" disabled="@_busy" @onclick="() => PresetAsync(InvoicePreset.PoBackedGrant)">PO-backed</button>
+        <button type="button" disabled="@_busy" @onclick="() => PresetAsync(InvoicePreset.MultiFund)">Multi-fund</button>
+    </p>
+    @if (_error is not null) { <p>@_error</p> }
+    <table>
+        <thead><tr><th>Number</th><th>Vendor</th><th>Amount</th><th>Status</th><th>Last evaluation</th></tr></thead>
+        <tbody>
+        @if (_list is not null)
+        {
+            @foreach (var row in _list)
+            {
+                <tr>
+                    <td><a href="@($"/invoices/{row.Id}")">@row.Reference</a></td>
+                    <td>@row.VendorName</td>
+                    <td>@row.Total.ToString("C2")</td>
+                    <td>@row.Status</td>
+                    <td>@row.LastOverall</td>
+                </tr>
+            }
+        }
+        </tbody>
+    </table>
+}
+else if (_invoice is not null)
+{
+    <InvoiceDetail Invoice="_invoice" Vendors="_vendors" PurchaseOrders="_orders" Segments="_segments"
+                   Busy="_busy" Message="_error" OnSave="SaveAsync" OnValidate="ValidateAsync" OnSubmit="SubmitAsync" />
+}
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+    private IReadOnlyList<InvoiceListItemVm>? _list;
+    private InvoiceVm? _invoice;
+    private IReadOnlyList<VendorVm> _vendors = [];
+    private IReadOnlyList<PurchaseOrderVm> _orders = [];
+    private SegmentsVm? _segments;
+    private bool _busy;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        _vendors = await Reference.GetVendorsAsync(actor);
+        _orders = await Reference.GetPurchaseOrdersAsync(actor);
+        _segments = await Reference.GetSegmentsAsync(actor);
+        if (Id is { } id)
+        {
+            _invoice = await InvoiceService.GetAsync(id, actor);
+        }
+        else
+        {
+            _list = await InvoiceService.ListAsync(actor);
+        }
+    }
+
+    private async Task NewDraftAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        await RunAsync(async () =>
+        {
+            var env = new CommandEnvelope(Guid.NewGuid(), null);
+            var date = new DateOnly(2026, 6, 15);
+            var r = await InvoiceService.CreateDraftAsync(new CreateInvoiceCommand(env, $"INV-{env.CommandId:N}"[..12],
+                _vendors[0].Id, date, date, date, new DateOnly(2026, 7, 15), 1m, null,
+                [new DistributionCommand("101-6000-53100", 1m, null)]), actor);
+            if (!r.IsAccepted) { _error = r.Reason; return; }
+            Navigation.NavigateTo($"/invoices/{r.Value!.Id}", forceLoad: true);
+        });
+    }
+
+    private async Task PresetAsync(InvoicePreset preset)
+    {
+        var actor = await CurrentActor.GetAsync();
+        await RunAsync(async () =>
+        {
+            var r = await InvoiceService.CreateFromPresetAsync(preset, new CommandEnvelope(Guid.NewGuid(), null), actor);
+            if (!r.IsAccepted) { _error = r.Reason; return; }
+            Navigation.NavigateTo($"/invoices/{r.Value!.Id}", forceLoad: true);
+        });
+    }
+
+    private Task SaveAsync(UpdateInvoiceCommand cmd) => ApplyAsync(a => InvoiceService.UpdateDraftAsync(cmd, a));
+    private Task ValidateAsync(InvoiceActionCommand cmd) => ApplyAsync(a => InvoiceService.ValidateAsync(cmd, a));
+    private Task SubmitAsync(InvoiceActionCommand cmd) => ApplyAsync(a => InvoiceService.SubmitAsync(cmd, a));
+
+    private async Task ApplyAsync(Func<GovErp.Application.Web.Common.ActorContext, Task<CommandResult<InvoiceVm>>> action)
+    {
+        var actor = await CurrentActor.GetAsync();
+        await RunAsync(async () =>
+        {
+            var r = await action(actor);
+            if (r.Status == CommandStatus.Conflict && r.Retryable) { _error = "Data changed — reload the document."; }
+            else if (r.Status == CommandStatus.Forbidden) { _error = "Not allowed."; }
+            else if (!r.IsAccepted) { _error = r.Reason; }
+            else { _error = null; }
+            if (Id is { } id) { _invoice = await InvoiceService.GetAsync(id, actor); }
+        });
+    }
+
+    private async Task RunAsync(Func<Task> body)
+    {
+        _busy = true;
+        try { await body(); }
+        finally { _busy = false; }
+    }
+}

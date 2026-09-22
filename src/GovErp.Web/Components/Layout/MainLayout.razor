@@ -7,6 +7,7 @@
         <Authorized>
             <header>
                 <strong>GovErp</strong>
+                <NavMenu />
                 <span>@context.User.FindFirst(ActorClaims.Name)?.Value</span>
                 <span>@string.Join(", ", context.User.FindAll(ActorClaims.Role).Select(c => c.Value))</span>
                 <span>@context.User.FindFirst(ActorClaims.Tenant)?.Value</span>

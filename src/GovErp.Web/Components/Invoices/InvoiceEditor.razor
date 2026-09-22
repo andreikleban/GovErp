@@ -1,0 +1,34 @@
+@using GovErp.Application.Web.Reference.Contracts
+@using Microsoft.AspNetCore.Components.Forms
+
+<EditForm Model="Edit">
+    <div>
+        <label>Number <InputText @bind-Value="Edit.Number" disabled="true" /></label>
+        <label>Document date (Invoice, Service and Posting — demo uses one date)
+            <InputDate @bind-Value="Edit.DocumentDate" disabled="@ReadOnly" />
+        </label>
+        <label>Due date <InputDate @bind-Value="Edit.DueDate" disabled="@ReadOnly" /></label>
+        <label>Vendor
+            <InputSelect @bind-Value="Edit.VendorId" disabled="@ReadOnly">
+                @foreach (var v in Vendors) { <option value="@v.Id">@v.Name</option> }
+            </InputSelect>
+        </label>
+        <label>Header amount (USD) <InputNumber @bind-Value="Edit.Total" disabled="@ReadOnly" /></label>
+        <label>PO
+            <InputSelect @bind-Value="Edit.PoRef" disabled="@ReadOnly">
+                <option value="">(none)</option>
+                @foreach (var po in PurchaseOrders) { <option value="@po.Number">@po.Number</option> }
+            </InputSelect>
+        </label>
+    </div>
+    <p>Line sum @Edit.LineSum.ToString("C2") — difference @Edit.Difference.ToString("C2")</p>
+    <DistributionEditor Edit="Edit" Segments="Segments" PurchaseOrders="PurchaseOrders" ReadOnly="ReadOnly" />
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired] public EditorModel Edit { get; set; } = null!;
+    [Parameter] public IReadOnlyList<VendorVm> Vendors { get; set; } = [];
+    [Parameter] public IReadOnlyList<PurchaseOrderVm> PurchaseOrders { get; set; } = [];
+    [Parameter] public SegmentsVm? Segments { get; set; }
+    [Parameter] public bool ReadOnly { get; set; }
+}

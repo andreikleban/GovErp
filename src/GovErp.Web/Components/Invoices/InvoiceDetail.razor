@@ -1,0 +1,44 @@
+@using GovErp.Application.Web.Commands
+@using GovErp.Application.Web.Invoices.Commands
+@using GovErp.Application.Web.Invoices.Contracts
+@using GovErp.Application.Web.Reference.Contracts
+
+<h1>Invoice @_edit.Number</h1>
+<p>Status: @_invoice.Status. Evaluation: @_invoice.LastEvaluation?.Overall</p>
+@if (Message is not null) { <p>@Message</p> }
+@if (_invoice.LastEvaluation is not null)
+{
+    <p>Saved evaluation @_invoice.LastEvaluation.Overall — @_invoice.LastEvaluation.Outcomes.Count checks.</p>
+}
+<InvoiceEditor Edit="_edit" Vendors="Vendors" PurchaseOrders="PurchaseOrders" Segments="Segments" ReadOnly="@(_invoice.Status != "Draft")" />
+<InvoiceActions Busy="Busy" CanEdit="@(_invoice.Status == "Draft")" OnSave="SaveAsync" OnValidate="ValidateAsync" OnSubmit="SubmitAsync" />
+
+@code {
+    [Parameter, EditorRequired] public InvoiceVm Invoice { get; set; } = null!;
+    [Parameter] public IReadOnlyList<VendorVm> Vendors { get; set; } = [];
+    [Parameter] public IReadOnlyList<PurchaseOrderVm> PurchaseOrders { get; set; } = [];
+    [Parameter] public SegmentsVm? Segments { get; set; }
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public EventCallback<UpdateInvoiceCommand> OnSave { get; set; }
+    [Parameter] public EventCallback<InvoiceActionCommand> OnValidate { get; set; }
+    [Parameter] public EventCallback<InvoiceActionCommand> OnSubmit { get; set; }
+
+    private InvoiceVm _invoice = null!;
+    private EditorModel _edit = new();
+    private Guid _commandId = Guid.NewGuid();
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_invoice, Invoice))
+        {
+            _invoice = Invoice;
+            _edit = EditorModel.From(Invoice);
+            _commandId = Guid.NewGuid();
+        }
+    }
+
+    private Task SaveAsync() => OnSave.InvokeAsync(_edit.ToUpdate(new CommandEnvelope(_commandId, _invoice.RowVersion), _invoice.Id));
+    private Task ValidateAsync() => OnValidate.InvokeAsync(new InvoiceActionCommand(new CommandEnvelope(_commandId, _invoice.RowVersion), _invoice.Id));
+    private Task SubmitAsync() => OnSubmit.InvokeAsync(new InvoiceActionCommand(new CommandEnvelope(_commandId, _invoice.RowVersion), _invoice.Id));
+}

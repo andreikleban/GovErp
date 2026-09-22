@@ -48,6 +48,11 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
                 return CommandResult<InvoiceVm>.Forbidden("Only AP clerks create invoices.");
             }
 
+            if (DemoDateMismatch(cmd.InvoiceDate, cmd.ServiceDate, cmd.PostingDate) is { } createDateReason)
+            {
+                return CommandResult<InvoiceVm>.Refused(null, createDateReason);
+            }
+
             var ws = sp.GetRequiredService<InvoiceWorkspace>();
             _ = await ws.Vendors.FindAsync(cmd.VendorId, token) ?? throw new NotFoundException($"Vendor {cmd.VendorId} not found.");
             if (cmd.PoRef is not null && await ws.PurchaseOrders.FindByNumberAsync(cmd.PoRef, token) is null)
@@ -93,6 +98,11 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
             }
 
             ws.Concurrency.Expect(invoice, cmd.Envelope.ExpectedRowVersion);
+            if (DemoDateMismatch(cmd.InvoiceDate, cmd.ServiceDate, cmd.PostingDate) is { } updateDateReason)
+            {
+                return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), updateDateReason);
+            }
+
             invoice.UpdateHeader(cmd.Number, cmd.VendorId, cmd.InvoiceDate, cmd.ServiceDate, cmd.PostingDate, cmd.DueDate,
                 Money.Of(cmd.Total), cmd.PoRef);   // не Draft → PayablesException → Refused
             var wanted = cmd.Distributions.Select(d => (AccountCode.Parse(d.Account), Money.Of(d.Amount), d.PoLineNo)).ToList();
@@ -212,4 +222,9 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
             ws.Audit.Record(actor, "PaymentHoldChanged", invoice.Reference, cmd.Envelope.CommandId.ToString(), new { cmd.Hold });
             return CommandResult<InvoiceVm>.Accepted(await ws.ToVmAsync(invoice, token));
         }, ct: ct);
+
+    private static string? DemoDateMismatch(DateOnly invoiceDate, DateOnly serviceDate, DateOnly postingDate) =>
+        invoiceDate == serviceDate && serviceDate == postingDate
+            ? null
+            : "Demo limitation: InvoiceDate, ServiceDate and PostingDate must be the same date.";
 }

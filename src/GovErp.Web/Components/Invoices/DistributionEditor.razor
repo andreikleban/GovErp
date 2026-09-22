@@ -1,0 +1,48 @@
+@using GovErp.Application.Web.Reference.Contracts
+
+<table>
+    <thead>
+        <tr><th>Fund</th><th>Department</th><th>Object</th><th>Grant</th><th>Amount</th><th>PO line</th><th></th></tr>
+    </thead>
+    <tbody>
+    @foreach (var line in Edit.Lines)
+    {
+        <tr>
+            <td>
+                <select @bind="line.Fund" disabled="@ReadOnly">
+                    @if (Segments is not null) { @foreach (var s in Segments.Funds) { <option value="@s.Code">@s.Code</option> } }
+                </select>
+            </td>
+            <td>
+                <select @bind="line.Department" disabled="@ReadOnly">
+                    @if (Segments is not null) { @foreach (var s in Segments.Departments) { <option value="@s.Code">@s.Code</option> } }
+                </select>
+            </td>
+            <td>
+                <select @bind="line.Object" disabled="@ReadOnly">
+                    @if (Segments is not null) { @foreach (var s in Segments.Objects) { <option value="@s.Code">@s.Code</option> } }
+                </select>
+            </td>
+            <td>
+                <select @bind="line.Grant" disabled="@ReadOnly">
+                    <option value="">(none)</option>
+                    @if (Segments is not null) { @foreach (var s in Segments.Grants) { <option value="@s.Code">@s.Code</option> } }
+                </select>
+            </td>
+            <td><input type="number" step="0.01" @bind="line.Amount" disabled="@ReadOnly" /></td>
+            <td><input type="number" @bind="line.PoLineNo" disabled="@ReadOnly" /></td>
+            <td><button type="button" disabled="@ReadOnly" @onclick="() => Edit.Lines.Remove(line)">Remove</button></td>
+        </tr>
+    }
+    </tbody>
+</table>
+<button type="button" disabled="@ReadOnly" @onclick="AddLine">Add line</button>
+
+@code {
+    [Parameter, EditorRequired] public EditorModel Edit { get; set; } = null!;
+    [Parameter] public SegmentsVm? Segments { get; set; }
+    [Parameter] public IReadOnlyList<PurchaseOrderVm> PurchaseOrders { get; set; } = [];
+    [Parameter] public bool ReadOnly { get; set; }
+
+    private void AddLine() => Edit.Lines.Add(new LineModel { Fund = "101", Department = "6000", Object = "53100", Amount = 0m });
+}
