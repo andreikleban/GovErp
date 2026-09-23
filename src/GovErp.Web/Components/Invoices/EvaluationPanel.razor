@@ -1,0 +1,88 @@
+@using System.Text.RegularExpressions
+@using GovErp.Application.Web.Validation.Contracts
+
+<section class="panel">
+    <h2>Results</h2>
+    @if (Evaluation is null)
+    {
+        <p class="note">No saved evaluation.</p>
+    }
+    else
+    {
+        <p class="note">
+            Overall @Evaluation.Overall · document version @Evaluation.ContentVersion · @Evaluation.Trigger
+            · @Evaluation.EvaluatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")
+        </p>
+        <table>
+            <thead>
+                <tr><th>#</th><th>Step</th><th>Result</th></tr>
+            </thead>
+            <tbody>
+            @foreach (var step in Evaluation.Steps.OrderBy(s => s.Step))
+            {
+                var outcomes = Evaluation.Outcomes.Where(o => o.Step == step.Step).ToList();
+                var result = ResultOf(step, outcomes);
+                <tr>
+                    <td>@step.Step</td>
+                    <td>@Label(step.Name)</td>
+                    <td><span class="chip @Chip(result)">@result</span></td>
+                </tr>
+                @foreach (var outcome in outcomes)
+                {
+                    <tr>
+                        <td></td>
+                        <td colspan="2">
+                            <div>
+                                @outcome.RuleId v@(outcome.RuleVersion)
+                                @if (outcome.Line is { } line) { <span> · line @line</span> }
+                                · <span class="chip @Chip(outcome.Severity)">@outcome.Severity</span>
+                            </div>
+                            @if (outcome.Inputs.Count > 0)
+                            {
+                                <div class="note">Inputs: @string.Join("; ", outcome.Inputs.Select(p => $"{p.Key}={p.Value}"))</div>
+                            }
+                            @if (outcome.Computed.Count > 0)
+                            {
+                                <div class="note">Computed: @string.Join("; ", outcome.Computed.Select(p => $"{p.Key}={p.Value}"))</div>
+                            }
+                            <div>@outcome.Message</div>
+                            @if (!string.IsNullOrWhiteSpace(outcome.Resolution))
+                            {
+                                <div class="note">Action: @outcome.Resolution</div>
+                            }
+                            @if (outcome.OverriddenBy is { } applied)
+                            {
+                                <div>Override @applied.Role: @applied.Reason</div>
+                            }
+                        </td>
+                    </tr>
+                }
+            }
+            </tbody>
+        </table>
+    }
+</section>
+
+@code {
+    [Parameter] public EvaluationVm? Evaluation { get; set; }
+
+    private static string ResultOf(StepVm step, IReadOnlyList<OutcomeVm> outcomes)
+    {
+        if (!step.Executed)
+        {
+            return "Not evaluated";
+        }
+
+        return outcomes.Any(o => o.Severity is "HardStop" or "SoftStop") ? "Failed" : "Passed";
+    }
+
+    private static string Chip(string value) => value switch
+    {
+        "Passed" or "Allowed" => "ok",
+        "Warning" => "warn",
+        "Failed" or "SoftStop" or "HardStop" => "bad",
+        _ => "muted",
+    };
+
+    private static string Label(string name) => Regex.Replace(name, "([a-z])([A-Z])", "$1 $2");
+}

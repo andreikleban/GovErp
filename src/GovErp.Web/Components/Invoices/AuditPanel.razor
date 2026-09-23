@@ -1,0 +1,68 @@
+@using GovErp.Application.Web.Audit
+@using GovErp.Application.Web.Validation.Contracts
+
+<section>
+    @if (History.Count == 0)
+    {
+        <p class="note">No evaluations yet.</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr><th>When</th><th>Actor</th><th>Trigger</th><th>Version</th><th>Rule set</th><th></th></tr>
+            </thead>
+            <tbody>
+            @foreach (var evaluation in History.OrderByDescending(e => e.EvaluatedAt))
+            {
+                <tr class="@(evaluation.Id == SelectedId ? "selected" : null)">
+                    <td>@evaluation.EvaluatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td>@evaluation.EvaluatedBy</td>
+                    <td>@evaluation.Trigger</td>
+                    <td>@evaluation.ContentVersion</td>
+                    <td>@evaluation.RuleSetFingerprint</td>
+                    <td><button type="button" @onclick="() => OnSelect.InvokeAsync(evaluation.Id)">Show</button></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+    <h3>Events</h3>
+    @if (Events.Count == 0)
+    {
+        <p class="note">No events.</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr><th>When</th><th>Actor</th><th>Action</th><th>Subject</th></tr>
+            </thead>
+            <tbody>
+            @foreach (var ev in Events.OrderBy(e => e.OccurredAt))
+            {
+                <tr>
+                    <td>@ev.OccurredAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td>@ev.ActorName</td>
+                    <td>@ev.Action</td>
+                    <td>@ev.SubjectRef</td>
+                </tr>
+                @if (!string.IsNullOrWhiteSpace(ev.PayloadJson))
+                {
+                    <tr>
+                        <td></td>
+                        <td colspan="3"><pre class="payload">@ev.PayloadJson</pre></td>
+                    </tr>
+                }
+            }
+            </tbody>
+        </table>
+    }
+</section>
+
+@code {
+    [Parameter] public IReadOnlyList<EvaluationVm> History { get; set; } = [];
+    [Parameter] public IReadOnlyList<AuditEventVm> Events { get; set; } = [];
+    [Parameter] public Guid? SelectedId { get; set; }
+    [Parameter] public EventCallback<Guid> OnSelect { get; set; }
+}

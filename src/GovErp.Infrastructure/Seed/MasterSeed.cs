@@ -8,7 +8,7 @@ namespace GovErp.Infrastructure.Seed;
 /// <summary>Демо-пользователи Master (spec §2). Тенантов создаёт TenantProvisioner, не этот класс.</summary>
 public static class MasterSeed
 {
-    public const string DemoPassword = "Demo!2026";
+    public const string DemoPassword = "1!Qwertyui";
 
     private const string Springfield = "springfield";
     private const string Shelbyville = "shelbyville";
@@ -53,17 +53,33 @@ public static class MasterSeed
         yield return U(ShelbyFinanceId, "shelby.finance", "Shelbyville Finance Director", Shelbyville, [Roles.FinanceDirector], null);
     }
 
-    /// <summary>Добавляет только отсутствующих по UserName: повторный старт не дублирует и не сбрасывает пароли.</summary>
+    /// <summary>
+    /// Добавляет отсутствующих по UserName. Уже существующим выставляет общий демо-пароль,
+    /// если сохранённый хеш ему не соответствует.
+    /// </summary>
     public static async Task SeedUsersAsync(MasterDbContext master, IPasswordHasher<UserAccount> hasher, CancellationToken ct)
     {
-        var existing = (await master.Users.Select(u => u.UserName).ToListAsync(ct)).ToHashSet(StringComparer.Ordinal);
-        var missing = Candidates(hasher).Where(u => !existing.Contains(u.UserName)).ToList();
-        if (missing.Count == 0)
+        var existing = await master.Users.ToListAsync(ct);
+        var names = existing.Select(u => u.UserName).ToHashSet(StringComparer.Ordinal);
+        var missing = Candidates(hasher).Where(u => !names.Contains(u.UserName)).ToList();
+        if (missing.Count > 0)
         {
-            return;
+            master.Users.AddRange(missing);
         }
 
-        master.Users.AddRange(missing);
-        await master.SaveChangesAsync(ct);
+        var changed = missing.Count > 0;
+        foreach (var user in existing)
+        {
+            if (hasher.VerifyHashedPassword(user, user.PasswordHash, DemoPassword) == PasswordVerificationResult.Failed)
+            {
+                user.PasswordHash = hasher.HashPassword(user, DemoPassword);
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            await master.SaveChangesAsync(ct);
+        }
     }
 }

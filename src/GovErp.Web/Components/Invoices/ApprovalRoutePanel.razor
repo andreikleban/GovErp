@@ -1,0 +1,65 @@
+@using GovErp.Application.Web.Invoices.Contracts
+@using GovErp.Application.Web.Validation.Contracts
+
+<section class="panel">
+    <h2>Approval route</h2>
+    <p>Document status: @DocumentStatus</p>
+    <p>Evaluation: @(Evaluation?.Overall ?? "none")</p>
+    <p class="note">A warning on the evaluation is not approval of the document.</p>
+    @if (Evaluation is null || Evaluation.ApprovalRoute.Count == 0)
+    {
+        <p class="note">No route on this evaluation.</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr><th>Role</th><th>Department</th><th>Reason</th><th>Done</th></tr>
+            </thead>
+            <tbody>
+            @foreach (var step in Evaluation.ApprovalRoute)
+            {
+                <tr>
+                    <td>@step.Role</td>
+                    <td>@(step.Department ?? "—")</td>
+                    <td>@step.Reason</td>
+                    <td>@(step.IsSatisfied ? "Yes" : "No")</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+    <h3>Decisions</h3>
+    <p class="note">Earlier approval cycles stay on the document.</p>
+    @if (Approvals.Count == 0)
+    {
+        <p class="note">No approval decisions recorded.</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr><th>When</th><th>Role</th><th>Department</th><th>Decision</th><th>Reason</th><th>Cycle</th></tr>
+            </thead>
+            <tbody>
+            @foreach (var approval in Approvals.OrderByDescending(a => a.At))
+            {
+                <tr>
+                    <td>@approval.At.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td>@approval.Role</td>
+                    <td>@(approval.Department ?? "—")</td>
+                    <td>@approval.Decision</td>
+                    <td>@(approval.Reason ?? "—")</td>
+                    <td><span class="chip @(approval.IsActiveCycle ? "ok" : null)">@(approval.IsActiveCycle ? "Current" : "History")</span></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</section>
+
+@code {
+    [Parameter] public EvaluationVm? Evaluation { get; set; }
+    [Parameter] public string DocumentStatus { get; set; } = "";
+    [Parameter] public IReadOnlyList<ApprovalVm> Approvals { get; set; } = [];
+}

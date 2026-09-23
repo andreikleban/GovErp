@@ -1,4 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <UserSecretsId>dc7bffd2-fd45-45f1-aa73-812bf673e267</UserSecretsId>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../GovErp.Application.Web/GovErp.Application.Web.csproj" />
     <ProjectReference Include="../GovErp.Infrastructure/GovErp.Infrastructure.csproj" />

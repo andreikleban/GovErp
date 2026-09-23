@@ -1,13 +1,51 @@
-<p>
-    <button type="button" disabled="@(Busy || !CanEdit)" @onclick="OnSave">Save</button>
+<p class="toolbar">
+    <button class="primary" type="button" disabled="@(Busy || !CanEdit)" @onclick="OnSave">Save</button>
     <button type="button" disabled="@Busy" @onclick="OnValidate">Validate</button>
     <button type="button" disabled="@(Busy || !CanEdit)" @onclick="OnSubmit">Submit</button>
+    @if (CanPost)
+    {
+        <button class="primary" type="button" disabled="@Busy" @onclick="OnPost">Post</button>
+    }
+    @if (CanReturn)
+    {
+        <button type="button" disabled="@Busy" @onclick="OnReturnToDraft">Return to draft</button>
+    }
 </p>
+@if (CanWithdraw)
+{
+    <label>Withdrawal reason
+        <input @bind="_withdrawReason" @bind:event="oninput" autocomplete="off" />
+    </label>
+    <p class="toolbar">
+        <button type="button" disabled="@(Busy || string.IsNullOrWhiteSpace(_withdrawReason))" @onclick="WithdrawAsync">Withdraw</button>
+    </p>
+}
 
 @code {
+    [Parameter] public Guid InvoiceId { get; set; }
     [Parameter] public bool Busy { get; set; }
     [Parameter] public bool CanEdit { get; set; }
+    [Parameter] public bool CanPost { get; set; }
+    [Parameter] public bool CanWithdraw { get; set; }
+    [Parameter] public bool CanReturn { get; set; }
     [Parameter] public EventCallback OnSave { get; set; }
     [Parameter] public EventCallback OnValidate { get; set; }
     [Parameter] public EventCallback OnSubmit { get; set; }
+    [Parameter] public EventCallback OnPost { get; set; }
+    [Parameter] public EventCallback<string> OnWithdraw { get; set; }
+    [Parameter] public EventCallback OnReturnToDraft { get; set; }
+
+    private Guid _invoiceId;
+    private string _withdrawReason = "";
+
+    protected override void OnParametersSet()
+    {
+        if (_invoiceId != InvoiceId)
+        {
+            _invoiceId = InvoiceId;
+            _withdrawReason = "";
+        }
+    }
+
+    private Task WithdrawAsync() => OnWithdraw.InvokeAsync(_withdrawReason.Trim());
 }

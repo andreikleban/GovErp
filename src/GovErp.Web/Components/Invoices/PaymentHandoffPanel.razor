@@ -1,0 +1,61 @@
+@using GovErp.Application.Web.Common
+@inject IClock Clock
+
+<section class="panel">
+    <h2>Payment handoff</h2>
+    <p class="note">Readiness for a payment module. This screen does not send a payment.</p>
+    <p>
+        Due date @DueDate.ToString("yyyy-MM-dd")
+        · Business date @Clock.BusinessDate.ToString("yyyy-MM-dd")
+        · Payment hold @(PaymentHold ? "On" : "Off")
+    </p>
+    <table>
+        <thead>
+            <tr><th>Condition</th><th>Met</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Posted</td>
+                <td><span class="chip @Chip(Posted)">@(Posted ? "Yes" : "No")</span></td>
+            </tr>
+            <tr>
+                <td>Vendor active</td>
+                <td><span class="chip @Chip(VendorActive)">@(VendorActive ? "Yes" : "No")</span></td>
+            </tr>
+            <tr>
+                <td>No payment hold</td>
+                <td><span class="chip @Chip(!PaymentHold)">@(!PaymentHold ? "Yes" : "No")</span></td>
+            </tr>
+            <tr>
+                <td>Due on or before the business date</td>
+                <td><span class="chip @Chip(Due)">@(Due ? "Yes" : "No")</span></td>
+            </tr>
+        </tbody>
+    </table>
+    <p>Ready <span class="chip @Chip(Ready)">@(Ready ? "Yes" : "No")</span></p>
+    @if (CanSetHold)
+    {
+        <p class="toolbar">
+            <button type="button" disabled="@Busy" @onclick="ToggleAsync">@(PaymentHold ? "Clear payment hold" : "Set payment hold")</button>
+        </p>
+    }
+</section>
+
+@code {
+    [Parameter] public string Status { get; set; } = "";
+    [Parameter] public string VendorStatus { get; set; } = "";
+    [Parameter] public bool PaymentHold { get; set; }
+    [Parameter] public DateOnly DueDate { get; set; }
+    [Parameter] public bool Ready { get; set; }
+    [Parameter] public bool CanSetHold { get; set; }
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public EventCallback<bool> OnSetHold { get; set; }
+
+    private bool Posted => Status == "Posted";
+    private bool VendorActive => VendorStatus == "Active";
+    private bool Due => DueDate <= Clock.BusinessDate;
+
+    private static string Chip(bool met) => met ? "ok" : "bad";
+
+    private Task ToggleAsync() => OnSetHold.InvokeAsync(!PaymentHold);
+}

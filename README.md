@@ -19,7 +19,7 @@ ignored `.packages` directory. No database or LLM credentials are needed at this
 dotnet restore GovErp.sln
 dotnet build GovErp.sln --no-restore
 dotnet test GovErp.sln --no-restore
-dotnet run --project src/GovErp.Web --no-build --urls http://localhost:8080
+dotnet run --project src/GovErp.AppHost
 ```
 
 Unit tests cover the domain invariants; architecture tests check project references

@@ -6,12 +6,15 @@
 @using GovErp.Application.Web.Invoices
 @using GovErp.Application.Web.Invoices.Commands
 @using GovErp.Application.Web.Invoices.Contracts
+@using GovErp.Application.Web.Posting
 @using GovErp.Application.Web.Reference
 @using GovErp.Application.Web.Reference.Contracts
 @using GovErp.Web.Authentication
+@using GovErp.Web.Formatting
 @using GovErp.Web.Components.Invoices
 @using Microsoft.AspNetCore.Authorization
 @inject IInvoiceAppService InvoiceService
+@inject IPostingAppService Posting
 @inject IReferenceAppService Reference
 @inject CurrentActor CurrentActor
 @inject NavigationManager Navigation
@@ -20,15 +23,15 @@
 @if (Id is null)
 {
     <h1>Invoices</h1>
-    <p>
-        <button type="button" disabled="@_busy" @onclick="NewDraftAsync">New</button>
+    <p class="toolbar">
+        <button class="primary" type="button" disabled="@_busy" @onclick="NewDraftAsync">New</button>
         <button type="button" disabled="@_busy" @onclick="() => PresetAsync(InvoicePreset.NonPoGrant)">Non-PO</button>
         <button type="button" disabled="@_busy" @onclick="() => PresetAsync(InvoicePreset.PoBackedGrant)">PO-backed</button>
         <button type="button" disabled="@_busy" @onclick="() => PresetAsync(InvoicePreset.MultiFund)">Multi-fund</button>
     </p>
-    @if (_error is not null) { <p>@_error</p> }
+    @if (_error is not null) { <p class="error">@_error</p> }
     <table>
-        <thead><tr><th>Number</th><th>Vendor</th><th>Amount</th><th>Status</th><th>Last evaluation</th></tr></thead>
+        <thead><tr><th>Number</th><th>Vendor</th><th class="money">Amount</th><th>Status</th><th>Last evaluation</th></tr></thead>
         <tbody>
         @if (_list is not null)
         {
@@ -37,7 +40,7 @@
                 <tr>
                     <td><a href="@($"/invoices/{row.Id}")">@row.Reference</a></td>
                     <td>@row.VendorName</td>
-                    <td>@row.Total.ToString("C2")</td>
+                    <td class="money">@MoneyText.Usd(row.Total)</td>
                     <td>@row.Status</td>
                     <td>@row.LastOverall</td>
                 </tr>
@@ -49,7 +52,8 @@
 else if (_invoice is not null)
 {
     <InvoiceDetail Invoice="_invoice" Vendors="_vendors" PurchaseOrders="_orders" Segments="_segments"
-                   Busy="_busy" Message="_error" OnSave="SaveAsync" OnValidate="ValidateAsync" OnSubmit="SubmitAsync" />
+                   Busy="_busy" Message="@_error" OnSave="SaveAsync" OnValidate="ValidateAsync" OnSubmit="SubmitAsync" OnPost="PostAsync"
+                   OnWithdraw="WithdrawAsync" OnReturnToDraft="ReturnAsync" OnPaymentHold="HoldAsync" />
 }
 
 @code {
@@ -107,6 +111,10 @@ else if (_invoice is not null)
     private Task SaveAsync(UpdateInvoiceCommand cmd) => ApplyAsync(a => InvoiceService.UpdateDraftAsync(cmd, a));
     private Task ValidateAsync(InvoiceActionCommand cmd) => ApplyAsync(a => InvoiceService.ValidateAsync(cmd, a));
     private Task SubmitAsync(InvoiceActionCommand cmd) => ApplyAsync(a => InvoiceService.SubmitAsync(cmd, a));
+    private Task PostAsync(InvoiceActionCommand cmd) => ApplyAsync(a => Posting.PostAsync(cmd, a));
+    private Task WithdrawAsync(ReasonedActionCommand cmd) => ApplyAsync(a => InvoiceService.WithdrawAsync(cmd, a));
+    private Task ReturnAsync(InvoiceActionCommand cmd) => ApplyAsync(a => InvoiceService.ReturnToDraftAsync(cmd, a));
+    private Task HoldAsync(PaymentHoldCommand cmd) => ApplyAsync(a => InvoiceService.SetPaymentHoldAsync(cmd, a));
 
     private async Task ApplyAsync(Func<GovErp.Application.Web.Common.ActorContext, Task<CommandResult<InvoiceVm>>> action)
     {

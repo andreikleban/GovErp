@@ -66,8 +66,10 @@ Save → Submit → Approve → Post с перевалидацией; пишет
 | Сценарии | `GovErp.Application.Web` |
 | Работа с внешним миром | `GovErp.Infrastructure` |
 | Интерфейс и точка сборки | `GovErp.Web` |
+| Оркестрация разработки | `GovErp.AppHost` (Aspire; не слой CA) |
 
 ```
+AppHost ────────► Web
 Web ────────────► Application.Web, Infrastructure (только Program.cs и Extensions/)
 Application.Web ► Domain.* , Domain.Shared
 Infrastructure ─► Domain.* , Domain.Shared, Application.Web (реализация портов слоя сценариев)
@@ -102,6 +104,7 @@ Domain.Shared ──► BCL
 | **GE-E2** Проект `GovErp.Domain.Shared` разделяется всеми контекстами | `DDD-6` | Shared kernel по Эвансу: `Money`, `AccountCode`, `FiscalYear`, идентификаторы — значения без поведения, одинаковые во всех контекстах | Если в Shared появится сущность или порт — это ошибка, а не расширение исключения |
 | **GE-E3** `TenantId`, `UserId` — обёртки над одним примитивом без собственных правил | `DDD-7.4` | Перепутать два идентификатора между собой слишком легко, компилятор — единственная надёжная защита | Не пересматривается |
 | **GE-E4** `Infrastructure` ссылается на `Application.Web` | `CA-7` (граф из общих правил) | Порты `IAuditTrail`, `IExplanationGenerator`, `ITenantContext` объявлены в слое сценариев, потому что не относятся ни к одному контексту; реализации живут снаружи | Если порт станет нужен слою правил — перенести в соответствующий Domain |
+| **GE-E5** `GovErp.AppHost` живёт в `src/` и ссылается на `GovErp.Web` | `CA-6`, `CA-7` | Aspire-оркестратор не слой продукта: только поднимает SQL-контейнер и Web. Домен и сценарии его не видят | Если AppHost начнёт ссылаться на Infrastructure или Domain — вынести за `src/` |
 
 ---
 
@@ -111,12 +114,12 @@ Domain.Shared ──► BCL
 |---|---|
 | Платформа | .NET (LTS), C# |
 | Интерфейс | Blazor Server, Bootstrap |
-| Хранилище | SQL Server 2022 в Docker; EF Core; БД на тенанта + `GovErp_Master` |
+| Хранилище | SQL Server 2022; локально — контейнер Aspire (`GovErp.AppHost`); EF Core; БД на тенанта + `GovErp_Master` |
 | Обмен сообщениями | нет |
 | Аутентификация | cookie auth, пользователи и роли в `GovErp_Master`, `PasswordHasher<T>` |
 | LLM | `Microsoft.Extensions.AI`; провайдер из конфигурации (`Template` / `Anthropic` / `OpenAI` / `Ollama`) |
 | Тесты | xUnit, FluentAssertions, Testcontainers, NetArchTest |
-| Развёртывание | `docker compose`: `sqlserver` + `web` |
+| Развёртывание | Локально: `dotnet run --project src/GovErp.AppHost`. Демо-образ: `docker compose`: `sqlserver` + `web` |
 
 ---
 

@@ -23,6 +23,11 @@ services:
       Tenancy__Credentials__springfield__Password: "${SPRINGFIELD_DB_PASSWORD}"
       Tenancy__Credentials__shelbyville__Password: "${SHELBYVILLE_DB_PASSWORD}"
       Explanation__Provider: "${EXPLANATION_PROVIDER:-Template}"
+      Explanation__Model: "${EXPLANATION_MODEL:-}"
+      Explanation__Endpoint: "${EXPLANATION_ENDPOINT:-}"
+      Explanation__TimeoutSeconds: "10"
+      Explanation__MaxOutputCharacters: "6000"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
     ports: ["127.0.0.1:8080:8080"]
 volumes:

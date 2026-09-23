@@ -1,0 +1,107 @@
+@using GovErp.Application.Web.Commands
+@using GovErp.Application.Web.Explanation
+@using GovErp.Web.Authentication
+@inject IExplanationAppService Explanations
+@inject CurrentActor CurrentActor
+
+<section class="panel">
+    <h2>Explanation</h2>
+    @if (EvaluationId is null)
+    {
+        <p class="note">No saved evaluation.</p>
+    }
+    else
+    {
+        <p class="note">Results above stay authoritative. This text does not change the decision.</p>
+        <label>Audience
+            <select @bind="_audience" @bind:after="NewCommand">
+                @foreach (var audience in Enum.GetValues<ExplanationAudience>())
+                {
+                    <option value="@audience">@audience</option>
+                }
+            </select>
+        </label>
+        <p class="toolbar">
+            <button type="button" disabled="@_busy" @onclick="GenerateAsync">Generate</button>
+        </p>
+        @if (_error is not null)
+        {
+            <p class="error">@_error</p>
+        }
+        @if (_shown is not null)
+        {
+            <pre class="payload explanation">@_shown.Text</pre>
+            <p class="note">
+                Provider @_shown.Provider
+                · Model @(_shown.Model ?? "—")
+                · Prompt @_shown.PromptVersion
+                · @_shown.GeneratedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")
+            </p>
+            @if (!string.IsNullOrWhiteSpace(_shown.FallbackReason))
+            {
+                <p class="note">Fallback: @_shown.FallbackReason</p>
+            }
+        }
+    }
+</section>
+
+@code {
+    [Parameter] public Guid? EvaluationId { get; set; }
+
+    private ExplanationAudience _audience = ExplanationAudience.FinanceUser;
+    private ExplanationVm? _shown;
+    private Guid? _loadedFor;
+    private Guid _commandId = Guid.NewGuid();
+    private string? _error;
+    private bool _busy;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedFor == EvaluationId)
+        {
+            return;
+        }
+
+        _loadedFor = EvaluationId;
+        _shown = null;
+        _error = null;
+        NewCommand();
+        if (EvaluationId is null)
+        {
+            return;
+        }
+
+        var list = await Explanations.ListAsync(EvaluationId.Value, await CurrentActor.GetAsync());
+        _shown = list.OrderByDescending(item => item.GeneratedAt).FirstOrDefault();
+    }
+
+    private void NewCommand() => _commandId = Guid.NewGuid();
+
+    private async Task GenerateAsync()
+    {
+        if (EvaluationId is null || _busy)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+        try
+        {
+            var result = await Explanations.ExplainAsync(EvaluationId.Value, _audience, new CommandEnvelope(_commandId, null), await CurrentActor.GetAsync());
+            if (result.IsAccepted && result.Value is not null)
+            {
+                _shown = result.Value;
+                NewCommand();
+            }
+            else
+            {
+                _error = result.Reason ?? "Explanation was not saved.";
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

@@ -65,7 +65,7 @@ public static class ServiceCollectionExtensions
         s.AddScoped<ISignIn, MasterSignIn>();
         s.AddSingleton<IPasswordHasher<UserAccount>, PasswordHasher<UserAccount>>();
         s.AddSingleton<IClock, SystemClock>();
-        s.AddScoped<IExplanationGenerator, TemplateExplanationGenerator>();   // план 4 заменит выбором провайдера
+        s.AddExplanation(cfg);
         return s;
     }
 }

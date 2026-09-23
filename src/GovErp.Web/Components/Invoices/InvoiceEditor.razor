@@ -1,12 +1,11 @@
 @using GovErp.Application.Web.Reference.Contracts
+@using GovErp.Web.Formatting
 @using Microsoft.AspNetCore.Components.Forms
 
 <EditForm Model="Edit">
     <div>
         <label>Number <InputText @bind-Value="Edit.Number" disabled="true" /></label>
-        <label>Document date (Invoice, Service and Posting — demo uses one date)
-            <InputDate @bind-Value="Edit.DocumentDate" disabled="@ReadOnly" />
-        </label>
+        <label>Document date <InputDate @bind-Value="Edit.DocumentDate" disabled="@ReadOnly" /></label>
         <label>Due date <InputDate @bind-Value="Edit.DueDate" disabled="@ReadOnly" /></label>
         <label>Vendor
             <InputSelect @bind-Value="Edit.VendorId" disabled="@ReadOnly">
@@ -21,7 +20,8 @@
             </InputSelect>
         </label>
     </div>
-    <p>Line sum @Edit.LineSum.ToString("C2") — difference @Edit.Difference.ToString("C2")</p>
+    <p class="note">Invoice, service and posting dates use this one document date.</p>
+    <p class="note">Line sum @MoneyText.Usd(Edit.LineSum) — difference @MoneyText.Usd(Edit.Difference)</p>
     <DistributionEditor Edit="Edit" Segments="Segments" PurchaseOrders="PurchaseOrders" ReadOnly="ReadOnly" />
 </EditForm>
 

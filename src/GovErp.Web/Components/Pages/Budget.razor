@@ -1,5 +1,109 @@
 @page "/budget"
 @attribute [Authorize]
-@using Microsoft.AspNetCore.Authorization
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Budget
+@using GovErp.Application.Web.Budget.Commands
+@using GovErp.Application.Web.Budget.Contracts
+@using GovErp.Application.Web.Commands
+@using GovErp.Web.Authentication
+@inject IBudgetAppService Budgets
+@inject CurrentActor CurrentActor
+
+<PageTitle>Budget</PageTitle>
 <h1>Budget</h1>
-<p>Budget lines will appear in the next step.</p>
+<p class="note">An amendment here simulates a change that has already been approved. It is not a request waiting for a vote.</p>
+@if (_error is not null) { <p class="error">@_error</p> }
+<label>Fiscal year <input type="number" @bind="_year" /></label>
+<p class="toolbar"><button type="button" disabled="@_busy" @onclick="LoadAsync">Show</button></p>
+@if (_lines is not null)
+{
+    <table>
+        <thead>
+            <tr>
+                <th>FY</th><th>Account</th>
+                <th class="money">Opening actuals</th><th class="money">Opening encumbered</th>
+                <th class="money">Amended</th><th class="money">Actuals</th><th class="money">Encumbered</th>
+                <th class="money">Held</th><th class="money">Available</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var line in _lines)
+        {
+            <tr>
+                <td>@line.FiscalYear</td>
+                <td>@line.Account</td>
+                <td class="money">@line.OpeningActuals.ToString("N2")</td>
+                <td class="money">@line.OpeningEncumbered.ToString("N2")</td>
+                <td class="money">@line.Amended.ToString("N2")</td>
+                <td class="money">@line.Actuals.ToString("N2")</td>
+                <td class="money">@line.Encumbered.ToString("N2")</td>
+                <td class="money">@line.Held.ToString("N2")</td>
+                <td class="money">@line.Available.ToString("N2")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+    <section class="panel">
+        <h2>Amendment</h2>
+        <div>
+            <label>Account
+                <select @bind="_account">
+                    @foreach (var line in _lines) { <option value="@line.Account">@line.Account</option> }
+                </select>
+            </label>
+            <label>Amount <input type="number" step="0.01" @bind="_amount" /></label>
+            <label>Fiscal year <input type="number" @bind="_amendYear" /></label>
+            <label>Effective date <input type="date" @bind="_effective" /></label>
+            <label>Reference <input @bind="_reference" /></label>
+        </div>
+        <p class="toolbar"><button class="primary" type="button" disabled="@_busy" @onclick="AmendAsync">Amend</button></p>
+    </section>
+}
+
+@code {
+    private int _year = 2026;
+    private int _amendYear = 2026;
+    private decimal _amount;
+    private string _account = "";
+    private string _reference = "";
+    private DateOnly _effective = new(2026, 6, 15);
+    private IReadOnlyList<BudgetLineVm>? _lines;
+    private string? _error;
+    private bool _busy;
+    private Guid _commandId = Guid.NewGuid();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        _lines = await Budgets.ListAsync(_year, actor);
+        if (_lines.Count > 0 && _lines.All(l => l.Account != _account))
+        {
+            _account = _lines[0].Account;
+        }
+    }
+
+    private async Task AmendAsync()
+    {
+        _busy = true;
+        try
+        {
+            var actor = await CurrentActor.GetAsync();
+            var result = await Budgets.AmendAsync(new AmendBudgetCommand(
+                new CommandEnvelope(_commandId, null), _account, _amendYear, _amount, _reference, _effective), actor);
+            _error = result.IsAccepted ? null : result.Status == CommandStatus.Forbidden ? "Not allowed." : result.Reason;
+            if (result.IsAccepted)
+            {
+                _amount = 0;
+                _reference = "";
+            }
+        }
+        finally
+        {
+            _busy = false;
+            _commandId = Guid.NewGuid();
+            await LoadAsync();
+        }
+    }
+}

@@ -13,5 +13,10 @@
     <PackageReference Include="Microsoft.Extensions.Identity.Core" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.AI" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
+    <PackageReference Include="Anthropic" />
+    <PackageReference Include="OllamaSharp" />
+    <PackageReference Include="System.ClientModel" />
   </ItemGroup>
 </Project>

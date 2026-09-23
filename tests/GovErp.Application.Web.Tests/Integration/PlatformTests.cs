@@ -28,7 +28,7 @@ public sealed class PlatformTests(SqlServerFixture fixture)
     {
         await using var scope = fixture.Services.CreateAsyncScope();
         var signIn = scope.ServiceProvider.GetRequiredService<ISignIn>();
-        var chief = await signIn.AuthenticateAsync("fire.chief", "Demo!2026");
+        var chief = await signIn.AuthenticateAsync("fire.chief", MasterSeed.DemoPassword);
         chief!.TenantId.Should().Be(new TenantId("springfield"));
         chief.DepartmentCode.Should().Be("6000");
         chief.IsInRole(Roles.DepartmentHead).Should().BeTrue();

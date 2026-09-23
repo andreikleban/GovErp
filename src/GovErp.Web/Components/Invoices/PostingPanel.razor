@@ -1,0 +1,63 @@
+@using GovErp.Application.Web.Validation.Contracts
+
+<section class="panel">
+    <h2>@(IsPosted ? "Journal" : "Posting preview")</h2>
+    @if (Check is not null)
+    {
+        <p class="note">Posting check @(Check.Passed ? "passed" : "failed").</p>
+        @foreach (var failure in Check.Failures)
+        {
+            <p class="error">@failure</p>
+        }
+    }
+    @if (Lines.Count == 0)
+    {
+        <p class="note">No lines.</p>
+    }
+    else
+    {
+        @foreach (var fund in Lines.GroupBy(FundOf).OrderBy(g => g.Key))
+        {
+            <h3>Fund @fund.Key</h3>
+            @foreach (var family in fund.GroupBy(l => l.Family).OrderBy(g => g.Key))
+            {
+                <h3>@family.Key</h3>
+                <table>
+                    <thead>
+                        <tr><th>Account</th><th>Description</th><th class="money">Debit</th><th class="money">Credit</th></tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var line in family)
+                    {
+                        <tr>
+                            <td>@line.Account</td>
+                            <td>@line.Description</td>
+                            <td class="money">@line.Debit.ToString("N2")</td>
+                            <td class="money">@line.Credit.ToString("N2")</td>
+                        </tr>
+                    }
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="2">Total</td>
+                            <td class="money">@family.Sum(l => l.Debit).ToString("N2")</td>
+                            <td class="money">@family.Sum(l => l.Credit).ToString("N2")</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            }
+        }
+    }
+</section>
+
+@code {
+    [Parameter] public IReadOnlyList<PreviewLineVm> Lines { get; set; } = [];
+    [Parameter] public bool IsPosted { get; set; }
+    [Parameter] public PostingCheckVm? Check { get; set; }
+
+    private static string FundOf(PreviewLineVm line)
+    {
+        var dash = line.Account.IndexOf('-');
+        return dash < 0 ? line.Account : line.Account[..dash];
+    }
+}

@@ -1,5 +1,50 @@
 @page "/rules"
 @attribute [Authorize]
-@using Microsoft.AspNetCore.Authorization
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Reference
+@using GovErp.Application.Web.Reference.Contracts
+@using GovErp.Web.Authentication
+@inject IReferenceAppService Reference
+@inject CurrentActor CurrentActor
+
+<PageTitle>Rules</PageTitle>
 <h1>Rules</h1>
-<p>Rule set will appear in the next step.</p>
+<p class="note">Federal and State layers are demonstration data. They are not a claim of legal compliance.</p>
+@if (_set is null)
+{
+    <p class="note">Loading the rule set.</p>
+}
+else
+{
+    <p class="note">Engine @_set.EngineVersion · fingerprint @_set.CurrentFingerprint</p>
+    <table>
+        <thead>
+            <tr><th>Rule</th><th>Version</th><th>Layer</th><th>From</th><th>To</th><th>Enabled</th><th>Parameters</th><th>Overridable by</th></tr>
+        </thead>
+        <tbody>
+        @foreach (var rule in _set.Rules)
+        {
+            <tr>
+                <td>@rule.RuleId</td>
+                <td>@rule.Version</td>
+                <td>@rule.Layer</td>
+                <td>@rule.EffectiveFrom.ToString("yyyy-MM-dd")</td>
+                <td>@(rule.EffectiveTo?.ToString("yyyy-MM-dd") ?? "—")</td>
+                <td>@(rule.IsEnabled ? "Yes" : "No")</td>
+                <td>@string.Join("; ", rule.Parameters.Select(p => $"{p.Key}={p.Value}"))</td>
+                <td>@(rule.OverridableBy.Count == 0 ? "—" : string.Join(", ", rule.OverridableBy))</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+@code {
+    private RuleSetVm? _set;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        _set = await Reference.GetRulesAsync(actor);
+    }
+}

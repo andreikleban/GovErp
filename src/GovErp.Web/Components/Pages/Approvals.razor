@@ -1,5 +1,136 @@
 @page "/approvals"
 @attribute [Authorize]
-@using Microsoft.AspNetCore.Authorization
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Approvals
+@using GovErp.Application.Web.Approvals.Contracts
+@using GovErp.Application.Web.Commands
+@using GovErp.Application.Web.Invoices
+@using GovErp.Application.Web.Invoices.Commands
+@using GovErp.Web.Authentication
+@inject IApprovalAppService ApprovalsService
+@inject IInvoiceAppService Invoices
+@inject CurrentActor CurrentActor
+
+<PageTitle>Approvals</PageTitle>
 <h1>Approvals</h1>
-<p>Queue will appear in the next step.</p>
+@if (_error is not null) { <p class="error">@_error</p> }
+@if (_queue is null)
+{
+    <p class="note">Loading the queue.</p>
+}
+else if (_queue.Count == 0)
+{
+    <p class="note">Nothing is waiting for you.</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr><th>Invoice</th><th>Vendor</th><th class="money">Amount</th><th>Evaluation</th><th>Kind</th><th>Role</th><th>Department</th><th></th></tr>
+        </thead>
+        <tbody>
+        @foreach (var item in _queue)
+        {
+            <tr class="@(_picked?.InvoiceId == item.InvoiceId && _picked.Kind == item.Kind && _picked.RuleId == item.RuleId ? "selected" : null)">
+                <td><a href="@($"/invoices/{item.InvoiceId}")">@item.Reference</a></td>
+                <td>@item.VendorName</td>
+                <td class="money">@item.Total.ToString("N2")</td>
+                <td>@item.Overall</td>
+                <td>@item.Kind</td>
+                <td>@item.Role</td>
+                <td>@(item.Department ?? "—")</td>
+                <td><button type="button" @onclick="() => Pick(item)">Open</button></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+@if (_picked is not null)
+{
+    <section class="panel">
+        <h2>@_picked.Kind · @_picked.Reference</h2>
+        <p>@_picked.Reason</p>
+        @if (_picked.Kind == "Override")
+        {
+            <p class="note">Rule @_picked.RuleId, line @(_picked.Line?.ToString() ?? "header"). The server checks that you may waive this outcome.</p>
+        }
+        <label>Reason <input @bind="_reason" @bind:event="oninput" /></label>
+        <p class="toolbar">
+            @if (_picked.Kind == "Approve")
+            {
+                <button class="primary" type="button" disabled="@_busy" @onclick="ApproveAsync">Approve</button>
+                <button type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_reason))" @onclick="RejectAsync">Reject</button>
+            }
+            else
+            {
+                <button class="primary" type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_reason))" @onclick="OverrideAsync">Override</button>
+            }
+        </p>
+    </section>
+}
+
+@code {
+    private IReadOnlyList<ApprovalQueueItemVm>? _queue;
+    private ApprovalQueueItemVm? _picked;
+    private string _reason = "";
+    private string? _error;
+    private bool _busy;
+    private Guid _commandId = Guid.NewGuid();
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private void Pick(ApprovalQueueItemVm item)
+    {
+        _picked = item;
+        _reason = "";
+        _error = null;
+        _commandId = Guid.NewGuid();
+    }
+
+    private Task ApproveAsync() => RunAsync(async actor =>
+    {
+        var invoice = await Invoices.GetAsync(_picked!.InvoiceId, actor);
+        return await ApprovalsService.ApproveAsync(new InvoiceActionCommand(new CommandEnvelope(_commandId, invoice.RowVersion), invoice.Id), actor);
+    });
+
+    private Task RejectAsync() => RunAsync(async actor =>
+    {
+        var invoice = await Invoices.GetAsync(_picked!.InvoiceId, actor);
+        return await ApprovalsService.RejectAsync(new ReasonedActionCommand(new CommandEnvelope(_commandId, invoice.RowVersion), invoice.Id, _reason), actor);
+    });
+
+    private Task OverrideAsync() => RunAsync(async actor =>
+    {
+        var invoice = await Invoices.GetAsync(_picked!.InvoiceId, actor);
+        return await ApprovalsService.OverrideAsync(new OverrideCommand(
+            new CommandEnvelope(_commandId, invoice.RowVersion), invoice.Id, _picked.EvaluationId, _picked.RuleId!, _picked.Line, _reason), actor);
+    });
+
+    private async Task RunAsync(Func<GovErp.Application.Web.Common.ActorContext, Task<CommandResult<GovErp.Application.Web.Invoices.Contracts.InvoiceVm>>> action)
+    {
+        _busy = true;
+        try
+        {
+            var actor = await CurrentActor.GetAsync();
+            var result = await action(actor);
+            _error = result.IsAccepted ? null : result.Status == CommandStatus.Forbidden ? "Not allowed." : result.Reason;
+            if (result.IsAccepted)
+            {
+                _picked = null;
+                _reason = "";
+            }
+        }
+        finally
+        {
+            _busy = false;
+            _commandId = Guid.NewGuid();
+            await ReloadAsync();
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        _queue = await ApprovalsService.GetQueueAsync(actor);
+    }
+}

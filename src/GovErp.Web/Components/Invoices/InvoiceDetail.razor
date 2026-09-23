@@ -1,17 +1,40 @@
+@using GovErp.Application.Web.Audit
 @using GovErp.Application.Web.Commands
+@using GovErp.Application.Web.Explanation
 @using GovErp.Application.Web.Invoices.Commands
 @using GovErp.Application.Web.Invoices.Contracts
+@using GovErp.Application.Web.Common
+@using GovErp.Application.Web.Posting
 @using GovErp.Application.Web.Reference.Contracts
+@using GovErp.Application.Web.Validation.Contracts
+@using GovErp.Web.Authentication
+@inject IExplanationAppService Explanations
+@inject IPostingAppService Posting
+@inject CurrentActor CurrentActor
 
 <h1>Invoice @_edit.Number</h1>
-<p>Status: @_invoice.Status. Evaluation: @_invoice.LastEvaluation?.Overall</p>
-@if (Message is not null) { <p>@Message</p> }
-@if (_invoice.LastEvaluation is not null)
-{
-    <p>Saved evaluation @_invoice.LastEvaluation.Overall — @_invoice.LastEvaluation.Outcomes.Count checks.</p>
-}
+<p class="note">Document status: @_invoice.Status</p>
+@if (Message is not null) { <p class="error">@Message</p> }
 <InvoiceEditor Edit="_edit" Vendors="Vendors" PurchaseOrders="PurchaseOrders" Segments="Segments" ReadOnly="@(_invoice.Status != "Draft")" />
-<InvoiceActions Busy="Busy" CanEdit="@(_invoice.Status == "Draft")" OnSave="SaveAsync" OnValidate="ValidateAsync" OnSubmit="SubmitAsync" />
+<InvoiceActions InvoiceId="_invoice.Id" Busy="Busy" CanEdit="@(_invoice.Status == "Draft")" CanPost="CanPost" CanWithdraw="CanWithdraw" CanReturn="CanReturn"
+                OnSave="SaveAsync" OnValidate="ValidateAsync" OnSubmit="SubmitAsync" OnPost="PostAsync" OnWithdraw="WithdrawAsync" OnReturnToDraft="ReturnAsync" />
+<div class="tabs" role="tablist">
+    <button type="button" role="tab" aria-selected="@(_tab == "invoice" ? "true" : "false")" @onclick="ShowInvoice">Invoice</button>
+    <button type="button" role="tab" aria-selected="@(_tab == "audit" ? "true" : "false")" @onclick="ShowAudit">Audit</button>
+</div>
+@if (_tab == "invoice")
+{
+    <EvaluationPanel Evaluation="Shown" />
+    <ExplanationPanel EvaluationId="Shown?.Id" />
+    <ApprovalRoutePanel Evaluation="Shown" DocumentStatus="@_invoice.Status" Approvals="_invoice.Approvals" />
+    <PostingPanel Lines="PostingLines" IsPosted="@(_invoice.Status == "Posted")" Check="Shown?.PostingCheck" />
+    <PaymentHandoffPanel Status="@_invoice.Status" VendorStatus="@VendorStatus" PaymentHold="_invoice.PaymentHold" DueDate="_invoice.DueDate"
+                         Ready="_invoice.ReadyForPaymentHandoff" CanSetHold="_isPoster" Busy="Busy" OnSetHold="HoldAsync" />
+}
+else
+{
+    <AuditPanel History="_history" Events="_events" SelectedId="Shown?.Id" OnSelect="Select" />
+}
 
 @code {
     [Parameter, EditorRequired] public InvoiceVm Invoice { get; set; } = null!;
@@ -23,10 +46,34 @@
     [Parameter] public EventCallback<UpdateInvoiceCommand> OnSave { get; set; }
     [Parameter] public EventCallback<InvoiceActionCommand> OnValidate { get; set; }
     [Parameter] public EventCallback<InvoiceActionCommand> OnSubmit { get; set; }
+    [Parameter] public EventCallback<InvoiceActionCommand> OnPost { get; set; }
+    [Parameter] public EventCallback<ReasonedActionCommand> OnWithdraw { get; set; }
+    [Parameter] public EventCallback<InvoiceActionCommand> OnReturnToDraft { get; set; }
+    [Parameter] public EventCallback<PaymentHoldCommand> OnPaymentHold { get; set; }
 
     private InvoiceVm _invoice = null!;
     private EditorModel _edit = new();
     private Guid _commandId = Guid.NewGuid();
+    private bool _reload;
+    private Guid? _selected;
+    private IReadOnlyList<EvaluationVm> _history = [];
+    private IReadOnlyList<AuditEventVm> _events = [];
+    private IReadOnlyList<PreviewLineVm> _journal = [];
+    private bool _isPoster;
+    private Guid _userId;
+    private string _tab = "invoice";
+
+    private bool CanPost => _isPoster && _invoice.Status == "Approved" && (_invoice.LastEvaluation?.Capabilities.CanPost ?? false);
+    private bool IsAuthor => _userId == _invoice.CreatedBy;
+    private bool CanWithdraw => IsAuthor && _invoice.Status is "Submitted" or "Approved";
+    private bool CanReturn => IsAuthor && _invoice.Status == "Rejected";
+    private string VendorStatus => Vendors.FirstOrDefault(v => v.Id == _invoice.VendorId)?.Status ?? "";
+
+    private EvaluationVm? Shown =>
+        _history.FirstOrDefault(e => e.Id == _selected) ?? _invoice.LastEvaluation;
+
+    private IReadOnlyList<PreviewLineVm> PostingLines =>
+        _invoice.Status == "Posted" ? _journal : Shown?.PostingPreview ?? [];
 
     protected override void OnParametersSet()
     {
@@ -35,10 +82,44 @@
             _invoice = Invoice;
             _edit = EditorModel.From(Invoice);
             _commandId = Guid.NewGuid();
+            _selected = Invoice.LastEvaluationRef;
+            _tab = "invoice";
+            _reload = true;
         }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_reload)
+        {
+            return;
+        }
+
+        _reload = false;
+        var actor = await CurrentActor.GetAsync();
+        _userId = actor.UserKey;
+        _isPoster = actor.IsInAnyRole(Roles.Posters);
+        _history = await Explanations.GetEvaluationHistoryAsync(_invoice.Id, actor);
+        _events = await Explanations.GetAuditTrailAsync(_invoice.Id, actor);
+        _journal = _invoice.Status == "Posted"
+            ? await Posting.GetJournalAsync(_invoice.Id, actor)
+            : [];
+        _selected ??= _history.OrderByDescending(e => e.EvaluatedAt).FirstOrDefault()?.Id;
+    }
+
+    private void ShowInvoice() => _tab = "invoice";
+    private void ShowAudit() => _tab = "audit";
+    private void Select(Guid id)
+    {
+        _selected = id;
+        _tab = "invoice";
     }
 
     private Task SaveAsync() => OnSave.InvokeAsync(_edit.ToUpdate(new CommandEnvelope(_commandId, _invoice.RowVersion), _invoice.Id));
     private Task ValidateAsync() => OnValidate.InvokeAsync(new InvoiceActionCommand(new CommandEnvelope(_commandId, _invoice.RowVersion), _invoice.Id));
     private Task SubmitAsync() => OnSubmit.InvokeAsync(new InvoiceActionCommand(new CommandEnvelope(_commandId, _invoice.RowVersion), _invoice.Id));
+    private Task PostAsync() => OnPost.InvokeAsync(new InvoiceActionCommand(new CommandEnvelope(_commandId, _invoice.RowVersion), _invoice.Id));
+    private Task WithdrawAsync(string reason) => OnWithdraw.InvokeAsync(new ReasonedActionCommand(new CommandEnvelope(_commandId, _invoice.RowVersion), _invoice.Id, reason));
+    private Task ReturnAsync() => OnReturnToDraft.InvokeAsync(new InvoiceActionCommand(new CommandEnvelope(_commandId, _invoice.RowVersion), _invoice.Id));
+    private Task HoldAsync(bool hold) => OnPaymentHold.InvokeAsync(new PaymentHoldCommand(new CommandEnvelope(_commandId, _invoice.RowVersion), _invoice.Id, hold));
 }

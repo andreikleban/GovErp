@@ -1,33 +1,46 @@
 @page "/login"
 @attribute [AllowAnonymous]
 @layout MainLayout
-@inject IHostEnvironment Environment
-
 <PageTitle>Sign in</PageTitle>
-<h1>Sign in</h1>
-@if (Error)
-{
-    <p>Invalid user name or password.</p>
-}
-<form method="post" action="/auth/login">
-    <AntiforgeryToken />
-    <input type="hidden" name="returnUrl" value="@ReturnUrl" />
-    <label>User name <input name="username" autocomplete="username" /></label>
-    <label>Password <input name="password" type="password" autocomplete="current-password" /></label>
-    <button type="submit">Sign in</button>
-</form>
-@if (Environment.IsEnvironment("Demo"))
-{
-    <p>Demo users (password is not listed): @string.Join(", ", DemoUsers)</p>
-}
+<section class="signin">
+    <h1>Sign in</h1>
+    @if (Error)
+    {
+        <p class="error">Invalid user name or password.</p>
+    }
+    <form method="post" action="/auth/login">
+        <AntiforgeryToken />
+        <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+        <label>User
+            <select name="username" autocomplete="username" required>
+                <option value="">Select a user</option>
+                @foreach (var user in Users)
+                {
+                    <option value="@user.Name">@user.Caption</option>
+                }
+            </select>
+        </label>
+        <label>Password <input name="password" type="password" autocomplete="current-password" /></label>
+        <button class="primary" type="submit">Sign in</button>
+    </form>
+</section>
 
 @code {
     [SupplyParameterFromQuery(Name = "error")] public string? ErrorValue { get; set; }
     [SupplyParameterFromQuery(Name = "returnUrl")] public string? ReturnUrl { get; set; }
     private bool Error => ErrorValue == "1";
-    private static readonly string[] DemoUsers =
+
+    private static readonly (string Name, string Caption)[] Users =
     [
-        "ap.clerk", "fire.chief", "police.chief", "pw.director", "water.director",
-        "grants.manager", "budget.officer", "finance.director", "shelby.clerk", "shelby.finance"
+        ("ap.clerk", "AP Clerk · Springfield"),
+        ("fire.chief", "Fire Chief · Springfield"),
+        ("police.chief", "Police Chief · Springfield"),
+        ("pw.director", "Public Works Director · Springfield"),
+        ("water.director", "Water Director · Springfield"),
+        ("grants.manager", "Grants Manager · Springfield"),
+        ("budget.officer", "Budget Officer · Springfield"),
+        ("finance.director", "Finance Director · Springfield"),
+        ("shelby.clerk", "AP Clerk · Shelbyville"),
+        ("shelby.finance", "Finance Director · Shelbyville"),
     ];
 }

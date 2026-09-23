@@ -33,6 +33,7 @@ public sealed class LayerReferenceTests
                 "GovErp.Application.Web" => domainNames,
                 "GovErp.Infrastructure" => [.. domainNames, "GovErp.Application.Web"],
                 "GovErp.Web" => ["GovErp.Application.Web", "GovErp.Infrastructure"],
+                "GovErp.AppHost" => ["GovErp.Web"],
                 _ => throw new InvalidOperationException($"Unspecified source project: {name}")
             };
             var document = XDocument.Load(projectPath);

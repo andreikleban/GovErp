@@ -3,20 +3,38 @@
 @using Microsoft.AspNetCore.Components.Authorization
 
 <div class="app">
-    <AuthorizeView>
-        <Authorized>
-            <header>
+    <header class="masthead">
+        <div class="brand">
+            <span class="mark" aria-hidden="true">GE</span>
+            <span>
                 <strong>GovErp</strong>
+                <small>Municipal financials</small>
+            </span>
+        </div>
+        <AuthorizeView>
+            <Authorized>
+                <div class="session">
+                    <span>
+                        <strong>@context.User.FindFirst(ActorClaims.Name)?.Value</strong>
+                        <small>
+                            @string.Join(", ", context.User.FindAll(ActorClaims.Role).Select(c => c.Value))
+                            · @context.User.FindFirst(ActorClaims.Tenant)?.Value
+                        </small>
+                    </span>
+                    <form method="post" action="/auth/logout">
+                        <AntiforgeryToken />
+                        <button type="submit">Sign out</button>
+                    </form>
+                </div>
+            </Authorized>
+        </AuthorizeView>
+    </header>
+    <div class="workspace">
+        <AuthorizeView>
+            <Authorized>
                 <NavMenu />
-                <span>@context.User.FindFirst(ActorClaims.Name)?.Value</span>
-                <span>@string.Join(", ", context.User.FindAll(ActorClaims.Role).Select(c => c.Value))</span>
-                <span>@context.User.FindFirst(ActorClaims.Tenant)?.Value</span>
-                <form method="post" action="/auth/logout">
-                    <AntiforgeryToken />
-                    <button type="submit">Logout</button>
-                </form>
-            </header>
-        </Authorized>
-    </AuthorizeView>
-    <main>@Body</main>
+            </Authorized>
+        </AuthorizeView>
+        <main>@Body</main>
+    </div>
 </div>
