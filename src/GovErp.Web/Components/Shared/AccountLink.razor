@@ -1,0 +1,9 @@
+@* Счёт ведёт в карточку строки бюджета (Budget › Budget Lines) за бюджетный год документа. *@
+<a class="account" href="@Href" title="Budget line @Account, FY@(FiscalYear)">@Account</a>
+
+@code {
+    [Parameter, EditorRequired] public string Account { get; set; } = "";
+    [Parameter, EditorRequired] public int FiscalYear { get; set; }
+
+    private string Href => $"/budget/lines/{Uri.EscapeDataString(Account)}/{FiscalYear}";
+}

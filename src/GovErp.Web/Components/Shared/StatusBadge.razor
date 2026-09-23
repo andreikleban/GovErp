@@ -1,7 +1,8 @@
-<span class="badge @Tone" title="Document status">@Status</span>
+<span class="badge @Tone" title="@Title">@Status</span>
 
 @code {
     [Parameter, EditorRequired] public string Status { get; set; } = "";
+    [Parameter] public string Title { get; set; } = "Document status";
 
     /// <summary>Цвет по смыслу статуса: в работе, ждёт решения, согласован или проведён, отклонён.</summary>
     private string Tone => Status switch

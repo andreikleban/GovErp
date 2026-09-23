@@ -8,6 +8,7 @@
 @inject CurrentActor CurrentActor
 
 <PageTitle>Rules</PageTitle>
+<Breadcrumbs Items="@([new Crumb("Setup"), new Crumb("Rules")])" />
 <h1>Rules</h1>
 <p class="note">Federal and State layers are demonstration data. They are not a claim of legal compliance.</p>
 @if (_set is null)
@@ -24,7 +25,7 @@ else
         <tbody>
         @foreach (var rule in _set.Rules)
         {
-            <tr>
+            <tr id="@($"rule-{rule.RuleId}")" class="@(string.Equals(rule.RuleId, Rule, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
                 <td>@rule.RuleId</td>
                 <td>@rule.Version</td>
                 <td>@rule.Layer</td>
@@ -40,6 +41,9 @@ else
 }
 
 @code {
+    /// <summary>Код правила из ссылки (hold в карточке инвойса): строка выделяется.</summary>
+    [SupplyParameterFromQuery(Name = "rule")] public string? Rule { get; set; }
+
     private RuleSetVm? _set;
 
     protected override async Task OnInitializedAsync()

@@ -13,6 +13,7 @@
 @inject CurrentActor CurrentActor
 
 <PageTitle>Approvals</PageTitle>
+<Breadcrumbs Items="@([new Crumb("Payables"), new Crumb("Approvals")])" />
 <h1>Approvals</h1>
 @if (_error is not null) { <p class="error">@_error</p> }
 @if (_queue is null)
@@ -33,9 +34,9 @@ else
         @foreach (var item in _queue)
         {
             <tr class="@(_picked?.InvoiceId == item.InvoiceId && _picked.Kind == item.Kind && _picked.RuleId == item.RuleId ? "selected" : null)">
-                <td><a href="@($"/invoices/{item.InvoiceId}")">@item.Reference</a></td>
+                <td><DocumentLink Id="item.InvoiceId" Reference="@item.Reference" /></td>
                 <td>@item.VendorName</td>
-                <td class="money">@MoneyText.Usd(item.Total)</td>
+                <td class="money"><Money Value="item.Total" /></td>
                 <td>@item.Overall</td>
                 <td>@item.Kind</td>
                 <td>@item.Role</td>

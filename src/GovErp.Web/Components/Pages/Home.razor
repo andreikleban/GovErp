@@ -1,6 +1,116 @@
 @page "/"
-@inject NavigationManager Navigation
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Approvals
+@using GovErp.Application.Web.Approvals.Contracts
+@using GovErp.Application.Web.Common
+@using GovErp.Web.Authentication
+@inject IApprovalAppService Approvals
+@inject CurrentActor CurrentActor
+
+<PageTitle>Waiting for me</PageTitle>
+<h1>Waiting for me</h1>
+
+@if (_queue is null)
+{
+    <p class="note">Loading the queue.</p>
+}
+else if (_queue.Count == 0)
+{
+    <p class="note">Nothing is waiting for your decision.</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr><th>Document</th><th>Vendor</th><th class="money">Amount</th><th>Decision</th><th>Role</th><th>Reason</th><th>Evaluation</th></tr>
+        </thead>
+        <tbody>
+        @foreach (var item in _queue)
+        {
+            <tr>
+                <td><DocumentLink Id="item.InvoiceId" Reference="@item.Reference" /></td>
+                <td>@item.VendorName</td>
+                <td class="money"><Money Value="item.Total" /></td>
+                <td>@(item.Kind == "Approve" ? "Approve" : "Release hold")</td>
+                <td>@item.Role@(item.Department is null ? "" : $" · {item.Department}")</td>
+                <td>@(item.RuleId is null ? item.Reason : $"{item.RuleId}: {item.Reason}")</td>
+                <td><span class="chip @Chip(item.Overall)">@item.Overall</span></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+@if (_shortcuts.Count > 0)
+{
+    <section class="panel">
+        <h2>Your work</h2>
+        <ul class="shortcuts">
+            @foreach (var (label, href) in _shortcuts)
+            {
+                <li><a href="@href">@label</a></li>
+            }
+        </ul>
+    </section>
+}
+
+<div class="tiles">
+    @foreach (var module in ModuleMenu.Visible)
+    {
+        <section class="tile">
+            <h2>@module.Name</h2>
+            <p class="note">@module.Summary</p>
+            @foreach (var entry in module.Entries)
+            {
+                <a href="@entry.Href">@entry.Label</a>
+            }
+        </section>
+    }
+</div>
 
 @code {
-    protected override void OnInitialized() => Navigation.NavigateTo("/invoices");
+    private IReadOnlyList<ApprovalQueueItemVm>? _queue;
+    private List<(string Label, string Href)> _shortcuts = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        _shortcuts = ShortcutsFor(actor);
+        _queue = await Approvals.GetQueueAsync(actor);
+    }
+
+    /// <summary>Ссылки на работу роли — те же фильтры списков, что доступны вручную.</summary>
+    private static List<(string, string)> ShortcutsFor(ActorContext actor)
+    {
+        var links = new List<(string, string)>();
+        if (actor.IsInRole(Roles.ApClerk))
+        {
+            links.Add(("New invoice", "/invoices/new"));
+            links.Add(("Drafts", "/invoices?status=Draft"));
+            links.Add(("Rejected invoices", "/invoices?status=Rejected"));
+        }
+
+        if (actor.IsInAnyRole(Roles.Approvers))
+        {
+            links.Add(("Approval queue", "/approvals"));
+            links.Add(("Submitted invoices", "/invoices?status=Submitted"));
+        }
+
+        if (actor.IsInAnyRole(Roles.Posters))
+        {
+            links.Add(("Approved invoices, ready to post", "/invoices?status=Approved"));
+            links.Add(("Invoices with open holds", "/invoices?holds=yes"));
+        }
+
+        return links;
+    }
+
+    private static string Chip(string overall) => overall switch
+    {
+        "Allowed" => "ok",
+        "Warning" or "SoftStop" => "warn",
+        "HardStop" => "bad",
+        _ => "muted",
+    };
 }

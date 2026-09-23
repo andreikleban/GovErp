@@ -348,3 +348,146 @@ h1 .badge { margin-left: 8px; }
 }
 
 .payload.explanation { max-height: 24rem; }
+
+/* Меню по модулям: группа — подпись модуля и его экраны. */
+.rail-group { margin-bottom: 10px; }
+.rail-group + .rail-group { border-top: 1px solid var(--line); padding-top: 8px; }
+
+/* Хлебные крошки над заголовком страницы. */
+.crumbs ol {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 0 0 6px;
+    padding: 0;
+    list-style: none;
+    color: var(--muted);
+    font-size: 12px;
+}
+.crumbs li + li::before { content: "›"; margin-right: 4px; color: var(--muted); }
+.crumbs li[aria-current="page"] { color: var(--ink); font-weight: 600; }
+
+/* Фильтры списка: одна строка полей над таблицей. */
+.filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 10px 14px;
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid #b7c3d1;
+}
+.filter-bar label { min-width: 150px; }
+.filter-bar label.check { flex-direction: row; align-items: center; gap: 6px; min-width: 0; }
+
+.amount.negative { color: var(--danger); }
+a.account { font-variant-numeric: tabular-nums; }
+
+/* Главная: ссылки на работу роли и плитки модулей. */
+.shortcuts { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; list-style: none; }
+.tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+}
+.tile {
+    background: var(--surface);
+    border: 1px solid #b7c3d1;
+    border-top: 3px solid var(--gold);
+    padding: 10px 14px;
+}
+.tile h2 { margin: 0 0 4px; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; }
+.tile a { display: block; padding: 2px 0; }
+
+/* Карточка документа: панель действий, шапка сеткой, статусная строка, строки, вкладки. */
+.doc-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    margin: 0 0 12px;
+    padding: 8px 10px;
+    background: var(--band);
+    border: 1px solid #b7c3d1;
+}
+.doc-toolbar .sep { width: 1px; align-self: stretch; background: #b7c3d1; margin: 0 4px; }
+.doc-toolbar .spacer { flex: 1; }
+
+.fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 10px 14px;
+    margin: 0 0 12px;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid #b7c3d1;
+    border-top: 3px solid var(--navy);
+}
+.field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.field > span:first-child, .fields label {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+.field > span + span { font-size: 14px; }
+.fields input, .fields select { width: 100%; }
+
+.status-line {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    margin: 0 0 12px;
+    background: var(--surface);
+    border: 1px solid #b7c3d1;
+}
+.status-line > div { padding: 6px 10px; border-right: 1px solid var(--line); min-width: 0; }
+.status-line > div:last-child { border-right: 0; }
+.status-line dt {
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.status-line dd { margin: 2px 0 0; font-weight: 600; }
+.status-line .ok { color: #1e5c38; }
+.status-line .warn { color: #7a5b12; }
+.status-line .bad { color: var(--danger); }
+@media (max-width: 1100px) { .status-line { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+.lines input, .lines select { width: 100%; min-width: 70px; }
+.lines td.money input { text-align: right; }
+.lines tfoot td { font-weight: 600; background: var(--band); }
+
+.tabs {
+    display: flex;
+    gap: 2px;
+    margin: 16px 0 0;
+    border-bottom: 2px solid var(--navy);
+}
+.tabs button {
+    border: 1px solid #b7c3d1;
+    border-bottom: 0;
+    border-radius: 2px 2px 0 0;
+    background: #f4f7fa;
+    padding: 6px 14px;
+    font-weight: 600;
+}
+.tabs button[aria-selected="true"] { background: var(--navy); border-color: var(--navy); color: #f3f6fa; }
+.tab-body > .panel:first-child { margin-top: 0; border-top: 0; }
+.tab-body { margin-bottom: 14px; }
+
+/* Маленький диалог причины (Reject, Withdraw, Release Hold). */
+.modal.small { width: min(520px, calc(100vw - 32px)); top: 18vh; }
+.modal.small textarea, .modal.small select { width: 100%; font: inherit; }
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    padding: 10px 14px;
+    border-top: 1px solid var(--line);
+}
+textarea { border: 1px solid #b7c3d1; border-radius: 2px; padding: 4px 8px; color: var(--ink); }

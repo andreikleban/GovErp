@@ -1,7 +1,15 @@
 <nav class="rail" aria-label="Modules">
-    <div class="rail-label">Modules</div>
-    <NavLink href="/invoices">Invoices</NavLink>
-    <NavLink href="/approvals">Approvals</NavLink>
-    <NavLink href="/budget">Budget</NavLink>
-    <NavLink href="/rules">Rules</NavLink>
+    <div class="rail-group">
+        <NavLink href="/" Match="NavLinkMatch.All">Waiting for me</NavLink>
+    </div>
+    @foreach (var module in ModuleMenu.Visible)
+    {
+        <div class="rail-group">
+            <div class="rail-label">@module.Name</div>
+            @foreach (var entry in module.Entries)
+            {
+                <NavLink href="@entry.Href" Match="@entry.Match">@entry.Label</NavLink>
+            }
+        </div>
+    }
 </nav>

@@ -1,0 +1,10 @@
+@* Ссылка на карточку инвойса; с EvaluationId карточка открывается на этой оценке. *@
+<a href="@Href">@Reference</a>
+
+@code {
+    [Parameter, EditorRequired] public Guid Id { get; set; }
+    [Parameter, EditorRequired] public string Reference { get; set; } = "";
+    [Parameter] public Guid? EvaluationId { get; set; }
+
+    private string Href => EvaluationId is { } evaluation ? $"/invoices/{Id}?evaluation={evaluation}" : $"/invoices/{Id}";
+}

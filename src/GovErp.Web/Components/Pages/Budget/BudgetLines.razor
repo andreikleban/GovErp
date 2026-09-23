@@ -9,8 +9,9 @@
 @inject IBudgetAppService Budgets
 @inject CurrentActor CurrentActor
 
-<PageTitle>Budget</PageTitle>
-<h1>Budget</h1>
+<PageTitle>Budget Lines</PageTitle>
+<Breadcrumbs Items="@([new Crumb("Budget"), new Crumb("Budget Lines")])" />
+<h1>Budget Lines</h1>
 <p class="note">An amendment here simulates a change that has already been approved. It is not a request waiting for a vote.</p>
 @if (_error is not null) { <p class="error">@_error</p> }
 <label>Fiscal year <input type="number" @bind="_year" /></label>

@@ -1,0 +1,15 @@
+@* Фильтры над таблицей списка: поля передаются содержимым; Clear показывается, если страница умеет сбросить фильтры. *@
+<div class="filter-bar" role="search">
+    @ChildContent
+    @if (OnClear.HasDelegate)
+    {
+        <button type="button" class="filter-clear" disabled="@(!Active)" @onclick="OnClear">Clear filters</button>
+    }
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public EventCallback OnClear { get; set; }
+    /// <summary>Есть ли выбранные фильтры: без них Clear ничего не меняет и неактивна.</summary>
+    [Parameter] public bool Active { get; set; }
+}
