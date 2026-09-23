@@ -1,0 +1,91 @@
+@page "/budget/encumbrances"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Budget
+@using GovErp.Application.Web.Budget.Contracts
+@using GovErp.Web.Authentication
+@using GovErp.Web.Components.Shared
+@inject IBudgetAppService Budgets
+@inject CurrentActor CurrentActor
+
+<PageTitle>Encumbrances</PageTitle>
+<Breadcrumbs Items="@([new Crumb("Budget"), new Crumb("Encumbrances")])" />
+<h1>Encumbrances</h1>
+@if (_encumbrances is null)
+{
+    <p class="note">Loading the encumbrances.</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>PO line</th><th>Account</th><th>Status</th><th class="money">Original</th><th class="money">Liquidated</th>
+                <th class="money">Released</th><th class="money">Remaining</th><th class="money">Authorized PO amount</th>
+                <th class="money">Already posted</th>
+            </tr>
+        </thead>
+        <tbody>
+        @if (_encumbrances.Count == 0)
+        {
+            <tr><td colspan="9" class="note">No encumbrances.</td></tr>
+        }
+        @foreach (var e in _encumbrances)
+        {
+            var (number, lineNo) = PoLineRefFormat.Split(e.PoLineRef);
+            <tr>
+                <td><PurchaseOrderLink Number="@number" LineNo="lineNo" /></td>
+                <td>@e.Account</td>
+                <td><span class="chip @(e.Status == "Open" ? "ok" : "muted")">@e.Status</span></td>
+                <td class="money"><Money Value="e.Original" /></td>
+                <td class="money"><Money Value="e.Liquidated" /></td>
+                <td class="money"><Money Value="e.Released" /></td>
+                <td class="money"><Money Value="e.Remaining" /></td>
+                <td class="money"><Money Value="e.AuthorizedPoAmount" /></td>
+                <td class="money"><Money Value="e.AlreadyPostedAgainstPo" /></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+
+    <section class="panel">
+        <h2>Held claims</h2>
+        @if (HeldClaims.Count == 0)
+        {
+            <p class="note">No held liquidation or billing claims.</p>
+        }
+        else
+        {
+            <table>
+                <thead><tr><th>PO line</th><th>Kind</th><th>Invoice</th><th class="money">Amount</th></tr></thead>
+                <tbody>
+                @foreach (var (poLineRef, kind, claim) in HeldClaims)
+                {
+                    var (number, lineNo) = PoLineRefFormat.Split(poLineRef);
+                    <tr>
+                        <td><PurchaseOrderLink Number="@number" LineNo="lineNo" /></td>
+                        <td>@kind</td>
+                        <td><DocumentLink Id="claim.InvoiceId" Reference="@claim.InvoiceReference" /></td>
+                        <td class="money"><Money Value="claim.Amount" /></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </section>
+}
+
+@code {
+    private IReadOnlyList<EncumbranceVm>? _encumbrances;
+
+    private List<(string PoLineRef, string Kind, EncumbranceClaimVm Claim)> HeldClaims => (_encumbrances ?? [])
+        .SelectMany(e => e.Claims.Where(c => c.Status == "Held").Select(c => (e.PoLineRef, "Liquidation", c)))
+        .Concat((_encumbrances ?? []).SelectMany(e => e.BillingClaims.Where(c => c.Status == "Held").Select(c => (e.PoLineRef, "Billing", c))))
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        _encumbrances = await Budgets.ListEncumbrancesAsync(actor);
+    }
+}

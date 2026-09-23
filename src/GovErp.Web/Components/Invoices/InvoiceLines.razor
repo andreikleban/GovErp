@@ -61,7 +61,17 @@
                 <td class="money"><Money Value="line.Amount" /></td>
                 @if (Edit.HasPo)
                 {
-                    <td>@(line.PoLineNo is { } no ? $"{Edit.PoRef}/{no}" : "—")</td>
+                    <td>
+                        @if (line.PoLineNo is { } no)
+                        {
+                            var poRef = Edit.PoRef ?? "";
+                            <PurchaseOrderLink Number="@poRef" LineNo="no" />
+                        }
+                        else
+                        {
+                            @:—
+                        }
+                    </td>
                 }
             }
             <td class="money">

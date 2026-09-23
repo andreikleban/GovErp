@@ -1,0 +1,48 @@
+@page "/purchasing/orders"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Purchasing
+@using GovErp.Application.Web.Purchasing.Contracts
+@using GovErp.Web.Authentication
+@inject IPurchasingAppService Purchasing
+@inject CurrentActor CurrentActor
+
+<PageTitle>Purchase Orders</PageTitle>
+<Breadcrumbs Items="@([new Crumb("Purchasing"), new Crumb("Purchase Orders")])" />
+<h1>Purchase Orders</h1>
+@if (_orders is null)
+{
+    <p class="note">Loading the purchase orders.</p>
+}
+else
+{
+    <table>
+        <thead><tr><th>Number</th><th>Vendor</th><th>Status</th><th class="money">Total</th><th class="money">Remaining</th></tr></thead>
+        <tbody>
+        @if (_orders.Count == 0)
+        {
+            <tr><td colspan="5" class="note">No purchase orders.</td></tr>
+        }
+        @foreach (var po in _orders)
+        {
+            <tr>
+                <td><a href="@($"/purchasing/orders/{Uri.EscapeDataString(po.Number)}")">@po.Number</a></td>
+                <td>@po.VendorName</td>
+                <td><StatusBadge Status="@po.Status" /></td>
+                <td class="money"><Money Value="po.Total" /></td>
+                <td class="money"><Money Value="po.Remaining" /></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+@code {
+    private IReadOnlyList<PurchaseOrderListItemVm>? _orders;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        _orders = await Purchasing.ListOrdersAsync(actor);
+    }
+}

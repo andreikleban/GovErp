@@ -1,0 +1,9 @@
+@* Строка PO ведёт в карточку заказа (Purchasing › Purchase Orders). *@
+<a href="@Href" title="Purchase order @Number">@Number@(LineNo is null ? "" : $"/{LineNo}")</a>
+
+@code {
+    [Parameter, EditorRequired] public string Number { get; set; } = "";
+    [Parameter] public int? LineNo { get; set; }
+
+    private string Href => $"/purchasing/orders/{Uri.EscapeDataString(Number)}";
+}

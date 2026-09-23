@@ -1,0 +1,147 @@
+@page "/ledger/journal"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Ledger
+@using GovErp.Application.Web.Ledger.Contracts
+@using GovErp.Application.Web.Reference
+@using GovErp.Application.Web.Reference.Contracts
+@using GovErp.Web.Authentication
+@inject ILedgerAppService Ledger
+@inject IReferenceAppService Reference
+@inject CurrentActor CurrentActor
+@inject NavigationManager Navigation
+
+<PageTitle>Journal</PageTitle>
+<Breadcrumbs Items="@([new Crumb("General Ledger"), new Crumb("Journal")])" />
+<h1>Journal</h1>
+
+<FilterBar OnClear="Clear" Active="@(Fund is not null || Period is not null || !string.IsNullOrWhiteSpace(Source))">
+    <label>Fund
+        <select value="@(Fund ?? "")" @onchange="e => Filter(fund: Value(e))">
+            <option value="">All</option>
+            @foreach (var fund in _funds)
+            {
+                <option value="@fund.Code">@fund.Code · @fund.Name</option>
+            }
+        </select>
+    </label>
+    <label>Period
+        <select value="@(Period ?? "")" @onchange="e => Filter(period: Value(e))">
+            <option value="">All</option>
+            @foreach (var p in _periods)
+            {
+                <option value="@PeriodKey(p)">@PeriodKey(p) (@p.Status)</option>
+            }
+        </select>
+    </label>
+    <label>Source <input value="@Source" @onchange="e => Filter(source: Value(e))" placeholder="AP-2026-…" /></label>
+</FilterBar>
+
+@if (_entries is null)
+{
+    <p class="note">Loading the journal.</p>
+}
+else if (_entries.Count == 0)
+{
+    <p class="note">No journal entries match these filters.</p>
+}
+else
+{
+    @foreach (var entry in _entries)
+    {
+        <section class="panel">
+            <h2>
+                @if (entry.InvoiceId is { } id)
+                {
+                    <DocumentLink Id="id" Reference="@(entry.InvoiceReference ?? entry.SourceRef)" />
+                }
+                else
+                {
+                    @entry.SourceRef
+                }
+            </h2>
+            <p class="note">
+                Period @entry.PeriodYear-@entry.PeriodMonth.ToString("00") · Posted @entry.PostedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")
+            </p>
+            <table>
+                <thead><tr><th>Account</th><th>Family</th><th class="money">Debit</th><th class="money">Credit</th><th>Description</th></tr></thead>
+                <tbody>
+                @foreach (var line in entry.Lines)
+                {
+                    <tr>
+                        <td>@line.Account</td>
+                        <td>@line.Family</td>
+                        <td class="money"><Money Value="line.Debit" /></td>
+                        <td class="money"><Money Value="line.Credit" /></td>
+                        <td>@line.Description</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+            <h3>Balance by fund and family</h3>
+            <table>
+                <thead><tr><th>Fund</th><th>Family</th><th class="money">Debit</th><th class="money">Credit</th><th>Check</th></tr></thead>
+                <tbody>
+                @foreach (var b in entry.Balances)
+                {
+                    <tr>
+                        <td>@b.Fund</td>
+                        <td>@b.Family</td>
+                        <td class="money"><Money Value="b.Debit" /></td>
+                        <td class="money"><Money Value="b.Credit" /></td>
+                        <td><span class="chip @(b.Balanced ? "ok" : "bad")">@(b.Balanced ? "Balanced" : "Unbalanced")</span></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </section>
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "fund")] public string? Fund { get; set; }
+    [SupplyParameterFromQuery(Name = "period")] public string? Period { get; set; }
+    [SupplyParameterFromQuery(Name = "source")] public string? Source { get; set; }
+
+    private IReadOnlyList<JournalEntryVm>? _entries;
+    private IReadOnlyList<SegmentValueVm> _funds = [];
+    private IReadOnlyList<FiscalPeriodVm> _periods = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        _funds = (await Reference.GetSegmentsAsync(actor)).Funds;
+        _periods = await Ledger.ListPeriodsAsync(actor);
+        var (year, month) = ParsePeriod(Period);
+        _entries = await Ledger.ListJournalAsync(new JournalFilter(Fund, year, month, Source), actor);
+    }
+
+    private static string PeriodKey(FiscalPeriodVm p) => $"{p.Year}-{p.Month:00}";
+
+    private static (int? Year, int? Month) ParsePeriod(string? period)
+    {
+        if (string.IsNullOrWhiteSpace(period))
+        {
+            return (null, null);
+        }
+
+        var parts = period.Split('-');
+        return parts.Length == 2 && int.TryParse(parts[0], out var y) && int.TryParse(parts[1], out var m) ? (y, m) : (null, null);
+    }
+
+    private static string? Value(ChangeEventArgs e) => e.Value?.ToString() is { Length: > 0 } value ? value : null;
+
+    /// <summary>Фильтры живут в адресе, как в списке инвойсов: ссылки и «назад» открывают тот же журнал.</summary>
+    private void Filter(string? fund = "", string? period = "", string? source = "")
+    {
+        var query = new Dictionary<string, object?>
+        {
+            ["fund"] = fund == "" ? Fund : fund,
+            ["period"] = period == "" ? Period : period,
+            ["source"] = source == "" ? Source : source,
+        };
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters("/ledger/journal", query));
+    }
+
+    private void Clear() => Navigation.NavigateTo("/ledger/journal");
+}

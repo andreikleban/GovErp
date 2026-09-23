@@ -1,0 +1,67 @@
+@page "/budget/amendments"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Budget
+@using GovErp.Application.Web.Budget.Contracts
+@using GovErp.Web.Authentication
+@inject IBudgetAppService Budgets
+@inject CurrentActor CurrentActor
+
+<PageTitle>Amendments</PageTitle>
+<Breadcrumbs Items="@([new Crumb("Budget"), new Crumb("Amendments")])" />
+<h1>Amendments</h1>
+<p class="note">Every amendment recorded against a budget line of this fiscal year, across all accounts.</p>
+@if (_error is not null) { <p class="error">@_error</p> }
+<label>Fiscal year <input type="number" @bind="_year" /></label>
+<p class="toolbar"><button type="button" disabled="@_busy" @onclick="LoadAsync">Show</button></p>
+@if (_amendments is not null)
+{
+    <table>
+        <thead><tr><th>Account</th><th>Reference</th><th>Effective</th><th class="money">Amount</th></tr></thead>
+        <tbody>
+        @if (_amendments.Count == 0)
+        {
+            <tr><td colspan="4" class="note">No amendments for this fiscal year.</td></tr>
+        }
+        @foreach (var a in _amendments)
+        {
+            <tr>
+                <td><a href="@($"/budget/lines/{Uri.EscapeDataString(a.Account)}/{a.FiscalYear}")">@a.Account</a></td>
+                <td>@a.Reference</td>
+                <td>@a.EffectiveDate.ToString("yyyy-MM-dd")</td>
+                <td class="money"><Money Value="a.Amount" /></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+@code {
+    private int _year = 2026;
+    private IReadOnlyList<AmendmentEntryVm>? _amendments;
+    private string? _error;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _busy = true;
+        try
+        {
+            var actor = await CurrentActor.GetAsync();
+            _amendments = await Budgets.ListAmendmentsAsync(_year, actor);
+            _error = null;
+        }
+        catch (ArgumentException ex)
+        {
+            // Неверный бюджетный год из поля ввода — сообщение, а не обрыв circuit.
+            _error = ex.Message;
+            _amendments = [];
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

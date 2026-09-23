@@ -2,9 +2,7 @@
 @attribute [Authorize]
 @rendermode InteractiveServer
 @using GovErp.Application.Web.Budget
-@using GovErp.Application.Web.Budget.Commands
 @using GovErp.Application.Web.Budget.Contracts
-@using GovErp.Application.Web.Commands
 @using GovErp.Web.Authentication
 @inject IBudgetAppService Budgets
 @inject CurrentActor CurrentActor
@@ -12,7 +10,10 @@
 <PageTitle>Budget Lines</PageTitle>
 <Breadcrumbs Items="@([new Crumb("Budget"), new Crumb("Budget Lines")])" />
 <h1>Budget Lines</h1>
-<p class="note">An amendment here simulates a change that has already been approved. It is not a request waiting for a vote.</p>
+<p class="note">
+    Open a line for its amendments, held reservations and encumbrances. <a href="/budget/amendments">Amendments</a> and
+    <a href="/budget/encumbrances">Encumbrances</a> also list them across every line.
+</p>
 @if (_error is not null) { <p class="error">@_error</p> }
 <label>Fiscal year <input type="number" @bind="_year" /></label>
 <p class="toolbar"><button type="button" disabled="@_busy" @onclick="LoadAsync">Show</button></p>
@@ -23,127 +24,62 @@
             <tr>
                 <th>FY</th><th>Account</th>
                 <th class="money">Opening actuals</th><th class="money">Opening encumbered</th>
-                <th class="money">Amended</th><th class="money">Actuals</th><th class="money">Encumbered</th>
+                <th class="money">Adopted</th><th class="money">Amended</th><th class="money">Actuals</th><th class="money">Encumbered</th>
                 <th class="money">Held</th><th class="money">Available</th>
             </tr>
         </thead>
         <tbody>
+        @if (_lines.Count == 0)
+        {
+            <tr><td colspan="10" class="note">No budget lines for this fiscal year.</td></tr>
+        }
         @foreach (var line in _lines)
         {
             <tr>
                 <td>@line.FiscalYear</td>
-                <td>@line.Account</td>
-                <td class="money">@line.OpeningActuals.ToString("N2")</td>
-                <td class="money">@line.OpeningEncumbered.ToString("N2")</td>
-                <td class="money">@line.Amended.ToString("N2")</td>
-                <td class="money">@line.Actuals.ToString("N2")</td>
-                <td class="money">@line.Encumbered.ToString("N2")</td>
-                <td class="money">@line.Held.ToString("N2")</td>
-                <td class="money">@line.Available.ToString("N2")</td>
+                <td><a href="@Href(line)">@line.Account</a></td>
+                <td class="money"><Money Value="line.OpeningActuals" /></td>
+                <td class="money"><Money Value="line.OpeningEncumbered" /></td>
+                <td class="money"><Money Value="line.Adopted" /></td>
+                <td class="money"><Money Value="line.Amended" /></td>
+                <td class="money"><Money Value="line.Actuals" /></td>
+                <td class="money"><Money Value="line.Encumbered" /></td>
+                <td class="money"><Money Value="line.Held" /></td>
+                <td class="money"><Money Value="line.Available" /></td>
             </tr>
         }
         </tbody>
     </table>
-    @if (_lines.Any(l => l.Amendments.Count > 0))
-    {
-        <section class="panel">
-            <h2>Amendments</h2>
-            <table>
-                <thead><tr><th>Account</th><th>Reference</th><th>Effective</th><th class="money">Amount</th></tr></thead>
-                <tbody>
-                @foreach (var line in _lines)
-                {
-                    @foreach (var a in line.Amendments)
-                    {
-                        <tr><td>@line.Account</td><td>@a.Reference</td><td>@a.EffectiveDate.ToString("yyyy-MM-dd")</td><td class="money">@a.Amount.ToString("N2")</td></tr>
-                    }
-                }
-                </tbody>
-            </table>
-        </section>
-    }
-    @if (_success is not null) { <p class="note">@_success</p> }
-    @if (_canAmend)
-    {
-    <section class="panel">
-        <h2>Amendment</h2>
-        <div>
-            <label>Account
-                <select @bind="_account">
-                    @foreach (var line in _lines) { <option value="@line.Account">@line.Account</option> }
-                </select>
-            </label>
-            <label>Amount <input type="number" step="0.01" @bind="_amount" /></label>
-            <label>Fiscal year <input type="number" @bind="_amendYear" /></label>
-            <label>Effective date <input type="date" @bind="_effective" /></label>
-            <label>Reference <input @bind="_reference" /></label>
-        </div>
-        <p class="toolbar"><button class="primary" type="button" disabled="@_busy" @onclick="AmendAsync">Amend</button></p>
-    </section>
-    }
 }
 
 @code {
     private int _year = 2026;
-    private int _amendYear = 2026;
-    private decimal _amount;
-    private string _account = "";
-    private string _reference = "";
-    private DateOnly _effective = new(2026, 6, 15);
     private IReadOnlyList<BudgetLineVm>? _lines;
     private string? _error;
-    private string? _success;
     private bool _busy;
-    private bool _canAmend;
-    private Guid _commandId = Guid.NewGuid();
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
+    private static string Href(BudgetLineVm line) => $"/budget/lines/{Uri.EscapeDataString(line.Account)}/{line.FiscalYear}";
+
     private async Task LoadAsync()
     {
-        var actor = await CurrentActor.GetAsync();
-        _canAmend = actor.IsInAnyRole(GovErp.Application.Web.Common.Roles.Overriders);
+        _busy = true;
         try
         {
+            var actor = await CurrentActor.GetAsync();
             _lines = await Budgets.ListAsync(_year, actor);
+            _error = null;
         }
         catch (ArgumentException ex)
         {
             // Неверный бюджетный год из поля ввода — сообщение, а не обрыв circuit.
             _error = ex.Message;
             _lines = [];
-            return;
-        }
-
-        if (_lines.Count > 0 && _lines.All(l => l.Account != _account))
-        {
-            _account = _lines[0].Account;
-        }
-    }
-
-    private async Task AmendAsync()
-    {
-        _busy = true;
-        try
-        {
-            var actor = await CurrentActor.GetAsync();
-            var result = await Budgets.AmendAsync(new AmendBudgetCommand(
-                new CommandEnvelope(_commandId, null), _account, _amendYear, _amount, _reference, _effective), actor);
-            _error = result.IsAccepted ? null : result.Status == CommandStatus.Forbidden ? $"Not allowed: {result.Reason}" : result.Reason;
-            _success = result.IsAccepted
-                ? $"Amendment {_reference} applied to {_account}: amended budget is now {result.Value!.Amended:N2}, available {result.Value.Available:N2}."
-                : null;
-            if (result.IsAccepted)
-            {
-                _amount = 0;
-                _reference = "";
-            }
         }
         finally
         {
             _busy = false;
-            _commandId = Guid.NewGuid();
-            await LoadAsync();
         }
     }
 }

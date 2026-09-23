@@ -1,0 +1,197 @@
+@page "/budget/lines/{Account}/{FiscalYear:int}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Budget
+@using GovErp.Application.Web.Budget.Commands
+@using GovErp.Application.Web.Budget.Contracts
+@using GovErp.Application.Web.Commands
+@using GovErp.Application.Web.Common
+@using GovErp.Web.Authentication
+@inject IBudgetAppService Budgets
+@inject CurrentActor CurrentActor
+
+<PageTitle>Budget line @Account</PageTitle>
+<Breadcrumbs Items="@([new Crumb("Budget"), new Crumb("Budget Lines", "/budget"), new Crumb($"{Account} FY{FiscalYear}")])" />
+<h1>Budget line @Account · FY@FiscalYear</h1>
+
+@if (_notFound)
+{
+    <p class="error">Budget line @Account FY@FiscalYear was not found.</p>
+}
+else if (_detail is { } detail)
+{
+    var line = detail.Line;
+    <div class="fields">
+        <div class="field"><span>Control mode</span><span>@line.ControlMode</span></div>
+        <div class="field"><span>Adopted</span><span><Money Value="line.Adopted" /></span></div>
+        <div class="field"><span>Amended</span><span><Money Value="line.Amended" /></span></div>
+        <div class="field"><span>Actuals</span><span><Money Value="line.Actuals" /></span></div>
+        <div class="field"><span>Encumbered</span><span><Money Value="line.Encumbered" /></span></div>
+        <div class="field"><span>Held</span><span><Money Value="line.Held" /></span></div>
+        <div class="field"><span>Available</span><span><Money Value="line.Available" /></span></div>
+        <div class="field"><span>Opening actuals</span><span><Money Value="line.OpeningActuals" /></span></div>
+        <div class="field"><span>Opening encumbered</span><span><Money Value="line.OpeningEncumbered" /></span></div>
+    </div>
+
+    <section class="panel">
+        <h2>Held reservations</h2>
+        @if (detail.Reservations.Count == 0)
+        {
+            <p class="note">No reservations against this line.</p>
+        }
+        else
+        {
+            <table>
+                <thead><tr><th>Invoice</th><th>Status</th><th class="money">Amount</th></tr></thead>
+                <tbody>
+                @foreach (var r in detail.Reservations)
+                {
+                    <tr>
+                        <td><DocumentLink Id="r.InvoiceId" Reference="@r.InvoiceReference" /></td>
+                        <td><span class="chip @Tone(r.Status)">@r.Status</span></td>
+                        <td class="money"><Money Value="r.Amount" /></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </section>
+
+    <section class="panel">
+        <h2>Encumbrances on this account</h2>
+        @if (detail.Encumbrances.Count == 0)
+        {
+            <p class="note">No encumbrances on this account.</p>
+        }
+        else
+        {
+            <table>
+                <thead>
+                    <tr>
+                        <th>PO line</th><th>Status</th><th class="money">Original</th><th class="money">Liquidated</th>
+                        <th class="money">Released</th><th class="money">Remaining</th><th class="money">Authorized PO amount</th>
+                        <th class="money">Already posted</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var e in detail.Encumbrances)
+                {
+                    var (number, lineNo) = PoLineRefFormat.Split(e.PoLineRef);
+                    <tr>
+                        <td><PurchaseOrderLink Number="@number" LineNo="lineNo" /></td>
+                        <td><span class="chip @(e.Status == "Open" ? "ok" : "muted")">@e.Status</span></td>
+                        <td class="money"><Money Value="e.Original" /></td>
+                        <td class="money"><Money Value="e.Liquidated" /></td>
+                        <td class="money"><Money Value="e.Released" /></td>
+                        <td class="money"><Money Value="e.Remaining" /></td>
+                        <td class="money"><Money Value="e.AuthorizedPoAmount" /></td>
+                        <td class="money"><Money Value="e.AlreadyPostedAgainstPo" /></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </section>
+
+    <section class="panel">
+        <h2>Amendments</h2>
+        @if (line.Amendments.Count == 0)
+        {
+            <p class="note">No amendments on this line.</p>
+        }
+        else
+        {
+            <table>
+                <thead><tr><th>Reference</th><th>Effective</th><th class="money">Amount</th></tr></thead>
+                <tbody>
+                @foreach (var a in line.Amendments)
+                {
+                    <tr><td>@a.Reference</td><td>@a.EffectiveDate.ToString("yyyy-MM-dd")</td><td class="money"><Money Value="a.Amount" /></td></tr>
+                }
+                </tbody>
+            </table>
+        }
+    </section>
+
+    @if (_success is not null) { <p class="note">@_success</p> }
+    @if (_error is not null) { <p class="error">@_error</p> }
+    @if (_canAmend)
+    {
+        <section class="panel">
+            <h2>Amendment</h2>
+            <p class="note">An amendment here simulates a change that has already been approved. It is not a request waiting for a vote.</p>
+            <div>
+                <label>Amount <input type="number" step="0.01" @bind="_amount" /></label>
+                <label>Effective date <input type="date" @bind="_effective" /></label>
+                <label>Reference <input @bind="_reference" /></label>
+            </div>
+            <p class="toolbar"><button class="primary" type="button" disabled="@_busy" @onclick="AmendAsync">Amend</button></p>
+        </section>
+    }
+}
+else
+{
+    <p class="note">Loading the budget line.</p>
+}
+
+@code {
+    [Parameter] public string Account { get; set; } = "";
+    [Parameter] public int FiscalYear { get; set; }
+
+    private BudgetLineDetailVm? _detail;
+    private bool _notFound;
+    private bool _canAmend;
+    private bool _busy;
+    private decimal _amount;
+    private string _reference = "";
+    private DateOnly _effective = new(2026, 6, 15);
+    private string? _error;
+    private string? _success;
+    private Guid _commandId = Guid.NewGuid();
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        _canAmend = actor.IsInAnyRole(Roles.Overriders);
+        try
+        {
+            _detail = await Budgets.GetLineAsync(Account, FiscalYear, actor);
+            _notFound = false;
+        }
+        catch (NotFoundException)
+        {
+            _detail = null;
+            _notFound = true;
+        }
+    }
+
+    private async Task AmendAsync()
+    {
+        _busy = true;
+        try
+        {
+            var actor = await CurrentActor.GetAsync();
+            var result = await Budgets.AmendAsync(
+                new AmendBudgetCommand(new CommandEnvelope(_commandId, null), Account, FiscalYear, _amount, _reference, _effective), actor);
+            _error = result.IsAccepted ? null : result.Status == CommandStatus.Forbidden ? $"Not allowed: {result.Reason}" : result.Reason;
+            _success = result.IsAccepted
+                ? $"Amendment {_reference} applied: amended budget is now {result.Value!.Amended:N2}, available {result.Value.Available:N2}."
+                : null;
+            if (result.IsAccepted)
+            {
+                _amount = 0;
+                _reference = "";
+            }
+        }
+        finally
+        {
+            _busy = false;
+            _commandId = Guid.NewGuid();
+            await LoadAsync();
+        }
+    }
+
+    private static string Tone(string status) => status switch { "Held" => "warn", "Committed" => "ok", _ => "muted" };
+}

@@ -1,0 +1,42 @@
+@page "/ledger/periods"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Ledger
+@using GovErp.Application.Web.Ledger.Contracts
+@using GovErp.Web.Authentication
+@inject ILedgerAppService Ledger
+@inject CurrentActor CurrentActor
+
+<PageTitle>Fiscal Periods</PageTitle>
+<Breadcrumbs Items="@([new Crumb("General Ledger"), new Crumb("Periods")])" />
+<h1>Fiscal Periods</h1>
+@if (_periods is null)
+{
+    <p class="note">Loading the fiscal periods.</p>
+}
+else
+{
+    <table>
+        <thead><tr><th>Year</th><th>Month</th><th>Status</th></tr></thead>
+        <tbody>
+        @foreach (var p in _periods)
+        {
+            <tr>
+                <td>@p.Year</td>
+                <td>@p.Month.ToString("00")</td>
+                <td><span class="badge @(p.Status == "Open" ? "ok" : "muted")">@p.Status</span></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+@code {
+    private IReadOnlyList<FiscalPeriodVm>? _periods;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        _periods = await Ledger.ListPeriodsAsync(actor);
+    }
+}

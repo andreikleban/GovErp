@@ -1,0 +1,115 @@
+@page "/purchasing/orders/{Number}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Common
+@using GovErp.Application.Web.Purchasing
+@using GovErp.Application.Web.Purchasing.Contracts
+@using GovErp.Web.Authentication
+@inject IPurchasingAppService Purchasing
+@inject CurrentActor CurrentActor
+
+<PageTitle>@Number</PageTitle>
+<Breadcrumbs Items="@([new Crumb("Purchasing"), new Crumb("Purchase Orders", "/purchasing/orders"), new Crumb(Number)])" />
+<h1>Purchase order @Number</h1>
+
+@if (_notFound)
+{
+    <p class="error">Purchase order @Number was not found.</p>
+}
+else if (_order is { } order)
+{
+    <div class="fields">
+        <div class="field"><span>Vendor</span><span>@order.VendorName</span></div>
+        <div class="field"><span>Status</span><span><StatusBadge Status="@order.Status" /></span></div>
+        <div class="field"><span>Total</span><span><Money Value="order.Total" /></span></div>
+    </div>
+
+    @foreach (var line in order.Lines)
+    {
+        <section class="panel">
+            <h2>Line @line.LineNo · <AccountLink Account="@line.Account" FiscalYear="_fiscalYear" /></h2>
+            <div class="fields">
+                <div class="field"><span>Line amount</span><span><Money Value="line.Amount" /></span></div>
+                @if (line.Encumbrance is { } e)
+                {
+                    <div class="field"><span>Status</span><span><span class="chip @(e.Status == "Open" ? "ok" : "muted")">@e.Status</span></span></div>
+                    <div class="field"><span>Original</span><span><Money Value="e.Original" /></span></div>
+                    <div class="field"><span>Liquidated</span><span><Money Value="e.Liquidated" /></span></div>
+                    <div class="field"><span>Released</span><span><Money Value="e.Released" /></span></div>
+                    <div class="field"><span>Remaining</span><span><Money Value="e.Remaining" /></span></div>
+                    <div class="field"><span>Authorized PO amount</span><span><Money Value="e.AuthorizedPoAmount" /></span></div>
+                    <div class="field"><span>Already posted</span><span><Money Value="e.AlreadyPostedAgainstPo" /></span></div>
+                }
+            </div>
+            @if (line.Encumbrance is { } encumbrance)
+            {
+                <h3>Claims</h3>
+                @if (encumbrance.Claims.Count == 0 && encumbrance.BillingClaims.Count == 0)
+                {
+                    <p class="note">No liquidation or billing claims on this line.</p>
+                }
+                else
+                {
+                    <table>
+                        <thead><tr><th>Kind</th><th>Invoice</th><th>Status</th><th class="money">Amount</th></tr></thead>
+                        <tbody>
+                        @foreach (var c in encumbrance.Claims)
+                        {
+                            <tr>
+                                <td>Liquidation</td>
+                                <td><DocumentLink Id="c.InvoiceId" Reference="@c.InvoiceReference" /></td>
+                                <td><span class="chip @Tone(c.Status)">@c.Status</span></td>
+                                <td class="money"><Money Value="c.Amount" /></td>
+                            </tr>
+                        }
+                        @foreach (var c in encumbrance.BillingClaims)
+                        {
+                            <tr>
+                                <td>Billing</td>
+                                <td><DocumentLink Id="c.InvoiceId" Reference="@c.InvoiceReference" /></td>
+                                <td><span class="chip @Tone(c.Status)">@c.Status</span></td>
+                                <td class="money"><Money Value="c.Amount" /></td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                }
+            }
+            else
+            {
+                <p class="note">No encumbrance recorded for this line.</p>
+            }
+        </section>
+    }
+}
+else
+{
+    <p class="note">Loading the purchase order.</p>
+}
+
+@code {
+    [Parameter] public string Number { get; set; } = "";
+
+    /// <summary>Демо ведёт всё в одном бюджетном годе; строки заказа сюда и ссылаются, пока PO не несёт свой FY.</summary>
+    private const int _fiscalYear = 2026;
+
+    private PurchaseOrderDetailVm? _order;
+    private bool _notFound;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        try
+        {
+            _order = await Purchasing.GetOrderAsync(Number, actor);
+            _notFound = false;
+        }
+        catch (NotFoundException)
+        {
+            _order = null;
+            _notFound = true;
+        }
+    }
+
+    private static string Tone(string status) => status switch { "Held" => "warn", "Consumed" => "ok", _ => "muted" };
+}

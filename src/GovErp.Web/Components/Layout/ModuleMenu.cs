@@ -9,11 +9,15 @@ public static class ModuleMenu
     public static readonly IReadOnlyList<MenuModule> Modules =
     [
         new("Setup", "Validation rules and reference data.", [new MenuEntry("Rules", "/rules")]),
-        new("Budget", "Budget lines, amendments and what holds the budget.", [new MenuEntry("Budget Lines", "/budget")]),
-        new("Purchasing", "Purchase orders and their encumbrances.", []),
+        new("Budget", "Budget lines, amendments and what holds the budget.",
+            // Match.All на "Budget Lines": иначе он подсвечивался бы и на Amendments/Encumbrances (общий префикс "/budget").
+            [new MenuEntry("Budget Lines", "/budget", Microsoft.AspNetCore.Components.Routing.NavLinkMatch.All),
+             new MenuEntry("Amendments", "/budget/amendments"), new MenuEntry("Encumbrances", "/budget/encumbrances")]),
+        new("Purchasing", "Purchase orders and their encumbrances.", [new MenuEntry("Purchase Orders", "/purchasing/orders")]),
         new("Payables", "Vendor invoices and the approval queue.",
             [new MenuEntry("Invoices", "/invoices"), new MenuEntry("Approvals", "/approvals")]),
-        new("General Ledger", "Journal and fiscal periods.", []),
+        new("General Ledger", "Journal and fiscal periods.",
+            [new MenuEntry("Journal", "/ledger/journal"), new MenuEntry("Periods", "/ledger/periods")]),
         new("Audit", "Evaluations and audit events.", []),
     ];
 
