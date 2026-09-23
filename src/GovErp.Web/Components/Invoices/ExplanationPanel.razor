@@ -12,7 +12,7 @@
     }
     else
     {
-        <p class="note">Results above stay authoritative. This text does not change the decision.</p>
+        <p class="note">The validation log stays authoritative. This text does not change the decision.</p>
         <label>Audience
             <select @bind="_audience" @bind:after="NewCommand">
                 @foreach (var audience in Enum.GetValues<ExplanationAudience>())

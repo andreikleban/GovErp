@@ -1,0 +1,359 @@
+@using GovErp.Application.Web.Approvals
+@using GovErp.Application.Web.Approvals.Contracts
+@using GovErp.Application.Web.Audit
+@using GovErp.Application.Web.Commands
+@using GovErp.Application.Web.Common
+@using GovErp.Application.Web.Explanation
+@using GovErp.Application.Web.Invoices.Commands
+@using GovErp.Application.Web.Invoices.Contracts
+@using GovErp.Application.Web.Posting
+@using GovErp.Application.Web.Reference.Contracts
+@using GovErp.Application.Web.Validation.Contracts
+@using GovErp.Web.Authentication
+@inject IExplanationAppService Explanations
+@inject IApprovalAppService Approvals
+@inject IPostingAppService Posting
+@inject CurrentActor CurrentActor
+
+@* Карточка инвойса по общему шаблону: панель действий → шапка → статусная строка → строки → вкладки.
+   Новый документ открывает ту же форму пустой; сохранённый правится на месте только автором в Draft. *@
+<Breadcrumbs Items="@([new Crumb("Payables"), new Crumb("Invoices", "/invoices"), new Crumb(Invoice?.Reference ?? "New")])" />
+<h1>@(Invoice is null ? "New invoice" : $"Invoice {Invoice.Reference}")</h1>
+
+<div class="doc-toolbar" role="toolbar" aria-label="Invoice actions">
+    @Button("Save", Policy.Save, SaveAsync, primary: true)
+    @Button("Submit", Policy.Submit, SubmitAsync)
+    @Button("Check Funds", Policy.CheckFunds, ValidateAsync)
+    <span class="sep" aria-hidden="true"></span>
+    @Button("Approve", Policy.Approve, ApproveAsync, primary: true)
+    @Button("Reject", Policy.Reject, () => OpenDialog(DialogKind.Reject))
+    @Button("Release Hold", Policy.ReleaseHold, () => OpenDialog(DialogKind.Release))
+    <span class="sep" aria-hidden="true"></span>
+    @Button("Post", Policy.Post, PostAsync, primary: true)
+    <span class="sep" aria-hidden="true"></span>
+    @Button("Withdraw", Policy.Withdraw, () => OpenDialog(DialogKind.Withdraw))
+    @Button("Return to Draft", Policy.ReturnToDraft, ReturnAsync)
+    <span class="sep" aria-hidden="true"></span>
+    @Button(Policy.PaymentHoldLabel, Policy.PaymentHold, HoldAsync)
+    <span class="spacer"></span>
+    @Button("Audit", Policy.Audit, OpenAudit)
+</div>
+
+@if (Message is not null) { <p class="error">@Message</p> }
+@if (Invoice is null)
+{
+    <p class="note">Nothing is stored until you press Save. The document number (AP-year-sequence) is assigned on save.
+        The vendor invoice number is suggested from the same sequence; keep it or enter the number printed on the vendor's invoice.</p>
+}
+
+<InvoiceHeader Edit="_edit" Invoice="Invoice" Editable="Policy.CanEdit" Vendors="Vendors" PurchaseOrders="PurchaseOrders" OnChange="Changed" />
+<InvoiceStatusLine Invoice="Invoice" VendorStatus="@VendorStatus" />
+<InvoiceLines Edit="_edit" Editable="Policy.CanEdit" FiscalYear="Invoice?.FiscalYear" Evaluation="Shown" Stale="Dirty"
+              Segments="Segments" PurchaseOrders="PurchaseOrders" OnChange="Changed" />
+
+@if (Invoice is not null)
+{
+    @if (Shown is { } shown && shown.Id != LatestId)
+    {
+        <p class="note">
+            Showing the @shown.Trigger evaluation of @shown.EvaluatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm") from the audit trail.
+            <button type="button" @onclick="ShowLatest">Show latest</button>
+        </p>
+    }
+    <div class="tabs" role="tablist">
+        @foreach (var (tab, label) in TabLabels)
+        {
+            <button type="button" role="tab" aria-selected="@(_tab == tab ? "true" : "false")" @onclick="() => _tab = tab">@label</button>
+        }
+    </div>
+    <div class="tab-body" role="tabpanel">
+        @switch (_tab)
+        {
+            case CardTab.Holds:
+                <HoldsPanel Evaluation="Shown" Releasable="Policy.ReleaseItems" />
+                break;
+            case CardTab.ValidationLog:
+                <EvaluationPanel Evaluation="Shown" />
+                break;
+            case CardTab.Approvals:
+                <ApprovalRoutePanel Evaluation="Shown" DocumentStatus="@Invoice.Status" Approvals="Invoice.Approvals" />
+                break;
+            case CardTab.Accounting:
+                <PostingPanel Lines="PostingLines" IsPosted="@(Invoice.Status == "Posted")" Check="Shown?.PostingCheck" />
+                <PaymentHandoffPanel Status="@Invoice.Status" VendorStatus="@VendorStatus" PaymentHold="Invoice.PaymentHold" DueDate="Invoice.DueDate"
+                                     Ready="Invoice.ReadyForPaymentHandoff" />
+                break;
+            case CardTab.Explanation:
+                <ExplanationPanel EvaluationId="Shown?.Id" />
+                break;
+        }
+    </div>
+
+    <ReasonDialog Open="@(_dialog != DialogKind.None)" Title="@DialogTitle" ConfirmText="@DialogConfirm" Busy="Busy"
+                  OnConfirm="ConfirmDialogAsync" OnCancel="CloseDialog">
+        @if (_dialog == DialogKind.Release && Policy.ReleaseItems.Count > 0)
+        {
+            @if (Policy.ReleaseItems.Count == 1)
+            {
+                <p>@Describe(Policy.ReleaseItems[0])</p>
+            }
+            else
+            {
+                <label>Hold
+                    <select @bind="_releasePick">
+                        @for (var i = 0; i < Policy.ReleaseItems.Count; i++)
+                        {
+                            <option value="@i">@Describe(Policy.ReleaseItems[i])</option>
+                        }
+                    </select>
+                </label>
+            }
+            <p class="note">The release is recorded with your role and reason; the invoice is re-evaluated.</p>
+        }
+        else if (_dialog == DialogKind.Reject)
+        {
+            <p class="note">Rejection releases the budget reservations and PO claims of this invoice. The author can return it to draft.</p>
+        }
+        else if (_dialog == DialogKind.Withdraw)
+        {
+            <p class="note">Withdrawal releases the budget reservations and PO claims and returns the invoice to draft.</p>
+        }
+    </ReasonDialog>
+    <AuditDialog Open="_auditOpen" Title="@Invoice.Reference" History="_history" Events="_events" SelectedId="Shown?.Id"
+                 OnSelect="Select" OnClose="CloseAudit" />
+}
+
+@code {
+    private enum CardTab { Holds, ValidationLog, Approvals, Accounting, Explanation }
+    private enum DialogKind { None, Reject, Withdraw, Release }
+
+    /// <summary>Сохранённый документ; null — новый, форма берётся из Draft.</summary>
+    [Parameter] public InvoiceVm? Invoice { get; set; }
+    /// <summary>Начальная форма нового документа (поставщик, дата, предложенный номер).</summary>
+    [Parameter] public EditorModel? Draft { get; set; }
+    [Parameter] public IReadOnlyList<VendorVm> Vendors { get; set; } = [];
+    [Parameter] public IReadOnlyList<PurchaseOrderVm> PurchaseOrders { get; set; } = [];
+    [Parameter] public SegmentsVm? Segments { get; set; }
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public string? Message { get; set; }
+    /// <summary>Оценка из ссылки (?evaluation=): карточка открывается на ней, если она принадлежит документу.</summary>
+    [Parameter] public Guid? InitialEvaluationId { get; set; }
+    [Parameter] public EventCallback<EditorModel> OnCreate { get; set; }
+    [Parameter] public EventCallback<UpdateInvoiceCommand> OnSave { get; set; }
+    [Parameter] public EventCallback<InvoiceActionCommand> OnValidate { get; set; }
+    [Parameter] public EventCallback<InvoiceActionCommand> OnSubmit { get; set; }
+    [Parameter] public EventCallback<InvoiceActionCommand> OnPost { get; set; }
+    [Parameter] public EventCallback<ReasonedActionCommand> OnWithdraw { get; set; }
+    [Parameter] public EventCallback<InvoiceActionCommand> OnReturnToDraft { get; set; }
+    [Parameter] public EventCallback<PaymentHoldCommand> OnPaymentHold { get; set; }
+    [Parameter] public EventCallback<InvoiceActionCommand> OnApprove { get; set; }
+    [Parameter] public EventCallback<ReasonedActionCommand> OnReject { get; set; }
+    [Parameter] public EventCallback<OverrideCommand> OnOverride { get; set; }
+
+    private InvoiceVm? _invoice;
+    private EditorModel _edit = new();
+    private EditorModel? _saved;
+    private Guid _commandId = Guid.NewGuid();
+    private bool _reload = true;
+    private bool _firstLoad;
+    private bool _retab;
+    private Guid? _selected;
+    private IReadOnlyList<EvaluationVm> _history = [];
+    private IReadOnlyList<AuditEventVm> _events = [];
+    private IReadOnlyList<PreviewLineVm> _journal = [];
+    private IReadOnlyList<ApprovalQueueItemVm> _pending = [];
+    private Guid _userId;
+    private bool _isClerk;
+    private bool _isPoster;
+    private bool _auditOpen;
+    private CardTab _tab = CardTab.ValidationLog;
+    private DialogKind _dialog;
+    private int _releasePick;
+
+    private bool Dirty => _saved is not null && !_edit.SameContent(_saved);
+
+    private InvoiceActionPolicy Policy => new(Invoice, _userId, _isClerk, _isPoster, _pending, Dirty);
+
+    private string VendorStatus => Vendors.FirstOrDefault(v => v.Id == (Invoice?.VendorId ?? _edit.VendorId))?.Status ?? "";
+
+    /// <summary>Текущая оценка документа: LastEvaluationRef активного инвойса, для Draft — последняя ручная проверка.</summary>
+    private Guid? LatestId => Invoice?.LastEvaluationRef ?? Invoice?.LastEvaluation?.Id;
+
+    private EvaluationVm? Shown => _history.FirstOrDefault(e => e.Id == _selected) ?? Invoice?.LastEvaluation;
+
+    private IReadOnlyList<PreviewLineVm> PostingLines => Invoice?.Status == "Posted" ? _journal : Shown?.PostingPreview ?? [];
+
+    private int OpenHolds => Shown?.Outcomes.Count(o => o.Severity is "SoftStop" or "HardStop" && o.OverriddenBy is null) ?? 0;
+
+    private IEnumerable<(CardTab, string)> TabLabels =>
+    [
+        (CardTab.Holds, OpenHolds > 0 ? $"Holds ({OpenHolds})" : "Holds"),
+        (CardTab.ValidationLog, "Validation Log"),
+        (CardTab.Approvals, "Approvals"),
+        (CardTab.Accounting, "Accounting"),
+        (CardTab.Explanation, "Explanation"),
+    ];
+
+    /// <summary>Первая содержательная вкладка: открытые блокировки; иначе маршрут для Submitted; учёт для Approved/Posted; иначе журнал проверки.</summary>
+    private CardTab DefaultTab() =>
+        OpenHolds > 0 ? CardTab.Holds
+        : Invoice?.Status == "Submitted" ? CardTab.Approvals
+        : Invoice?.Status is "Approved" or "Posted" ? CardTab.Accounting
+        : CardTab.ValidationLog;
+
+    protected override void OnParametersSet()
+    {
+        if (Invoice is null)
+        {
+            if (_invoice is not null || _saved is not null || !ReferenceEquals(_edit, Draft ?? _edit))
+            {
+                _invoice = null;
+                _saved = null;
+                _edit = Draft ?? new EditorModel();
+            }
+
+            return;
+        }
+
+        if (!ReferenceEquals(_invoice, Invoice))
+        {
+            // Форму пересобираем только когда документ на сервере действительно изменился (другой документ,
+            // новая версия содержания или статус). После отказа Save версия прежняя, и введённые правки остаются в форме.
+            var otherDocument = _invoice is null || _invoice.Id != Invoice.Id;
+            var documentChanged = otherDocument || _invoice!.ContentVersion != Invoice.ContentVersion || _invoice.Status != Invoice.Status;
+            _invoice = Invoice;
+            _saved = EditorModel.From(Invoice);
+            if (documentChanged)
+            {
+                _edit = EditorModel.From(Invoice);
+            }
+
+            _commandId = Guid.NewGuid();
+            _selected = Invoice.LastEvaluationRef;
+            _auditOpen = false;
+            _dialog = DialogKind.None;
+            _reload = true;
+            _firstLoad = otherDocument;
+            _retab = documentChanged;
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_reload)
+        {
+            return;
+        }
+
+        _reload = false;
+        var actor = await CurrentActor.GetAsync();
+        _userId = actor.UserKey;
+        _isPoster = actor.IsInAnyRole(Roles.Posters);
+        _isClerk = actor.IsInRole(Roles.ApClerk);
+        if (Invoice is null)
+        {
+            return;
+        }
+
+        _history = await Explanations.GetEvaluationHistoryAsync(Invoice.Id, actor);
+        _events = await Explanations.GetAuditTrailAsync(Invoice.Id, actor);
+        // Решения, которых по этому документу ждут именно от текущего пользователя (та же очередь, что на главной и в Approvals).
+        _pending = (await Approvals.GetQueueAsync(actor)).Where(q => q.InvoiceId == Invoice.Id).ToList();
+        _journal = Invoice.Status == "Posted" ? await Posting.GetJournalAsync(Invoice.Id, actor) : [];
+        if (_firstLoad && InitialEvaluationId is { } requested && _history.Any(e => e.Id == requested))
+        {
+            _selected = requested;
+        }
+
+        _selected ??= _history.OrderByDescending(e => e.EvaluatedAt).FirstOrDefault()?.Id;
+        if (_retab)
+        {
+            _tab = DefaultTab();
+        }
+
+        _firstLoad = false;
+        _retab = false;
+    }
+
+    private RenderFragment Button(string label, string? blocked, Func<Task> onClick, bool primary = false) => __builder =>
+    {
+        <button type="button" class="@(primary && blocked is null ? "primary" : null)" disabled="@(Busy || blocked is not null)"
+                title="@blocked" @onclick="onClick">@label</button>
+    };
+
+    private RenderFragment Button(string label, string? blocked, Action onClick) =>
+        Button(label, blocked, () => { onClick(); return Task.CompletedTask; });
+
+    /// <summary>Правка формы: перерисовка карточки пересчитывает Dirty и доступность кнопок.</summary>
+    private void Changed() { }
+
+    private void OpenAudit() => _auditOpen = true;
+    private void CloseAudit() => _auditOpen = false;
+    private void ShowLatest() => _selected = LatestId;
+
+    /// <summary>Выбор оценки в журнале закрывает окно: вкладки и строки показывают её вместо последней.</summary>
+    private void Select(Guid id)
+    {
+        _selected = id;
+        _auditOpen = false;
+    }
+
+    private void OpenDialog(DialogKind kind)
+    {
+        _dialog = kind;
+        _releasePick = 0;
+    }
+
+    private void CloseDialog() => _dialog = DialogKind.None;
+
+    private string DialogTitle => _dialog switch
+    {
+        DialogKind.Reject => "Reject invoice",
+        DialogKind.Withdraw => "Withdraw invoice",
+        DialogKind.Release => "Release hold",
+        _ => "",
+    };
+
+    private string DialogConfirm => _dialog switch
+    {
+        DialogKind.Reject => "Reject",
+        DialogKind.Withdraw => "Withdraw",
+        DialogKind.Release => "Release",
+        _ => "Confirm",
+    };
+
+    private static string Describe(ApprovalQueueItemVm item) =>
+        $"{item.RuleId}{(item.Line is { } line ? $" · line {line}" : "")}: {item.Reason}";
+
+    private CommandEnvelope Envelope => new(_commandId, Invoice!.RowVersion);
+
+    private Task SaveAsync() => Invoice is null
+        ? OnCreate.InvokeAsync(_edit)
+        : OnSave.InvokeAsync(_edit.ToUpdate(Envelope, Invoice.Id));
+
+    private Task ValidateAsync() => OnValidate.InvokeAsync(new InvoiceActionCommand(Envelope, Invoice!.Id));
+    private Task SubmitAsync() => OnSubmit.InvokeAsync(new InvoiceActionCommand(Envelope, Invoice!.Id));
+    private Task PostAsync() => OnPost.InvokeAsync(new InvoiceActionCommand(Envelope, Invoice!.Id));
+    private Task ReturnAsync() => OnReturnToDraft.InvokeAsync(new InvoiceActionCommand(Envelope, Invoice!.Id));
+    private Task ApproveAsync() => OnApprove.InvokeAsync(new InvoiceActionCommand(Envelope, Invoice!.Id));
+    private Task HoldAsync() => OnPaymentHold.InvokeAsync(new PaymentHoldCommand(Envelope, Invoice!.Id, !Invoice.PaymentHold));
+
+    private async Task ConfirmDialogAsync(string reason)
+    {
+        var kind = _dialog;
+        var release = kind == DialogKind.Release ? Policy.ReleaseItems.ElementAtOrDefault(_releasePick) : null;
+        _dialog = DialogKind.None;
+        switch (kind)
+        {
+            case DialogKind.Reject:
+                await OnReject.InvokeAsync(new ReasonedActionCommand(Envelope, Invoice!.Id, reason));
+                break;
+            case DialogKind.Withdraw:
+                await OnWithdraw.InvokeAsync(new ReasonedActionCommand(Envelope, Invoice!.Id, reason));
+                break;
+            case DialogKind.Release when release is not null:
+                await OnOverride.InvokeAsync(new OverrideCommand(Envelope, Invoice!.Id, release.EvaluationId, release.RuleId!, release.Line, reason));
+                break;
+        }
+    }
+}

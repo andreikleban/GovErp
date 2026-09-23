@@ -1,0 +1,88 @@
+@using GovErp.Application.Web.Invoices.Contracts
+@using GovErp.Application.Web.Reference.Contracts
+
+@* Шапка документа сеткой полей. Правка на месте — только когда форма открыта для правки (автор, Draft, или новый документ). *@
+<div class="fields">
+    <div class="field">
+        <span>Document</span>
+        <span>@(Invoice?.Reference ?? "Assigned on save")</span>
+    </div>
+    @if (Editable && Invoice is null)
+    {
+        <label title="The number printed on the vendor's invoice. It cannot change after the first save (duplicate check).">
+            Vendor invoice no.
+            <input @bind="Edit.Number" @bind:after="ChangedAsync" autocomplete="off" />
+        </label>
+    }
+    else
+    {
+        <div class="field"><span>Vendor invoice no.</span><span>@Edit.Number</span></div>
+    }
+    @if (Editable)
+    {
+        <label>Vendor
+            <select @bind="VendorText" @bind:after="ChangedAsync">
+                @foreach (var v in Vendors)
+                {
+                    <option value="@v.Id">@v.Name@(v.Status == "Active" ? "" : $" ({v.Status})")</option>
+                }
+            </select>
+        </label>
+        <label title="Invoice, service and posting dates use this one document date.">Document date
+            <input type="date" @bind="Edit.DocumentDate" @bind:after="ChangedAsync" />
+        </label>
+        <label>Due date <input type="date" @bind="Edit.DueDate" @bind:after="ChangedAsync" /></label>
+        <label>Amount (USD) <input type="number" step="0.01" @bind="Edit.Total" @bind:after="ChangedAsync" /></label>
+        <label>Purchase order
+            <select @bind="Edit.PoRef" @bind:after="ChangedAsync">
+                <option value="">(none)</option>
+                @foreach (var po in PurchaseOrders)
+                {
+                    <option value="@po.Number">@po.Number</option>
+                }
+            </select>
+        </label>
+    }
+    else
+    {
+        <div class="field"><span>Vendor</span><span>@VendorName</span></div>
+        <div class="field" title="Invoice, service and posting dates use this one document date.">
+            <span>Document date</span><span>@Edit.DocumentDate.ToString("yyyy-MM-dd")</span>
+        </div>
+        <div class="field"><span>Due date</span><span>@Edit.DueDate.ToString("yyyy-MM-dd")</span></div>
+        <div class="field"><span>Amount (USD)</span><span><Money Value="Edit.Total" /></span></div>
+        <div class="field"><span>Purchase order</span><span>@(Edit.HasPo ? Edit.PoRef : "—")</span></div>
+    }
+    @if (Invoice is not null)
+    {
+        <div class="field"><span>Fiscal year</span><span>FY@(Invoice.FiscalYear)</span></div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public EditorModel Edit { get; set; } = null!;
+    [Parameter] public InvoiceVm? Invoice { get; set; }
+    [Parameter] public bool Editable { get; set; }
+    [Parameter] public IReadOnlyList<VendorVm> Vendors { get; set; } = [];
+    [Parameter] public IReadOnlyList<PurchaseOrderVm> PurchaseOrders { get; set; } = [];
+    /// <summary>Любая правка поля: карточка пересчитывает доступность Submit и Check Funds.</summary>
+    [Parameter] public EventCallback OnChange { get; set; }
+
+    private string VendorName
+    {
+        get
+        {
+            var vendor = Vendors.FirstOrDefault(v => v.Id == Edit.VendorId);
+            return vendor is null ? Invoice?.VendorName ?? "—" : vendor.Status == "Active" ? vendor.Name : $"{vendor.Name} ({vendor.Status})";
+        }
+    }
+
+    /// <summary>Выбор поставщика через строку: значение option — Guid поставщика.</summary>
+    private string VendorText
+    {
+        get => Edit.VendorId.ToString();
+        set => Edit.VendorId = Guid.TryParse(value, out var id) ? id : Edit.VendorId;
+    }
+
+    private Task ChangedAsync() => OnChange.InvokeAsync();
+}

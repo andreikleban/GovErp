@@ -1,0 +1,68 @@
+@* Маленький диалог причины для Reject, Withdraw и Release Hold: без причины подтвердить нельзя (сервер её требует). *@
+@if (Open)
+{
+    <div class="modal-backdrop" @onclick="CancelAsync"></div>
+    <div class="modal small" role="dialog" aria-modal="true" aria-labelledby="reason-title" tabindex="-1"
+         @onkeydown="OnKeyDownAsync">
+        <header class="modal-header">
+            <h2 id="reason-title">@Title</h2>
+        </header>
+        <div class="modal-body">
+            @ChildContent
+            <label>@Label
+                <textarea rows="3" @ref="_input" @bind="_reason" @bind:event="oninput" autocomplete="off"></textarea>
+            </label>
+        </div>
+        <footer class="modal-footer">
+            <button type="button" @onclick="CancelAsync">Cancel</button>
+            <button class="primary" type="button" disabled="@(Busy || string.IsNullOrWhiteSpace(_reason))"
+                    title="@(string.IsNullOrWhiteSpace(_reason) ? "Enter a reason." : null)" @onclick="ConfirmAsync">@ConfirmText</button>
+        </footer>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string Label { get; set; } = "Reason";
+    [Parameter] public string ConfirmText { get; set; } = "Confirm";
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public EventCallback<string> OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private ElementReference _input;
+    private string _reason = "";
+    private bool _shown;
+    private bool _focused;
+
+    protected override void OnParametersSet()
+    {
+        // Каждое открытие начинается с пустой причины: прежний текст относился к другому действию.
+        if (Open && !_shown)
+        {
+            _reason = "";
+        }
+
+        _shown = Open;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Open && !_focused)
+        {
+            _focused = true;
+            await _input.FocusAsync();
+        }
+        else if (!Open)
+        {
+            _focused = false;
+        }
+    }
+
+    private Task OnKeyDownAsync(KeyboardEventArgs e) => e.Key == "Escape" ? CancelAsync() : Task.CompletedTask;
+
+    private Task CancelAsync() => OnCancel.InvokeAsync();
+
+    private Task ConfirmAsync() => string.IsNullOrWhiteSpace(_reason) ? Task.CompletedTask : OnConfirm.InvokeAsync(_reason.Trim());
+}

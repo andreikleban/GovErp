@@ -33,7 +33,7 @@ else
                 <td>@item.VendorName</td>
                 <td class="money"><Money Value="item.Total" /></td>
                 <td>@(item.Kind == "Approve" ? "Approve" : "Release hold")</td>
-                <td>@item.Role@(item.Department is null ? "" : $" · {item.Department}")</td>
+                <td>@GovErp.Web.Components.Invoices.InvoiceActionPolicy.RoleLabel(item.Role)@(item.Department is null ? "" : $" · {item.Department}")</td>
                 <td>@(item.RuleId is null ? item.Reason : $"{item.RuleId}: {item.Reason}")</td>
                 <td><span class="chip @Chip(item.Overall)">@item.Overall</span></td>
             </tr>

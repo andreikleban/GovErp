@@ -56,7 +56,7 @@ public static class AuthEndpoints
         if (string.IsNullOrWhiteSpace(returnUrl) || !returnUrl.StartsWith('/') || returnUrl.StartsWith("//")
             || returnUrl.Contains('\\', StringComparison.Ordinal) || returnUrl.Contains("://", StringComparison.Ordinal))
         {
-            return "/invoices";
+            return "/";
         }
 
         return returnUrl;

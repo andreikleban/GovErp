@@ -1,8 +1,10 @@
+using GovErp.Application.Web.Commands;
 using GovErp.Application.Web.Invoices.Commands;
 using GovErp.Application.Web.Invoices.Contracts;
 
 namespace GovErp.Web.Components.Invoices;
 
+/// <summary>Форма карточки инвойса: шапка и строки. Для нового документа живёт только в памяти до Save.</summary>
 public sealed class EditorModel
 {
     public string Number { get; set; } = "";
@@ -15,6 +17,7 @@ public sealed class EditorModel
 
     public decimal LineSum => Lines.Sum(l => l.Amount);
     public decimal Difference => Total - LineSum;
+    public bool HasPo => !string.IsNullOrWhiteSpace(PoRef);
 
     public static EditorModel From(InvoiceVm invoice) => new()
     {
@@ -36,42 +39,20 @@ public sealed class EditorModel
         Lines = [LineModel.Default()],
     };
 
-    public CreateInvoiceCommand ToCreate(GovErp.Application.Web.Commands.CommandEnvelope envelope) =>
-        new(envelope, Number, VendorId, DocumentDate, DocumentDate, DocumentDate, DueDate, Total,
-            string.IsNullOrWhiteSpace(PoRef) ? null : PoRef,
-            Lines.Select(l => new DistributionCommand(l.Account, l.Amount, l.PoLineNo)).ToList());
+    /// <summary>Совпадает ли содержание с другой формой: несохранённые правки блокируют Submit и Check Funds.</summary>
+    public bool SameContent(EditorModel other) =>
+        (Number.Trim(), VendorId, DocumentDate, DueDate, Total, HasPo ? PoRef!.Trim() : null) ==
+        (other.Number.Trim(), other.VendorId, other.DocumentDate, other.DueDate, other.Total, other.HasPo ? other.PoRef!.Trim() : null)
+        && Lines.Select(l => (l.Account, l.Amount, HasPo ? l.PoLineNo : null))
+            .SequenceEqual(other.Lines.Select(l => (l.Account, l.Amount, other.HasPo ? l.PoLineNo : null)));
 
-    public UpdateInvoiceCommand ToUpdate(GovErp.Application.Web.Commands.CommandEnvelope envelope, Guid id) =>
-        new(envelope, id, Number, VendorId, DocumentDate, DocumentDate, DocumentDate, DueDate, Total,
-            string.IsNullOrWhiteSpace(PoRef) ? null : PoRef,
-            Lines.Select(l => new DistributionCommand(l.Account, l.Amount, l.PoLineNo)).ToList());
-}
+    public CreateInvoiceCommand ToCreate(CommandEnvelope envelope) =>
+        new(envelope, Number, VendorId, DocumentDate, DocumentDate, DocumentDate, DueDate, Total, HasPo ? PoRef : null, Distributions());
 
-public sealed class LineModel
-{
-    public string Fund { get; set; } = "";
-    public string Department { get; set; } = "";
-    public string Object { get; set; } = "";
-    public string? Grant { get; set; }
-    public decimal Amount { get; set; }
-    public int? PoLineNo { get; set; }
+    public UpdateInvoiceCommand ToUpdate(CommandEnvelope envelope, Guid id) =>
+        new(envelope, id, Number, VendorId, DocumentDate, DocumentDate, DocumentDate, DueDate, Total, HasPo ? PoRef : null, Distributions());
 
-    public string Account => string.IsNullOrWhiteSpace(Grant) ? $"{Fund}-{Department}-{Object}" : $"{Fund}-{Department}-{Object}-{Grant}";
-
-    /// <summary>Выпадающие списки сегментов не имеют пустого значения, поэтому новая строка сразу получает валидные коды.</summary>
-    public static LineModel Default() => new() { Fund = "101", Department = "6000", Object = "53100" };
-
-    public static LineModel From(DistributionVm d)
-    {
-        var parts = d.Account.Split('-');
-        return new LineModel
-        {
-            Fund = parts.ElementAtOrDefault(0) ?? "",
-            Department = parts.ElementAtOrDefault(1) ?? "",
-            Object = parts.ElementAtOrDefault(2) ?? "",
-            Grant = parts.Length > 3 ? string.Join('-', parts.Skip(3)) : null,
-            Amount = d.Amount,
-            PoLineNo = d.PoLineNo,
-        };
-    }
+    /// <summary>Без PO номер строки заказа не отправляется: колонка скрыта, и прежний выбор не должен уйти на сервер.</summary>
+    private List<DistributionCommand> Distributions() =>
+        Lines.Select(l => new DistributionCommand(l.Account, l.Amount, HasPo ? l.PoLineNo : null)).ToList();
 }

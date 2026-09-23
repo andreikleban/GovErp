@@ -1,0 +1,161 @@
+@page "/invoices"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Commands
+@using GovErp.Application.Web.Common
+@using GovErp.Application.Web.Invoices
+@using GovErp.Application.Web.Invoices.Commands
+@using GovErp.Application.Web.Invoices.Contracts
+@using GovErp.Application.Web.Reference
+@using GovErp.Application.Web.Reference.Contracts
+@using GovErp.Web.Authentication
+@inject IInvoiceAppService InvoiceService
+@inject IReferenceAppService Reference
+@inject CurrentActor CurrentActor
+@inject NavigationManager Navigation
+
+<PageTitle>Invoices</PageTitle>
+<Breadcrumbs Items="@([new Crumb("Payables"), new Crumb("Invoices")])" />
+<div class="page-header">
+    <h1>Invoices</h1>
+    @if (_canCreate)
+    {
+        <div class="toolbar">
+            <a class="button primary" href="/invoices/new">New</a>
+            <button type="button" disabled="@_busy" title="Demo invoice from the exercise: grant-funded, no PO" @onclick="() => PresetAsync(InvoicePreset.NonPoGrant)">Non-PO</button>
+            <button type="button" disabled="@_busy" title="Demo invoice from the exercise: liquidates PO-2026-0451" @onclick="() => PresetAsync(InvoicePreset.PoBackedGrant)">PO-backed</button>
+            <button type="button" disabled="@_busy" title="Demo invoice from the exercise: three funds" @onclick="() => PresetAsync(InvoicePreset.MultiFund)">Multi-fund</button>
+        </div>
+    }
+</div>
+
+<FilterBar OnClear="Clear" Active="@(Status is not null || Fund is not null || Holds is not null)">
+    <label>Status
+        <select value="@(Status ?? "")" @onchange="e => Filter(status: Value(e))">
+            <option value="">All</option>
+            @foreach (var status in Statuses)
+            {
+                <option value="@status">@status</option>
+            }
+        </select>
+    </label>
+    <label>Fund
+        <select value="@(Fund ?? "")" @onchange="e => Filter(fund: Value(e))">
+            <option value="">All</option>
+            @foreach (var fund in _funds)
+            {
+                <option value="@fund.Code">@fund.Code · @fund.Name</option>
+            }
+        </select>
+    </label>
+    <label>Holds
+        <select value="@(Holds ?? "")" @onchange="e => Filter(holds: Value(e))">
+            <option value="">Any</option>
+            <option value="yes">With open holds</option>
+            <option value="no">Without holds</option>
+        </select>
+    </label>
+</FilterBar>
+
+@if (_error is not null) { <p class="error">@_error</p> }
+@if (_list is { Count: 0 })
+{
+    <p class="note">
+        @(Status is not null || Fund is not null || Holds is not null
+            ? "No invoices match these filters."
+            : _canCreate
+                ? "No invoices yet. New opens an empty form; Non-PO, PO-backed and Multi-fund create the demo invoices from the exercise."
+                : "No invoices yet. AP clerks create them; approvals waiting for you appear on the home page and under Approvals.")
+    </p>
+}
+<table>
+    <thead>
+        <tr>
+            <th>Document</th><th>Vendor invoice</th><th>Vendor</th><th>Funds</th><th>Posting date</th>
+            <th class="money">Amount</th><th>Status</th><th>Holds</th><th>Last evaluation</th>
+        </tr>
+    </thead>
+    <tbody>
+    @if (_list is not null)
+    {
+        @foreach (var row in _list)
+        {
+            <tr>
+                <td><DocumentLink Id="row.Id" Reference="@row.Reference" /></td>
+                <td>@row.Number</td>
+                <td>@row.VendorName</td>
+                <td>@string.Join(", ", row.Funds)</td>
+                <td>@row.PostingDate.ToString("yyyy-MM-dd")</td>
+                <td class="money"><Money Value="row.Total" /></td>
+                <td><StatusBadge Status="@row.Status" /></td>
+                <td>@if (row.OpenHolds > 0) { <span class="chip warn">@row.OpenHolds open</span> } else { <span class="note">—</span> }</td>
+                <td>@(row.LastOverall ?? "Not checked")</td>
+            </tr>
+        }
+    }
+    </tbody>
+</table>
+
+@code {
+    private static readonly string[] Statuses = ["Draft", "Submitted", "Approved", "Rejected", "Posted"];
+
+    [SupplyParameterFromQuery(Name = "status")] public string? Status { get; set; }
+    [SupplyParameterFromQuery(Name = "fund")] public string? Fund { get; set; }
+    /// <summary>yes — только с открытыми блокировками, no — только без них.</summary>
+    [SupplyParameterFromQuery(Name = "holds")] public string? Holds { get; set; }
+
+    private IReadOnlyList<InvoiceListItemVm>? _list;
+    private IReadOnlyList<SegmentValueVm> _funds = [];
+    private bool _busy;
+    private bool _canCreate;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        _canCreate = actor.IsInRole(Roles.ApClerk);
+        _funds = (await Reference.GetSegmentsAsync(actor)).Funds;
+        var holds = Holds switch { "yes" => true, "no" => (bool?)false, _ => null };
+        _list = await InvoiceService.ListAsync(new InvoiceListFilter(Status, Fund, holds), actor);
+    }
+
+    private static string? Value(ChangeEventArgs e) => e.Value?.ToString() is { Length: > 0 } value ? value : null;
+
+    /// <summary>
+    /// Фильтры живут в адресе: ссылки с главной и кнопка «назад» открывают тот же список.
+    /// Пустая строка — «поле не менялось», null — фильтр снят.
+    /// </summary>
+    private void Filter(string? status = "", string? fund = "", string? holds = "")
+    {
+        var query = new Dictionary<string, object?>
+        {
+            ["status"] = status == "" ? Status : status,
+            ["fund"] = fund == "" ? Fund : fund,
+            ["holds"] = holds == "" ? Holds : holds,
+        };
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters("/invoices", query));
+    }
+
+    private void Clear() => Navigation.NavigateTo("/invoices");
+
+    private async Task PresetAsync(InvoicePreset preset)
+    {
+        _busy = true;
+        try
+        {
+            var actor = await CurrentActor.GetAsync();
+            var r = await InvoiceService.CreateFromPresetAsync(preset, new CommandEnvelope(Guid.NewGuid(), null), actor);
+            if (!r.IsAccepted)
+            {
+                _error = r.Reason;
+                return;
+            }
+
+            Navigation.NavigateTo($"/invoices/{r.Value!.Id}");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

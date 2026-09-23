@@ -1,0 +1,84 @@
+@using GovErp.Application.Web.Approvals.Contracts
+@using GovErp.Application.Web.Validation.Contracts
+
+@* Блокировки оценки: Hard Stop и Soft Stop, открытые и снятые override'ом — правило, причина, цифры, кто может снять. *@
+<section class="panel">
+    <h2>Holds</h2>
+    @if (Evaluation is null)
+    {
+        <p class="note">No saved evaluation. Check Funds runs the rules.</p>
+    }
+    else if (Holds.Count == 0)
+    {
+        <p class="note">No holds on this evaluation.</p>
+    }
+    else
+    {
+        <p class="note">A Hard Stop is removed only by fixing the data or the budget. A Soft Stop is released (overridden) by a permitted role with a reason.</p>
+        <table>
+            <thead>
+                <tr><th>Rule</th><th>Line</th><th>Severity</th><th>Reason</th><th>Figures</th><th>Who can release</th><th>State</th></tr>
+            </thead>
+            <tbody>
+            @foreach (var hold in Holds)
+            {
+                <tr>
+                    <td><a href="@($"/rules?rule={Uri.EscapeDataString(hold.RuleId)}")" title="Setup › Rules">@hold.RuleId</a> <span class="note">v@(hold.RuleVersion)</span></td>
+                    <td>@(hold.Line?.ToString() ?? "Header")</td>
+                    <td><span class="chip @(hold.OverriddenBy is not null ? "muted" : hold.Severity == "HardStop" ? "bad" : "warn")">@SeverityText(hold.Severity)</span></td>
+                    <td>
+                        <div>@hold.Message</div>
+                        @if (!string.IsNullOrWhiteSpace(hold.Resolution))
+                        {
+                            <div class="note">Action: @hold.Resolution</div>
+                        }
+                    </td>
+                    <td class="note">@Figures(hold)</td>
+                    <td>@WhoCanRelease(hold)</td>
+                    <td>
+                        @if (hold.OverriddenBy is { } by)
+                        {
+                            <span class="chip ok">Released</span>
+                            <div class="note">@(by.Role is null ? "" : InvoiceActionPolicy.RoleLabel(by.Role)): @by.Reason</div>
+                        }
+                        else if (Mine(hold))
+                        {
+                            <span class="chip warn">Open · you can release</span>
+                        }
+                        else
+                        {
+                            <span class="chip @(hold.Severity == "HardStop" ? "bad" : "warn")">Open</span>
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</section>
+
+@code {
+    [Parameter] public EvaluationVm? Evaluation { get; set; }
+    /// <summary>Soft Stop, которые текущий пользователь вправе снять (из его очереди).</summary>
+    [Parameter] public IReadOnlyList<ApprovalQueueItemVm> Releasable { get; set; } = [];
+
+    private IReadOnlyList<OutcomeVm> Holds =>
+        Evaluation?.Outcomes.Where(o => o.Severity is "HardStop" or "SoftStop").OrderBy(o => o.OverriddenBy is not null).ThenBy(o => o.Step).ToList() ?? [];
+
+    private bool Mine(OutcomeVm hold) =>
+        Releasable.Any(r => r.EvaluationId == Evaluation?.Id && r.RuleId == hold.RuleId && r.Line == hold.Line);
+
+    private static string SeverityText(string severity) => severity == "HardStop" ? "Hard stop" : "Soft stop";
+
+    /// <summary>Расчёт правила; если его нет — входные данные.</summary>
+    private static string Figures(OutcomeVm hold)
+    {
+        var values = hold.Computed.Count > 0 ? hold.Computed : hold.Inputs;
+        return string.Join("; ", values.Select(p => $"{p.Key} = {p.Value}"));
+    }
+
+    private static string WhoCanRelease(OutcomeVm hold) =>
+        hold.Severity == "HardStop" ? "Nobody: fix the data"
+        : hold.OverridableBy.Count == 0 ? "Nobody"
+        : string.Join(", ", hold.OverridableBy.Select(InvoiceActionPolicy.RoleLabel));
+}

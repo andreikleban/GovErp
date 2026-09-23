@@ -1,0 +1,113 @@
+@using System.Globalization
+@using GovErp.Application.Web.Common
+@using GovErp.Application.Web.Invoices.Contracts
+@inject IClock Clock
+
+@* Состояние документа одной строкой: статус, проверка, согласование, деньги, учёт, оплата — по текущей (последней) оценке. *@
+<dl class="status-line">
+    <div>
+        <dt>Document</dt>
+        <dd>@if (Invoice is null) { <span class="badge muted">New</span> } else { <StatusBadge Status="@Invoice.Status" /> }</dd>
+    </div>
+    <div>
+        <dt>Validation</dt>
+        <dd class="@Validation.Tone">@Validation.Text</dd>
+    </div>
+    <div>
+        <dt>Approval</dt>
+        <dd class="@Approval.Tone">@Approval.Text</dd>
+    </div>
+    <div>
+        <dt>Funds</dt>
+        <dd title="@FundsDetail">@Funds</dd>
+    </div>
+    <div>
+        <dt>Accounting</dt>
+        <dd class="@(Invoice?.PostedAt is null ? null : "ok")">@Accounting</dd>
+    </div>
+    <div>
+        <dt>Payment</dt>
+        <dd class="@Payment.Tone">@Payment.Text</dd>
+    </div>
+</dl>
+
+@code {
+    [Parameter] public InvoiceVm? Invoice { get; set; }
+    [Parameter] public string VendorStatus { get; set; } = "";
+
+    private (string Text, string? Tone) Validation
+    {
+        get
+        {
+            var last = Invoice?.LastEvaluation;
+            if (last is null)
+            {
+                return ("Not checked", null);
+            }
+
+            if (Invoice!.Status == "Draft" && last.ContentVersion != Invoice.ContentVersion)
+            {
+                return ("Not checked since the last change", null);
+            }
+
+            var open = last.Outcomes.Where(o => o.OverriddenBy is null).ToList();
+            var soft = open.Count(o => o.Severity == "SoftStop");
+            var hard = open.Count(o => o.Severity == "HardStop");
+            var warnings = open.Count(o => o.Severity == "Warning");
+            return soft + hard > 0 ? ($"{Plural(soft + hard, "hold")} ({soft} soft / {hard} hard)", hard > 0 ? "bad" : "warn")
+                : warnings > 0 ? (Plural(warnings, "warning"), "warn")
+                : ("Passed", "ok");
+        }
+    }
+
+    private (string Text, string? Tone) Approval => Invoice?.Status switch
+    {
+        "Submitted" when Invoice.LastEvaluation is { } last && last.ApprovalRoute.Count > 0 =>
+            ($"{last.ApprovalRoute.Count(r => r.IsSatisfied)} of {last.ApprovalRoute.Count}", "warn"),
+        "Submitted" => ("Pending", "warn"),
+        "Approved" or "Posted" => ("Approved", "ok"),
+        "Rejected" => ("Rejected", "bad"),
+        _ => ("—", null),
+    };
+
+    private string Funds
+    {
+        get
+        {
+            if (Invoice?.Funds is not { } funds)
+            {
+                return "—";
+            }
+
+            if (Invoice.Status == "Posted")
+            {
+                return $"Consumed {Amount(funds.Consumed)}";
+            }
+
+            var parts = new List<string>();
+            if (funds.LiquidationClaimed > 0) { parts.Add($"Liquidating PO {Amount(funds.LiquidationClaimed)}"); }
+            if (funds.Reserved > 0) { parts.Add($"Reserved {Amount(funds.Reserved)}"); }
+            return parts.Count == 0 ? "Not reserved" : string.Join(" · ", parts);
+        }
+    }
+
+    private string? FundsDetail => Invoice?.Funds is { } f
+        ? $"Budget reserved {Amount(f.Reserved)} · PO liquidation claims {Amount(f.LiquidationClaimed)} · PO billing claims {Amount(f.BillingClaimed)} · Consumed {Amount(f.Consumed)}"
+        : null;
+
+    private string Accounting => Invoice?.PostedAt is { } at ? $"Posted {at.LocalDateTime:yyyy-MM-dd}" : "Not posted";
+
+    /// <summary>Готовность к передаче в оплату: те же условия, что ReadyForPaymentHandoff; первая невыполненная — причина.</summary>
+    private (string Text, string? Tone) Payment =>
+        Invoice is null ? ("—", (string?)null)
+        : Invoice.PaymentHold ? ("On hold", "bad")
+        : Invoice.ReadyForPaymentHandoff ? ("Ready", "ok")
+        : Invoice.Status != "Posted" ? ("Not ready: not posted", (string?)null)
+        : VendorStatus is not ("Active" or "") ? ($"Not ready: vendor {VendorStatus.ToLowerInvariant()}", "warn")
+        : Invoice.DueDate > Clock.BusinessDate ? ($"Not ready: due {Invoice.DueDate:yyyy-MM-dd}", (string?)null)
+        : ("Not ready", (string?)null);
+
+    private static string Amount(decimal value) => value.ToString("N2", CultureInfo.InvariantCulture);
+
+    private static string Plural(int count, string noun) => count == 1 ? $"1 {noun}" : $"{count} {noun}s";
+}
