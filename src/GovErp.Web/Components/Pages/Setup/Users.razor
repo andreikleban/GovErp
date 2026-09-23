@@ -1,0 +1,38 @@
+@page "/users"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Reference
+@using GovErp.Application.Web.Reference.Contracts
+@using GovErp.Web.Authentication
+@inject IReferenceAppService Reference
+@inject CurrentActor CurrentActor
+
+<PageTitle>Users</PageTitle>
+<Breadcrumbs Items="@([new Crumb("Setup"), new Crumb("Users")])" />
+<h1>Users</h1>
+<p class="note">Tenant users from Master. Roles and department drive what each user may do — see Setup › Roles.</p>
+
+<table>
+    <thead><tr><th>Login</th><th>Display name</th><th>Roles</th><th>Department</th></tr></thead>
+    <tbody>
+    @foreach (var u in _users)
+    {
+        <tr>
+            <td>@u.UserName</td>
+            <td>@u.DisplayName</td>
+            <td>@string.Join(", ", u.Roles)</td>
+            <td>@(u.DepartmentCode ?? "—")</td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+@code {
+    private IReadOnlyList<UserVm> _users = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        _users = await Reference.GetUsersAsync(actor);
+    }
+}

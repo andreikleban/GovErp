@@ -1,0 +1,125 @@
+@page "/audit/events"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Audit
+@using GovErp.Application.Web.Audit.Contracts
+@using GovErp.Web.Authentication
+@inject IAuditAppService Audit
+@inject CurrentActor CurrentActor
+@inject NavigationManager Navigation
+
+<PageTitle>Events</PageTitle>
+<Breadcrumbs Items="@([new Crumb("Audit"), new Crumb("Events")])" />
+<h1>Events</h1>
+<p class="note">The latest 200 audit events across the tenant, most recent first.</p>
+
+<FilterBar OnClear="Clear" Active="@(Action is not null || Actor is not null || Subject is not null)">
+    <label>Action <input value="@Action" @onchange="e => Filter(action: Value(e))" placeholder="InvoiceSubmitted…" /></label>
+    <label>Actor <input value="@Actor" @onchange="e => Filter(actor: Value(e))" placeholder="budget.officer…" /></label>
+    <label>Subject <input value="@Subject" @onchange="e => Filter(subject: Value(e))" placeholder="AP-2026-…" /></label>
+</FilterBar>
+
+@if (_events is null)
+{
+    <p class="note">Loading events.</p>
+}
+else if (_events.Count == 0)
+{
+    <p class="note">No events match these filters.</p>
+}
+else
+{
+    <table>
+        <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Subject</th><th>Payload</th></tr></thead>
+        <tbody>
+        @foreach (var e in _events)
+        {
+            <tr>
+                <td>@e.OccurredAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</td>
+                <td>@e.ActorName</td>
+                <td>@e.Action</td>
+                <td>
+                    @if (e.SubjectInvoiceId is { } id)
+                    {
+                        <DocumentLink Id="id" Reference="@e.SubjectRef" />
+                    }
+                    else
+                    {
+                        @e.SubjectRef
+                    }
+                </td>
+                <td>
+                    @if (string.IsNullOrWhiteSpace(e.PayloadJson) || e.PayloadJson == "{}")
+                    {
+                        <span class="note">—</span>
+                    }
+                    else
+                    {
+                        <details>
+                            <summary>@Summarize(e.PayloadJson)</summary>
+                            <pre class="payload">@Pretty(e.PayloadJson)</pre>
+                        </details>
+                    }
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "action")] public string? Action { get; set; }
+    [SupplyParameterFromQuery(Name = "actor")] public string? Actor { get; set; }
+    [SupplyParameterFromQuery(Name = "subject")] public string? Subject { get; set; }
+
+    private IReadOnlyList<AuditEventVm>? _events;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        _events = await Audit.ListEventsAsync(new EventFilter(Action, Actor, Subject), actor);
+    }
+
+    /// <summary>Первая пара «ключ: значение» как краткая подпись; полный payload — в раскрывающемся <details>.</summary>
+    private static string Summarize(string payloadJson)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(payloadJson);
+            var first = doc.RootElement.EnumerateObject().FirstOrDefault();
+            return first.Name is null ? "details…" : $"{first.Name}: {first.Value}";
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return "details…";
+        }
+    }
+
+    private static string Pretty(string payloadJson)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(payloadJson);
+            return System.Text.Json.JsonSerializer.Serialize(doc.RootElement, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return payloadJson;
+        }
+    }
+
+    private static string? Value(ChangeEventArgs e) => e.Value?.ToString() is { Length: > 0 } value ? value : null;
+
+    private void Filter(string? action = "", string? actor = "", string? subject = "")
+    {
+        var query = new Dictionary<string, object?>
+        {
+            ["action"] = action == "" ? Action : action,
+            ["actor"] = actor == "" ? Actor : actor,
+            ["subject"] = subject == "" ? Subject : subject,
+        };
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters("/audit/events", query));
+    }
+
+    private void Clear() => Navigation.NavigateTo("/audit/events");
+}

@@ -1,0 +1,108 @@
+@page "/grants/{Code}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Common
+@using GovErp.Application.Web.Reference
+@using GovErp.Application.Web.Reference.Contracts
+@using GovErp.Web.Authentication
+@inject IReferenceAppService Reference
+@inject CurrentActor CurrentActor
+
+<PageTitle>Grant @Code</PageTitle>
+<Breadcrumbs Items="@([new Crumb("Setup"), new Crumb("Grants", "/grants"), new Crumb(Code)])" />
+<h1>Grant @Code</h1>
+
+@if (_notFound)
+{
+    <p class="error">Grant @Code was not found.</p>
+}
+else if (_grant is { } grant)
+{
+    <div class="fields">
+        <div class="field"><span>Name</span><span>@grant.Name</span></div>
+        <div class="field"><span>Sponsor</span><span>@grant.Sponsor</span></div>
+        <div class="field"><span>Federal</span><span>@(grant.IsFederal ? "Yes" : "No")</span></div>
+        <div class="field"><span>Period</span><span>@grant.PeriodFrom.ToString("yyyy-MM-dd") – @(grant.PeriodTo?.ToString("yyyy-MM-dd") ?? "open")</span></div>
+        <div class="field"><span>Status</span><span><span class="chip @(grant.Status == "Active" ? "ok" : "muted")">@grant.Status</span></span></div>
+        <div class="field"><span>Allowed departments</span><span>@(grant.AllowedDepartments.Count == 0 ? "Any" : string.Join(", ", grant.AllowedDepartments))</span></div>
+        <div class="field"><span>Allowed objects</span><span>@(grant.AllowedObjects.Count == 0 ? "Any" : string.Join(", ", grant.AllowedObjects))</span></div>
+    </div>
+
+    <section class="panel">
+        <h2>Account combinations</h2>
+        @if (grant.Combinations.Count == 0)
+        {
+            <p class="note">No combinations on this grant.</p>
+        }
+        else
+        {
+            <table>
+                <thead><tr><th>Account</th><th>Status</th><th>Effective from</th><th>Effective to</th><th>Source</th></tr></thead>
+                <tbody>
+                @foreach (var c in grant.Combinations)
+                {
+                    <tr>
+                        <td>@c.Code</td>
+                        <td><span class="chip @(c.Status == "Active" ? "ok" : "muted")">@c.Status</span></td>
+                        <td>@c.EffectiveFrom.ToString("yyyy-MM-dd")</td>
+                        <td>@(c.EffectiveTo?.ToString("yyyy-MM-dd") ?? "—")</td>
+                        <td>@c.Source</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </section>
+
+    <section class="panel">
+        <h2>Budget lines</h2>
+        @if (grant.BudgetLines.Count == 0)
+        {
+            <p class="note">No budget lines on this grant.</p>
+        }
+        else
+        {
+            <table>
+                <thead><tr><th>Account</th><th>FY</th><th class="money">Adopted</th><th class="money">Amended</th><th class="money">Available</th></tr></thead>
+                <tbody>
+                @foreach (var l in grant.BudgetLines)
+                {
+                    <tr>
+                        <td><AccountLink Account="@l.Account" FiscalYear="l.FiscalYear" /></td>
+                        <td>@l.FiscalYear</td>
+                        <td class="money"><Money Value="l.Adopted" /></td>
+                        <td class="money"><Money Value="l.Amended" /></td>
+                        <td class="money"><Money Value="l.Available" /></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </section>
+}
+else
+{
+    <p class="note">Loading the grant.</p>
+}
+
+@code {
+    [Parameter] public string Code { get; set; } = "";
+
+    private GrantDetailVm? _grant;
+    private bool _notFound;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        try
+        {
+            _grant = await Reference.GetGrantAsync(Code, actor);
+            _notFound = false;
+        }
+        catch (NotFoundException)
+        {
+            _grant = null;
+            _notFound = true;
+        }
+    }
+}

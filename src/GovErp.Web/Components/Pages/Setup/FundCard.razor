@@ -1,0 +1,109 @@
+@page "/funds/{Code}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Common
+@using GovErp.Application.Web.Reference
+@using GovErp.Application.Web.Reference.Contracts
+@using GovErp.Web.Authentication
+@inject IReferenceAppService Reference
+@inject CurrentActor CurrentActor
+
+<PageTitle>Fund @Code</PageTitle>
+<Breadcrumbs Items="@([new Crumb("Setup"), new Crumb("Funds", "/funds"), new Crumb(Code)])" />
+<h1>Fund @Code</h1>
+
+@if (_notFound)
+{
+    <p class="error">Fund @Code was not found.</p>
+}
+else if (_fund is { } fund)
+{
+    <div class="fields">
+        <div class="field"><span>Name</span><span>@fund.Name</span></div>
+        <div class="field"><span>Type</span><span>@fund.Type</span></div>
+        <div class="field"><span>Basis</span><span>@fund.Basis</span></div>
+        <div class="field"><span>Budget control</span><span>@fund.ControlMode</span></div>
+        <div class="field"><span>Grant policy</span><span>@fund.GrantPolicy</span></div>
+        <div class="field"><span>Active</span><span>@(fund.IsActive ? "Yes" : "No")</span></div>
+        <div class="field"><span>Allowed departments</span><span>@(fund.AllowedDepartments.Count == 0 ? "Any" : string.Join(", ", fund.AllowedDepartments))</span></div>
+        <div class="field"><span>Allowed objects</span><span>@(fund.AllowedObjects.Count == 0 ? "Any" : string.Join(", ", fund.AllowedObjects))</span></div>
+    </div>
+
+    <section class="panel">
+        <h2>Account combinations</h2>
+        @if (fund.Combinations.Count == 0)
+        {
+            <p class="note">No combinations on this fund.</p>
+        }
+        else
+        {
+            <table>
+                <thead><tr><th>Account</th><th>Status</th><th>Effective from</th><th>Effective to</th><th>Source</th></tr></thead>
+                <tbody>
+                @foreach (var c in fund.Combinations)
+                {
+                    <tr>
+                        <td>@c.Code</td>
+                        <td><span class="chip @(c.Status == "Active" ? "ok" : "muted")">@c.Status</span></td>
+                        <td>@c.EffectiveFrom.ToString("yyyy-MM-dd")</td>
+                        <td>@(c.EffectiveTo?.ToString("yyyy-MM-dd") ?? "—")</td>
+                        <td>@c.Source</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </section>
+
+    <section class="panel">
+        <h2>Budget lines</h2>
+        @if (fund.BudgetLines.Count == 0)
+        {
+            <p class="note">No budget lines on this fund.</p>
+        }
+        else
+        {
+            <table>
+                <thead><tr><th>Account</th><th>FY</th><th class="money">Adopted</th><th class="money">Amended</th><th class="money">Available</th></tr></thead>
+                <tbody>
+                @foreach (var l in fund.BudgetLines)
+                {
+                    <tr>
+                        <td><AccountLink Account="@l.Account" FiscalYear="l.FiscalYear" /></td>
+                        <td>@l.FiscalYear</td>
+                        <td class="money"><Money Value="l.Adopted" /></td>
+                        <td class="money"><Money Value="l.Amended" /></td>
+                        <td class="money"><Money Value="l.Available" /></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </section>
+}
+else
+{
+    <p class="note">Loading the fund.</p>
+}
+
+@code {
+    [Parameter] public string Code { get; set; } = "";
+
+    private FundDetailVm? _fund;
+    private bool _notFound;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        try
+        {
+            _fund = await Reference.GetFundAsync(Code, actor);
+            _notFound = false;
+        }
+        catch (NotFoundException)
+        {
+            _fund = null;
+            _notFound = true;
+        }
+    }
+}

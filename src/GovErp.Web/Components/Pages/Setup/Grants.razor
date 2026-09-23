@@ -1,0 +1,38 @@
+@page "/grants"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Reference
+@using GovErp.Web.Authentication
+@inject IReferenceAppService Reference
+@inject CurrentActor CurrentActor
+
+<PageTitle>Grants</PageTitle>
+<Breadcrumbs Items="@([new Crumb("Setup"), new Crumb("Grants")])" />
+<h1>Grants</h1>
+
+<table>
+    <thead><tr><th>Code</th><th>Name</th><th>Sponsor</th><th>Federal</th><th>Period</th><th>Status</th></tr></thead>
+    <tbody>
+    @foreach (var grant in _grants)
+    {
+        <tr>
+            <td><a href="@($"/grants/{grant.Code}")">@grant.Code</a></td>
+            <td>@grant.Name</td>
+            <td>@grant.Attributes["Sponsor"]</td>
+            <td>@(grant.Attributes["IsFederal"] == "True" ? "Yes" : "No")</td>
+            <td>@grant.Attributes["PeriodFrom"] – @(string.IsNullOrEmpty(grant.Attributes["PeriodTo"]) ? "open" : grant.Attributes["PeriodTo"])</td>
+            <td>@grant.Attributes["Status"]</td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+@code {
+    private IReadOnlyList<GovErp.Application.Web.Reference.Contracts.SegmentValueVm> _grants = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        _grants = (await Reference.GetSegmentsAsync(actor)).Grants;
+    }
+}

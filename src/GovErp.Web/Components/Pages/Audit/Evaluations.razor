@@ -1,0 +1,124 @@
+@page "/audit/evaluations"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Audit
+@using GovErp.Application.Web.Audit.Contracts
+@using GovErp.Web.Authentication
+@inject IAuditAppService Audit
+@inject CurrentActor CurrentActor
+@inject NavigationManager Navigation
+
+<PageTitle>Evaluations</PageTitle>
+<Breadcrumbs Items="@([new Crumb("Audit"), new Crumb("Evaluations")])" />
+<h1>Evaluations</h1>
+<p class="note">The latest 200 engine evaluations across all documents, most recent first.</p>
+
+<FilterBar OnClear="Clear" Active="@(Document is not null || Trigger is not null || Overall is not null || Fingerprint is not null)">
+    <label>Document <input value="@Document" @onchange="e => Filter(document: Value(e))" placeholder="AP-2026-…" /></label>
+    <label>Trigger
+        <select value="@(Trigger ?? "")" @onchange="e => Filter(trigger: Value(e))">
+            <option value="">All</option>
+            @foreach (var t in Triggers)
+            {
+                <option value="@t">@t</option>
+            }
+        </select>
+    </label>
+    <label>Overall
+        <select value="@(Overall ?? "")" @onchange="e => Filter(overall: Value(e))">
+            <option value="">All</option>
+            @foreach (var o in Overalls)
+            {
+                <option value="@o">@o</option>
+            }
+        </select>
+    </label>
+    <label>Rule fingerprint <input value="@Fingerprint" @onchange="e => Filter(fingerprint: Value(e))" placeholder="prefix…" /></label>
+</FilterBar>
+
+@if (_evaluations is null)
+{
+    <p class="note">Loading evaluations.</p>
+}
+else if (_evaluations.Count == 0)
+{
+    <p class="note">No evaluations match these filters.</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>When</th><th>Actor</th><th>Document</th><th>Trigger</th><th>Version</th>
+                <th>Overall</th><th>Rule set fingerprint</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var e in _evaluations)
+        {
+            <tr>
+                <td>@e.EvaluatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</td>
+                <td>@e.ActorName</td>
+                <td>
+                    @if (e.DocumentId is { } id)
+                    {
+                        <DocumentLink Id="id" Reference="@e.DocumentReference" EvaluationId="e.Id" />
+                    }
+                    else
+                    {
+                        @e.DocumentReference
+                    }
+                </td>
+                <td>@e.Trigger</td>
+                <td>@e.ContentVersion</td>
+                <td><span class="chip @Chip(e.Overall)">@e.Overall</span></td>
+                <td title="@e.RuleFingerprint">@Short(e.RuleFingerprint)</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+@code {
+    private static readonly string[] Triggers = ["Submit", "Approve", "Post", "Manual"];
+    private static readonly string[] Overalls = ["Allowed", "Warning", "SoftStop", "HardStop"];
+
+    [SupplyParameterFromQuery(Name = "document")] public string? Document { get; set; }
+    [SupplyParameterFromQuery(Name = "trigger")] public string? Trigger { get; set; }
+    [SupplyParameterFromQuery(Name = "overall")] public string? Overall { get; set; }
+    [SupplyParameterFromQuery(Name = "fingerprint")] public string? Fingerprint { get; set; }
+
+    private IReadOnlyList<EvaluationListItemVm>? _evaluations;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        _evaluations = await Audit.ListEvaluationsAsync(new EvaluationFilter(Document, Trigger, Overall, Fingerprint), actor);
+    }
+
+    private static string Short(string fingerprint) => fingerprint.Length <= 12 ? fingerprint : fingerprint[..12] + "…";
+
+    private static string Chip(string overall) => overall switch
+    {
+        "Allowed" => "ok",
+        "Warning" => "warn",
+        "SoftStop" or "HardStop" => "bad",
+        _ => "muted",
+    };
+
+    private static string? Value(ChangeEventArgs e) => e.Value?.ToString() is { Length: > 0 } value ? value : null;
+
+    private void Filter(string? document = "", string? trigger = "", string? overall = "", string? fingerprint = "")
+    {
+        var query = new Dictionary<string, object?>
+        {
+            ["document"] = document == "" ? Document : document,
+            ["trigger"] = trigger == "" ? Trigger : trigger,
+            ["overall"] = overall == "" ? Overall : overall,
+            ["fingerprint"] = fingerprint == "" ? Fingerprint : fingerprint,
+        };
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters("/audit/evaluations", query));
+    }
+
+    private void Clear() => Navigation.NavigateTo("/audit/evaluations");
+}

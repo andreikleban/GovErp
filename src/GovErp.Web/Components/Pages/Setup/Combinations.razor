@@ -1,0 +1,38 @@
+@page "/combinations"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Reference
+@using GovErp.Application.Web.Reference.Contracts
+@using GovErp.Web.Authentication
+@inject IReferenceAppService Reference
+@inject CurrentActor CurrentActor
+
+<PageTitle>Account Combinations</PageTitle>
+<Breadcrumbs Items="@([new Crumb("Setup"), new Crumb("Account Combinations")])" />
+<h1>Account Combinations</h1>
+
+<table>
+    <thead><tr><th>Account</th><th>Status</th><th>Effective from</th><th>Effective to</th><th>Source</th></tr></thead>
+    <tbody>
+    @foreach (var c in _combinations)
+    {
+        <tr>
+            <td>@c.Code</td>
+            <td><span class="chip @(c.Status == "Active" ? "ok" : "muted")">@c.Status</span></td>
+            <td>@c.EffectiveFrom.ToString("yyyy-MM-dd")</td>
+            <td>@(c.EffectiveTo?.ToString("yyyy-MM-dd") ?? "—")</td>
+            <td>@c.Source</td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+@code {
+    private IReadOnlyList<CombinationVm> _combinations = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        _combinations = await Reference.GetCombinationsAsync(actor);
+    }
+}

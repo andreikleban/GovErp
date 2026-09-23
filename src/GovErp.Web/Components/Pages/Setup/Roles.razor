@@ -1,0 +1,62 @@
+@page "/roles"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Reference
+@using GovErp.Application.Web.Reference.Contracts
+@using GovErp.Web.Authentication
+@using GovErp.Web.Components.Invoices
+@inject IReferenceAppService Reference
+@inject CurrentActor CurrentActor
+
+<PageTitle>Roles</PageTitle>
+<Breadcrumbs Items="@([new Crumb("Setup"), new Crumb("Roles")])" />
+<h1>Roles</h1>
+<p class="note">Built from the same role constants and rule set the server checks on every command — not a hand-maintained table.</p>
+
+@if (_matrix is { } matrix)
+{
+    <table>
+        <thead>
+            <tr>
+                <th>Role</th><th>Create / submit</th><th>Approve</th><th>Release soft stop</th>
+                <th>Amend budget</th><th>Post</th><th>Payment hold</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in matrix.Rows)
+        {
+            <tr>
+                <td>@InvoiceActionPolicy.RoleLabel(row.Role)</td>
+                <td>@Mark(row.CanCreateAndSubmit)</td>
+                <td>@Mark(row.CanApprove)</td>
+                <td>@Mark(row.CanReleaseSoftStop)</td>
+                <td>@Mark(row.CanAmendBudget)</td>
+                <td>@Mark(row.CanPost)</td>
+                <td>@Mark(row.CanPaymentHold)</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+
+    <p class="note">
+        Who may release a soft stop today:
+        @(matrix.ReleaseSoftStopRoles.Count == 0 ? "no role — no current rule lists an overrider." : string.Join(", ", matrix.ReleaseSoftStopRoles.Select(InvoiceActionPolicy.RoleLabel)))
+    </p>
+    <p class="note">@matrix.SeparationOfDutiesNote</p>
+}
+else
+{
+    <p class="note">Loading the role matrix.</p>
+}
+
+@code {
+    private RoleMatrixVm? _matrix;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        _matrix = await Reference.GetRoleMatrixAsync(actor);
+    }
+
+    private static string Mark(bool value) => value ? "Yes" : "—";
+}

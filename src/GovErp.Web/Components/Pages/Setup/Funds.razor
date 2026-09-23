@@ -1,0 +1,39 @@
+@page "/funds"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Reference
+@using GovErp.Web.Authentication
+@inject IReferenceAppService Reference
+@inject CurrentActor CurrentActor
+
+<PageTitle>Funds</PageTitle>
+<Breadcrumbs Items="@([new Crumb("Setup"), new Crumb("Funds")])" />
+<h1>Funds</h1>
+
+<table>
+    <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Basis</th><th>Control mode</th><th>Grant policy</th><th>Active</th></tr></thead>
+    <tbody>
+    @foreach (var fund in _funds)
+    {
+        <tr>
+            <td><a href="@($"/funds/{fund.Code}")">@fund.Code</a></td>
+            <td>@fund.Name</td>
+            <td>@fund.Attributes["Type"]</td>
+            <td>@fund.Attributes["Basis"]</td>
+            <td>@fund.Attributes["ControlMode"]</td>
+            <td>@fund.Attributes["GrantPolicy"]</td>
+            <td>@(fund.IsActive ? "Yes" : "No")</td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+@code {
+    private IReadOnlyList<GovErp.Application.Web.Reference.Contracts.SegmentValueVm> _funds = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        _funds = (await Reference.GetSegmentsAsync(actor)).Funds;
+    }
+}

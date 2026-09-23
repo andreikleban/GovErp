@@ -1,0 +1,37 @@
+@page "/vendors"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Reference
+@using GovErp.Application.Web.Reference.Contracts
+@using GovErp.Web.Authentication
+@inject IReferenceAppService Reference
+@inject CurrentActor CurrentActor
+
+<PageTitle>Vendors</PageTitle>
+<Breadcrumbs Items="@([new Crumb("Setup"), new Crumb("Vendors")])" />
+<h1>Vendors</h1>
+
+<table>
+    <thead><tr><th>Code</th><th>Name</th><th>Status</th><th>SAM registered</th></tr></thead>
+    <tbody>
+    @foreach (var v in _vendors)
+    {
+        <tr>
+            <td>@v.Code</td>
+            <td>@v.Name</td>
+            <td><span class="chip @(v.Status == "Active" ? "ok" : "muted")">@v.Status</span></td>
+            <td>@(v.SamRegistered ? "Yes" : "No")</td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+@code {
+    private IReadOnlyList<VendorVm> _vendors = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        _vendors = await Reference.GetVendorsAsync(actor);
+    }
+}

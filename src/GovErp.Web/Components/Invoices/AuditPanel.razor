@@ -17,7 +17,7 @@
             {
                 <tr class="@(evaluation.Id == SelectedId ? "selected" : null)">
                     <td>@evaluation.EvaluatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</td>
-                    <td>@evaluation.EvaluatedBy</td>
+                    <td>@evaluation.EvaluatedByName</td>
                     <td>@evaluation.Trigger</td>
                     <td>@evaluation.ContentVersion</td>
                     <td>@evaluation.RuleSetFingerprint</td>

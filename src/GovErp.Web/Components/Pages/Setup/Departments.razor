@@ -1,0 +1,35 @@
+@page "/departments"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Reference
+@using GovErp.Web.Authentication
+@inject IReferenceAppService Reference
+@inject CurrentActor CurrentActor
+
+<PageTitle>Departments</PageTitle>
+<Breadcrumbs Items="@([new Crumb("Setup"), new Crumb("Departments")])" />
+<h1>Departments</h1>
+
+<table>
+    <thead><tr><th>Code</th><th>Name</th><th>Active</th></tr></thead>
+    <tbody>
+    @foreach (var department in _departments)
+    {
+        <tr>
+            <td>@department.Code</td>
+            <td>@department.Name</td>
+            <td>@(department.IsActive ? "Yes" : "No")</td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+@code {
+    private IReadOnlyList<GovErp.Application.Web.Reference.Contracts.SegmentValueVm> _departments = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        _departments = (await Reference.GetSegmentsAsync(actor)).Departments;
+    }
+}
