@@ -1,4 +1,5 @@
 using GovErp.Application.Web.Approvals;
+using GovErp.Application.Web.Audit;
 using GovErp.Application.Web.Budget;
 using GovErp.Application.Web.Explanation;
 using GovErp.Application.Web.Extensions;
@@ -36,6 +37,8 @@ public class CompositionTests
         sp.GetRequiredService<IPurchasingAppService>().Should().NotBeNull();
         sp.GetRequiredService<ILedgerAppService>().Should().NotBeNull();
         sp.GetRequiredService<IReferenceAppService>().Should().NotBeNull();
+        sp.GetRequiredService<IAuditAppService>().Should().NotBeNull();
+        sp.GetRequiredService<ITenantUserDirectory>().Should().NotBeNull();
         sp.GetRequiredService<IExplanationAppService>().Should().NotBeNull();
 
         // Как в runner'е: DbContext тенанта строится только после инициализации контекста тенанта (подключения к БД нет).

@@ -1,4 +1,5 @@
 using GovErp.Application.Web.Approvals;
+using GovErp.Application.Web.Audit;
 using GovErp.Application.Web.Budget;
 using GovErp.Application.Web.Explanation;
 using GovErp.Application.Web.Invoices;
@@ -26,6 +27,7 @@ public static class ServiceCollectionExtensions
         s.AddScoped<IPurchasingAppService, PurchasingAppService>();
         s.AddScoped<ILedgerAppService, LedgerAppService>();
         s.AddScoped<IReferenceAppService, ReferenceAppService>();
+        s.AddScoped<IAuditAppService, AuditAppService>();
         s.AddScoped<IExplanationAppService, ExplanationAppService>();
         return s;
     }

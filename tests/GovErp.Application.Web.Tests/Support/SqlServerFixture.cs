@@ -88,6 +88,12 @@ public sealed class SqlServerFixture : IAsyncLifetime
         return new TenantDriver(this, new TenantId(id));
     }
 
+    /// <summary>
+    /// Тенанты из DatabaseInitializer (springfield / shelbyville). Нужны для Users и имён актёров:
+    /// Master хранит пользователей только под этими TenantId, CreateTenantAsync заводит отдельную БД без строк в Master.
+    /// </summary>
+    public TenantDriver Named(string tenantId) => new(this, new TenantId(tenantId));
+
     public async Task DisposeAsync()
     {
         await _appScope.DisposeAsync();

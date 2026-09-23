@@ -1,6 +1,7 @@
 using GovErp.Application.Web.Audit;
 using GovErp.Application.Web.Commands;
 using GovErp.Application.Web.Common;
+using GovErp.Application.Web.Tenancy;
 using GovErp.Application.Web.Validation;
 using GovErp.Application.Web.Validation.Contracts;
 using GovErp.Domain.Payables.Repositories;
@@ -39,19 +40,23 @@ public sealed class ExplanationAppService(ITenantOperationRunner runner, IExplan
             (await sp.GetRequiredService<IExplanationRepository>().ListByEvaluationAsync(evaluationId, token))
                 .Select(ExplanationMapping.ToVm).ToList(), ct);
 
+    /// <summary>Имена акторов — та же логика, что у Audit (Tenancy.TenantUserNaming): дёшево при размере тенанта демо.</summary>
     public Task<IReadOnlyList<EvaluationVm>> GetEvaluationHistoryAsync(Guid invoiceId, ActorContext actor, CancellationToken ct = default) =>
         runner.QueryAsync<IReadOnlyList<EvaluationVm>>(actor, async (sp, token) =>
         {
             var reference = await ReferenceOfAsync(sp, invoiceId, token);
-            return (await sp.GetRequiredService<IEvaluationRecordRepository>().ListByTransactionAsync(reference, token))
-                .Select(EvaluationMapping.ToVm).ToList();
+            var records = await sp.GetRequiredService<IEvaluationRecordRepository>().ListByTransactionAsync(reference, token);
+            var names = await sp.GetRequiredService<ITenantUserDirectory>().ResolveAsync(actor.TenantId, token);
+            return records.Select(r => EvaluationMapping.ToVm(r, names.NameOf(r.EvaluatedBy.Value))).ToList();
         }, ct);
 
     public Task<IReadOnlyList<AuditEventVm>> GetAuditTrailAsync(Guid invoiceId, ActorContext actor, CancellationToken ct = default) =>
         runner.QueryAsync<IReadOnlyList<AuditEventVm>>(actor, async (sp, token) =>
         {
             var reference = await ReferenceOfAsync(sp, invoiceId, token);
-            return (await sp.GetRequiredService<IAuditTrail>().ListBySubjectAsync(reference, token)).Select(AuditEventVm.From).ToList();
+            // Здесь SubjectRef каждого события — Reference именно этого инвойса (ListBySubjectAsync фильтрует по нему).
+            return (await sp.GetRequiredService<IAuditTrail>().ListBySubjectAsync(reference, token))
+                .Select(e => AuditEventVm.From(e, invoiceId)).ToList();
         }, ct);
 
     private static async Task<string> ReferenceOfAsync(IServiceProvider sp, Guid invoiceId, CancellationToken ct) =>

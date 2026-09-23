@@ -14,4 +14,7 @@ public sealed class EfEvaluationRecordRepository(GovErpDbContext db) : IEvaluati
 
     public async Task<IReadOnlyList<EvaluationRecord>> ListByTransactionAsync(string transactionRef, CancellationToken ct = default) =>
         await db.EvaluationRecords.Where(e => e.TransactionRef == transactionRef).OrderBy(e => e.EvaluatedAt).ToListAsync(ct);
+
+    public async Task<IReadOnlyList<EvaluationRecord>> ListAsync(CancellationToken ct = default) =>
+        await db.EvaluationRecords.ToListAsync(ct);
 }

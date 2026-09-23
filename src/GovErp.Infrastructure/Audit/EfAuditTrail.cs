@@ -15,4 +15,7 @@ public sealed class EfAuditTrail(GovErpDbContext db, ITenantContext tenant, IClo
 
     public async Task<IReadOnlyList<AuditEvent>> ListBySubjectAsync(string subjectRef, CancellationToken ct = default) =>
         await db.AuditEvents.Where(e => e.SubjectRef == subjectRef).OrderBy(e => e.OccurredAt).ToListAsync(ct);
+
+    public async Task<IReadOnlyList<AuditEvent>> ListAsync(CancellationToken ct = default) =>
+        await db.AuditEvents.ToListAsync(ct);
 }

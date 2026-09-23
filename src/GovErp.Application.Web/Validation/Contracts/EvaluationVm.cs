@@ -1,7 +1,7 @@
 namespace GovErp.Application.Web.Validation.Contracts;
 
 public sealed record EvaluationVm(Guid Id, string TransactionRef, int ContentVersion, Guid ApprovalCycleId, string Trigger, DateTimeOffset EvaluatedAt,
-    Guid EvaluatedBy, string Overall, CapabilitiesVm Capabilities, string EngineVersion, string RuleSetFingerprint,
+    Guid EvaluatedBy, string EvaluatedByName, string Overall, CapabilitiesVm Capabilities, string EngineVersion, string RuleSetFingerprint,
     IReadOnlyList<AppliedRuleVm> AppliedRules, IReadOnlyList<StepVm> Steps, IReadOnlyList<OutcomeVm> Outcomes,
     IReadOnlyList<RouteStepVm> ApprovalRoute, IReadOnlyList<PreviewLineVm> PostingPreview, PostingCheckVm? PostingCheck,
     bool ReadyForPaymentHandoff, IReadOnlyList<LineBudgetVm> LineBudgets);

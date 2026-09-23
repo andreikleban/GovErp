@@ -10,4 +10,8 @@ public interface IReferenceAppService
     Task<RuleSetVm> GetRulesAsync(ActorContext actor, CancellationToken ct = default);
     Task<IReadOnlyList<VendorVm>> GetVendorsAsync(ActorContext actor, CancellationToken ct = default);
     Task<IReadOnlyList<PurchaseOrderVm>> GetPurchaseOrdersAsync(ActorContext actor, CancellationToken ct = default);
+    Task<FundDetailVm> GetFundAsync(string code, ActorContext actor, CancellationToken ct = default);
+    Task<GrantDetailVm> GetGrantAsync(string code, ActorContext actor, CancellationToken ct = default);
+    Task<IReadOnlyList<UserVm>> GetUsersAsync(ActorContext actor, CancellationToken ct = default);
+    Task<RoleMatrixVm> GetRoleMatrixAsync(ActorContext actor, CancellationToken ct = default);
 }

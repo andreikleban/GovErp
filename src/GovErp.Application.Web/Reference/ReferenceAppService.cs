@@ -1,9 +1,13 @@
 using System.Globalization;
+using GovErp.Application.Web.Budget;
+using GovErp.Application.Web.Budget.Contracts;
 using GovErp.Application.Web.Commands;
 using GovErp.Application.Web.Common;
 using GovErp.Application.Web.Reference.Contracts;
+using GovErp.Application.Web.Tenancy;
 using GovErp.Domain.ChartOfAccounts.Entities;
 using GovErp.Domain.ChartOfAccounts.Repositories;
+using GovErp.Domain.Ledger.Entities;
 using GovErp.Domain.Ledger.Repositories;
 using GovErp.Domain.Payables.Repositories;
 using GovErp.Domain.Validation.DomainServices;
@@ -100,6 +104,100 @@ public sealed class ReferenceAppService(ITenantOperationRunner runner) : IRefere
 
             return result;
         }, ct);
+
+    /// <summary>Карточка фонда: атрибуты, комбинации по Code.Fund и строки бюджета всех отслеживаемых счетов этого фонда.</summary>
+    public Task<FundDetailVm> GetFundAsync(string code, ActorContext actor, CancellationToken ct = default) =>
+        runner.QueryAsync(actor, async (sp, token) =>
+        {
+            var fundCode = new FundCode(code);
+            var fund = await sp.GetRequiredService<IFundRepository>().FindAsync(fundCode, token)
+                ?? throw new NotFoundException($"Fund {code} not found.");
+            var combinations = await CombinationsAsync(sp, c => c.Code.Fund == fundCode, token);
+            var lines = await BudgetLinesAsync(sp, l => l.Account.Fund == fundCode, token);
+            return new FundDetailVm(fund.Code.Value, fund.Name, fund.Type.ToString(), fund.Basis.ToString(), fund.ControlMode.ToString(),
+                fund.GrantPolicy.ToString(), fund.AllowedDepartments.Select(d => d.Value).ToList(), fund.AllowedObjects.Select(o => o.Value).ToList(),
+                fund.IsActive, combinations, lines);
+        }, ct);
+
+    /// <summary>Карточка гранта: атрибуты, комбинации по Code.Grant и строки бюджета всех отслеживаемых счетов этого гранта.</summary>
+    public Task<GrantDetailVm> GetGrantAsync(string code, ActorContext actor, CancellationToken ct = default) =>
+        runner.QueryAsync(actor, async (sp, token) =>
+        {
+            var grantCode = new GrantCode(code);
+            var grant = await sp.GetRequiredService<IGrantRepository>().FindAsync(grantCode, token)
+                ?? throw new NotFoundException($"Grant {code} not found.");
+            var combinations = await CombinationsAsync(sp, c => c.Code.Grant == grantCode, token);
+            var lines = await BudgetLinesAsync(sp, l => l.Account.Grant == grantCode, token);
+            return new GrantDetailVm(grant.Code.Value, grant.Name, grant.Sponsor, grant.IsFederal, grant.Period.From, grant.Period.To,
+                grant.AllowedDepartments.Select(d => d.Value).ToList(), grant.AllowableObjects.Select(o => o.Value).ToList(),
+                grant.Status.ToString(), combinations, lines);
+        }, ct);
+
+    public Task<IReadOnlyList<UserVm>> GetUsersAsync(ActorContext actor, CancellationToken ct = default) =>
+        runner.QueryAsync<IReadOnlyList<UserVm>>(actor, async (sp, token) =>
+            (await sp.GetRequiredService<ITenantUserDirectory>().ListAsync(actor.TenantId, token))
+                .OrderBy(u => u.UserName, StringComparer.Ordinal)
+                .Select(u => new UserVm(u.Id, u.UserName, u.DisplayName, u.Roles, u.DepartmentCode))
+                .ToList(), ct);
+
+    /// <summary>
+    /// Матрица строится из тех же констант и правил, что проверяют сервисы (не отдельная ручная таблица, spec §6):
+    /// создание/отправка — Roles.ApClerk (InvoiceAppService.SubmitAsync); согласование — Roles.Approvers (ApprovalAppService.ApproveAsync);
+    /// снятие Soft Stop — Roles.Overriders, пересечённое с ролями из OverridableBy действующих правил (та же проверка, что
+    /// в ApprovalAppService.OverrideAsync — там override разрешён по outcome.OverridableBy, а не по статичной Severity правила:
+    /// у BUDGET_AVAILABILITY, например, Severity в определении не задан — тяжесть считается по каждому исходу отдельно, но
+    /// OverridableBy непусто только у правил, которые действительно умеют быть мягкой остановкой); поправка бюджета —
+    /// Roles.Overriders (BudgetAppService.AmendAsync); проводка и payment hold — Roles.Posters (PostingAppService.PostAsync,
+    /// InvoiceAppService.SetPaymentHoldAsync).
+    /// </summary>
+    public Task<RoleMatrixVm> GetRoleMatrixAsync(ActorContext actor, CancellationToken ct = default) =>
+        runner.QueryAsync(actor, async (sp, token) =>
+        {
+            var clock = sp.GetRequiredService<IClock>();
+            var rules = await sp.GetRequiredService<IRuleDefinitionRepository>().ListAsync(token);
+            var effective = RuleResolution.Resolve(rules, clock.BusinessDate);
+            var releasers = Roles.Overriders
+                .Where(role => effective.Rules.Any(r => r.OverridableBy.Count > 0
+                    && r.OverridableBy.Select(RoleMapping.ToRoleName).Contains(role, StringComparer.Ordinal)))
+                .ToList();
+
+            string[] roleOrder = [Roles.ApClerk, Roles.DepartmentHead, Roles.GrantsManager, Roles.BudgetOfficer, Roles.FinanceDirector];
+            var rows = roleOrder.Select(role => new RoleMatrixRowVm(role,
+                CanCreateAndSubmit: role == Roles.ApClerk,
+                CanApprove: Roles.Approvers.Contains(role),
+                CanReleaseSoftStop: releasers.Contains(role),
+                CanAmendBudget: Roles.Overriders.Contains(role),
+                CanPost: Roles.Posters.Contains(role),
+                CanPaymentHold: Roles.Posters.Contains(role))).ToList();
+
+            const string note = "The author of an invoice never approves, rejects, releases a soft stop on, or posts their own invoice, "
+                + "even when their role otherwise allows the action (separation of duties, enforced by the server on every such command).";
+            return new RoleMatrixVm(rows, releasers, note);
+        }, ct);
+
+    private static async Task<IReadOnlyList<CombinationVm>> CombinationsAsync(IServiceProvider sp, Func<AccountCombination, bool> matches, CancellationToken ct) =>
+        (await sp.GetRequiredService<IAccountCombinationRepository>().ListAsync(ct))
+            .Where(matches)
+            .OrderBy(c => c.Code.ToString(), StringComparer.Ordinal)
+            .Select(c => new CombinationVm(c.Code.ToString(), c.Status.ToString(), c.EffectiveFrom, c.EffectiveTo, c.Source.ToString()))
+            .ToList();
+
+    /// <summary>Строки бюджета по всем годам, у которых заведены фискальные периоды: у BudgetLine есть год, у PO/фонда/гранта — нет.</summary>
+    private static async Task<IReadOnlyList<BudgetLineVm>> BudgetLinesAsync(IServiceProvider sp, Func<BudgetLine, bool> matches, CancellationToken ct)
+    {
+        var budgetLines = sp.GetRequiredService<IBudgetLineRepository>();
+        var openingBalances = sp.GetRequiredService<IOpeningBalanceRepository>();
+        var years = (await sp.GetRequiredService<IFiscalPeriodRepository>().ListAsync(ct)).Select(p => p.Year).Distinct();
+        var result = new List<BudgetLineVm>();
+        foreach (var year in years)
+        {
+            var fy = new FiscalYear(year);
+            var openings = await openingBalances.ListAsync(fy, ct);
+            result.AddRange((await budgetLines.ListAsync(fy, ct)).Where(matches).Select(l => BudgetMapping.ToVm(l, openings)));
+        }
+
+        return result.OrderBy(l => l.FiscalYear).ThenBy(l => l.Account, StringComparer.Ordinal).ToList();
+    }
 
     private static string Date(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 }

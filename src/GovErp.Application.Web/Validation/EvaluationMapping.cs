@@ -7,9 +7,13 @@ namespace GovErp.Application.Web.Validation;
 
 public static class EvaluationMapping
 {
-    public static EvaluationVm ToVm(EvaluationRecord r) => new(
+    /// <summary>
+    /// evaluatedByName — отображаемое имя актора (Audit, Tenancy.TenantUserNaming); по умолчанию сырой id как заглушка,
+    /// как и для инвойса в LastEvaluation, где имя не нужно на каждой загрузке карточки (spec §6, «если дёшево»).
+    /// </summary>
+    public static EvaluationVm ToVm(EvaluationRecord r, string? evaluatedByName = null) => new(
         r.Id, r.TransactionRef, r.TransactionVersion, r.ApprovalCycleId, r.Trigger.ToString(), r.EvaluatedAt,
-        r.EvaluatedBy.Value, r.Overall.ToString(),
+        r.EvaluatedBy.Value, evaluatedByName ?? r.EvaluatedBy.Value.ToString(), r.Overall.ToString(),
         new CapabilitiesVm(r.Capabilities.CanSave, r.Capabilities.CanSubmit, r.Capabilities.CanApprove, r.Capabilities.CanPost, r.Capabilities.CanPay),
         r.RuleSetVersions.Engine, r.RuleFingerprint,
         r.RuleSetVersions.AppliedRules.Select(a => new AppliedRuleVm(a.RuleId, a.Layer.ToString(), a.Version, a.ScopeFund, a.ScopeGrant)).ToList(),

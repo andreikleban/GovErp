@@ -64,6 +64,7 @@ public static class ServiceCollectionExtensions
         s.AddScoped<IAuditTrail, EfAuditTrail>();
         s.AddScoped<IExplanationRepository, EfExplanationRepository>();
         s.AddScoped<ITenantCatalog, MasterTenantCatalog>();
+        s.AddScoped<ITenantUserDirectory, MasterTenantUserDirectory>();
         s.AddScoped<ISignIn, MasterSignIn>();
         s.AddSingleton<IPasswordHasher<UserAccount>, PasswordHasher<UserAccount>>();
         s.AddSingleton<IClock, SystemClock>();

@@ -174,6 +174,8 @@ public sealed class InMemoryEvaluationRecordRepository(IEnumerable<EvaluationRec
         Task.FromResult(Items.SingleOrDefault(r => r.Id == id));
     public Task<IReadOnlyList<EvaluationRecord>> ListByTransactionAsync(string transactionRef, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<EvaluationRecord>>(Items.Where(r => r.TransactionRef == transactionRef).ToList());
+    public Task<IReadOnlyList<EvaluationRecord>> ListAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<EvaluationRecord>>(Items.AsReadOnly());
 }
 
 public sealed class InMemoryRuleDefinitionRepository(IEnumerable<RuleDefinition> items) : IRuleDefinitionRepository
