@@ -74,7 +74,13 @@
     private bool _auditOpen;
     private IReadOnlyList<ApprovalQueueItemVm> _pending = [];
 
-    private bool CanPost => _isPoster && _invoice.Status == "Approved" && (_invoice.LastEvaluation?.Capabilities.CanPost ?? false);
+    /// <summary>
+    /// Допуск к проводке (PostingEligibility) движок вычисляет только в оценке, запущенной самой командой Post,
+    /// поэтому Capabilities.CanPost последней оценки согласованного документа всегда false. Кнопку показываем по
+    /// статусу, роли и отсутствию неснятых стопов; окончательную проверку делает сервер при нажатии.
+    /// </summary>
+    private bool CanPost => _isPoster && _invoice.Status == "Approved"
+        && _invoice.LastEvaluation?.Overall is not ("HardStop" or "SoftStop");
     private bool IsAuthor => _userId == _invoice.CreatedBy;
     /// <summary>Сервер разрешает правку и Submit только автору-AP clerk в Draft; UI не предлагает то, что заведомо будет отклонено.</summary>
     private bool CanEdit => _actorLoaded && _isClerk && IsAuthor && _invoice.Status == "Draft";
