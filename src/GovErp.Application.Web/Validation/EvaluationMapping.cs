@@ -1,4 +1,5 @@
 using GovErp.Application.Web.Validation.Contracts;
+using GovErp.Domain.Validation.DomainServices;
 using GovErp.Domain.Validation.Entities;
 using GovErp.Domain.Validation.ValueObjects;
 
@@ -17,7 +18,8 @@ public static class EvaluationMapping
         r.ApprovalRoute.Select(a => new RouteStepVm(a.Role.ToString(), a.Department, a.Reason, a.IsSatisfied)).ToList(),
         r.PostingPreview.Select(ToVm).ToList(),
         r.PostingCheck is { } check ? new PostingCheckVm(check.Passed, check.Failures.ToList()) : null,
-        r.ReadyForPaymentHandoff);
+        r.ReadyForPaymentHandoff,
+        LineBudgets(r.InputSnapshot));
 
     public static OutcomeVm ToVm(RuleOutcome o) => new(
         o.OutcomeRef, o.RuleId, o.RuleVersion, (int)o.Step, o.Step.ToString(), o.Layer.ToString(), o.DistributionLine,
@@ -27,4 +29,29 @@ public static class EvaluationMapping
 
     public static PreviewLineVm ToVm(PostingPreviewLine l) =>
         new(l.Account.ToString(), l.Family, l.Debit.Amount, l.Credit.Amount, l.Description);
+
+    /// <summary>
+    /// «Available after» по строкам — формула BUDGET_AVAILABILITY над входным снимком оценки: по счёту и году
+    /// available + свой резерв − новая потребность (часть сверх ликвидации PO). Строки одного счёта получают одно значение.
+    /// Правило пишет эти цифры только в outcome'ы отказа, поэтому для прошедших строк они вычисляются здесь тем же способом.
+    /// </summary>
+    public static IReadOnlyList<LineBudgetVm> LineBudgets(ValidationSubject? subject)
+    {
+        if (subject?.Distributions is not { Count: > 0 })
+        {
+            return [];
+        }
+
+        var result = new List<LineBudgetVm>();
+        foreach (var group in BudgetAllocation.Allocate(subject).GroupBy(x => (x.Distribution.Account, x.Distribution.Budget.FiscalYear)))
+        {
+            var budget = group.First().Distribution.Budget;
+            decimal? after = budget.Exists && group.All(x => x.Error is null)
+                ? budget.AvailableForThisInvoice.Amount - group.Sum(x => x.RequiredNewBudget.Amount)
+                : null;
+            result.AddRange(group.Select(x => new LineBudgetVm(x.Distribution.LineNo, x.Distribution.Account.ToString(), budget.FiscalYear, after)));
+        }
+
+        return result.OrderBy(l => l.LineNo).ToList();
+    }
 }

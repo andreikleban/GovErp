@@ -19,7 +19,7 @@ public sealed class PlatformTests(SqlServerFixture fixture)
         var t = await fixture.CreateTenantAsync();
         var inv = await t.CreateAsync(10m, null, ("101-6000-53100", 10m, null));
         var shelby = new ActorContext(new TenantId("shelbyville"), UserId.New(), "shelby.clerk", new HashSet<string> { Roles.ApClerk }, null);
-        (await t.Service<IInvoiceAppService>().ListAsync(shelby)).Should().BeEmpty();
+        (await t.Service<IInvoiceAppService>().ListAsync(GovErp.Application.Web.Invoices.Contracts.InvoiceListFilter.None, shelby)).Should().BeEmpty();
         await FluentActions.Awaiting(() => t.Service<IInvoiceAppService>().GetAsync(inv.Id, shelby)).Should().ThrowAsync<NotFoundException>();
     }
 

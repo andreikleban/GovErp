@@ -4,6 +4,7 @@ using GovErp.Application.Web.Common;
 using GovErp.Application.Web.Invoices.Contracts;
 using GovErp.Application.Web.Invoices.Mapping;
 using GovErp.Application.Web.Validation;
+using GovErp.Domain.Ledger.Entities;
 using GovErp.Domain.Ledger.Exceptions;
 using GovErp.Domain.Ledger.Repositories;
 using GovErp.Domain.Payables.Entities;
@@ -163,11 +164,46 @@ public sealed class InvoiceWorkspace(
             ? await evaluations.FindAsync(id, ct)
             : (await evaluations.ListByTransactionAsync(invoice.Reference, ct)).LastOrDefault());
 
+    /// <summary>
+    /// withRowVersion — ответ чтения: тогда же читаются удержания (Funds). В ответе команды их нет: резервы и claims,
+    /// созданные этой ещё не сохранённой операцией, запрос к хранилищу не находит.
+    /// </summary>
     public async Task<InvoiceVm> ToVmAsync(VendorInvoice invoice, CancellationToken ct, bool withRowVersion = false)
     {
         var vendor = await vendors.FindAsync(invoice.VendorId, ct) ?? throw new NotFoundException($"Vendor {invoice.VendorId} not found.");
         return InvoiceMapping.ToVm(invoice, vendor, await LastEvaluationAsync(invoice, ct),
-            withRowVersion ? concurrency.VersionOf(invoice) : null, clock.BusinessDate);
+            withRowVersion ? concurrency.VersionOf(invoice) : null, clock.BusinessDate,
+            withRowVersion ? await FundsAsync(invoice, ct) : null);
+    }
+
+    /// <summary>
+    /// Удержания инвойса по его ссылкам (ReservationRefs, EncumbranceClaimRefs, PoBillingClaimRefs): удерживаемые суммы
+    /// и погашенные при Post. Освобождённые (Reject) не считаются; Withdraw и Return to Draft очищают сами ссылки.
+    /// </summary>
+    public async Task<InvoiceFundsVm> FundsAsync(VendorInvoice invoice, CancellationToken ct)
+    {
+        decimal reserved = 0m, liquidating = 0m, billing = 0m, consumed = 0m;
+        foreach (var id in invoice.ReservationRefs)
+        {
+            var reservation = (await budgetLines.FindByReservationAsync(id, ct))?.Reservations.SingleOrDefault(r => r.Id == id);
+            reserved += reservation is { Status: ReservationStatus.Held } ? reservation.Amount.Amount : 0m;
+            consumed += reservation is { Status: ReservationStatus.Committed } ? reservation.Amount.Amount : 0m;
+        }
+
+        foreach (var id in invoice.EncumbranceClaimRefs)
+        {
+            var claim = (await encumbrances.FindByClaimAsync(id, ct))?.Claims.SingleOrDefault(c => c.Id == id);
+            liquidating += claim is { Status: ClaimStatus.Held } ? claim.Amount.Amount : 0m;
+            consumed += claim is { Status: ClaimStatus.Consumed } ? claim.Amount.Amount : 0m;
+        }
+
+        foreach (var id in invoice.PoBillingClaimRefs)
+        {
+            var claim = (await encumbrances.FindByClaimAsync(id, ct))?.BillingClaims.SingleOrDefault(c => c.Id == id);
+            billing += claim is { Status: ClaimStatus.Held } ? claim.Amount.Amount : 0m;
+        }
+
+        return new InvoiceFundsVm(reserved, liquidating, billing, consumed);
     }
 
     /// <summary>

@@ -18,16 +18,28 @@ namespace GovErp.Application.Web.Invoices;
 /// </summary>
 public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceAppService
 {
-    public Task<IReadOnlyList<InvoiceListItemVm>> ListAsync(ActorContext actor, CancellationToken ct = default) =>
+    public Task<IReadOnlyList<InvoiceListItemVm>> ListAsync(InvoiceListFilter filter, ActorContext actor, CancellationToken ct = default) =>
         runner.QueryAsync<IReadOnlyList<InvoiceListItemVm>>(actor, async (sp, token) =>
         {
             var ws = sp.GetRequiredService<InvoiceWorkspace>();
             var result = new List<InvoiceListItemVm>();
-            foreach (var inv in (await ws.Invoices.ListAsync(token)).OrderByDescending(i => i.CreatedAt))
+            var status = string.IsNullOrWhiteSpace(filter.Status) ? null : filter.Status.Trim();
+            var fund = string.IsNullOrWhiteSpace(filter.Fund) ? null : filter.Fund.Trim();
+            // Фильтры по статусу и фонду дешёвые (поля документа) и идут до чтения оценки; «есть блокировки» — по последней оценке.
+            var matching = (await ws.Invoices.ListAsync(token))
+                .Where(i => status is null || string.Equals(i.Status.ToString(), status, StringComparison.OrdinalIgnoreCase))
+                .Where(i => fund is null || InvoiceMapping.FundsOf(i).Contains(fund, StringComparer.Ordinal))
+                .OrderByDescending(i => i.CreatedAt);
+            foreach (var inv in matching)
             {
-                var vendor = await ws.Vendors.FindAsync(inv.VendorId, token);
                 var last = await ws.LastEvaluationAsync(inv, token);
-                result.Add(InvoiceMapping.ToListItem(inv, vendor?.Name ?? "?", last?.Overall.ToString()));
+                if (filter.HasHolds is { } holds && holds != InvoiceMapping.OpenHolds(last) > 0)
+                {
+                    continue;
+                }
+
+                var vendor = await ws.Vendors.FindAsync(inv.VendorId, token);
+                result.Add(InvoiceMapping.ToListItem(inv, vendor?.Name ?? "?", last));
             }
 
             return result;

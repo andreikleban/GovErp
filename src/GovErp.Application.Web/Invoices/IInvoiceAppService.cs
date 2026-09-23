@@ -7,7 +7,7 @@ namespace GovErp.Application.Web.Invoices;
 
 public interface IInvoiceAppService
 {
-    Task<IReadOnlyList<InvoiceListItemVm>> ListAsync(ActorContext actor, CancellationToken ct = default);
+    Task<IReadOnlyList<InvoiceListItemVm>> ListAsync(InvoiceListFilter filter, ActorContext actor, CancellationToken ct = default);
     Task<InvoiceVm> GetAsync(Guid id, ActorContext actor, CancellationToken ct = default);
     /// <summary>Номер поставщика, который получит новый документ, если его не заменить (без резервирования).</summary>
     Task<string> SuggestNumberAsync(DateOnly postingDate, ActorContext actor, CancellationToken ct = default);

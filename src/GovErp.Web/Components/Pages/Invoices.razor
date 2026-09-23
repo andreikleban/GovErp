@@ -94,7 +94,7 @@ else if (_invoice is not null)
         }
         else
         {
-            _list = await InvoiceService.ListAsync(actor);
+            _list = await InvoiceService.ListAsync(InvoiceListFilter.None, actor);
         }
     }
 

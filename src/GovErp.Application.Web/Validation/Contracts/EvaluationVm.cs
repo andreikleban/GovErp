@@ -4,7 +4,7 @@ public sealed record EvaluationVm(Guid Id, string TransactionRef, int ContentVer
     Guid EvaluatedBy, string Overall, CapabilitiesVm Capabilities, string EngineVersion, string RuleSetFingerprint,
     IReadOnlyList<AppliedRuleVm> AppliedRules, IReadOnlyList<StepVm> Steps, IReadOnlyList<OutcomeVm> Outcomes,
     IReadOnlyList<RouteStepVm> ApprovalRoute, IReadOnlyList<PreviewLineVm> PostingPreview, PostingCheckVm? PostingCheck,
-    bool ReadyForPaymentHandoff);
+    bool ReadyForPaymentHandoff, IReadOnlyList<LineBudgetVm> LineBudgets);
 
 public sealed record OutcomeVm(Guid OutcomeRef, string RuleId, int RuleVersion, int Step, string StepName, string Layer, int? Line,
     string Severity, IReadOnlyDictionary<string, string> Inputs, IReadOnlyDictionary<string, string> Computed, string Message,
