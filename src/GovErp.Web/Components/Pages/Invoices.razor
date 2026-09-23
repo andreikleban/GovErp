@@ -15,6 +15,7 @@
 @using Microsoft.AspNetCore.Authorization
 @inject IInvoiceAppService InvoiceService
 @inject IPostingAppService Posting
+@inject GovErp.Application.Web.Approvals.IApprovalAppService Approvals
 @inject IReferenceAppService Reference
 @inject CurrentActor CurrentActor
 @inject NavigationManager Navigation
@@ -53,7 +54,7 @@
                     <td>@row.Number</td>
                     <td>@row.VendorName</td>
                     <td class="money">@MoneyText.Usd(row.Total)</td>
-                    <td>@row.Status</td>
+                    <td><StatusBadge Status="@row.Status" /></td>
                     <td>@row.LastOverall</td>
                 </tr>
             }
@@ -65,7 +66,8 @@ else if (_invoice is not null)
 {
     <InvoiceDetail Invoice="_invoice" Vendors="_vendors" PurchaseOrders="_orders" Segments="_segments"
                    Busy="_busy" Message="@_error" OnSave="SaveAsync" OnValidate="ValidateAsync" OnSubmit="SubmitAsync" OnPost="PostAsync"
-                   OnWithdraw="WithdrawAsync" OnReturnToDraft="ReturnAsync" OnPaymentHold="HoldAsync" />
+                   OnWithdraw="WithdrawAsync" OnReturnToDraft="ReturnAsync" OnPaymentHold="HoldAsync"
+                   OnApprove="ApproveAsync" OnReject="RejectAsync" OnOverride="OverrideAsync" />
 }
 
 @code {
@@ -114,6 +116,9 @@ else if (_invoice is not null)
     private Task WithdrawAsync(ReasonedActionCommand cmd) => ApplyAsync(a => InvoiceService.WithdrawAsync(cmd, a));
     private Task ReturnAsync(InvoiceActionCommand cmd) => ApplyAsync(a => InvoiceService.ReturnToDraftAsync(cmd, a));
     private Task HoldAsync(PaymentHoldCommand cmd) => ApplyAsync(a => InvoiceService.SetPaymentHoldAsync(cmd, a));
+    private Task ApproveAsync(InvoiceActionCommand cmd) => ApplyAsync(a => Approvals.ApproveAsync(cmd, a));
+    private Task RejectAsync(ReasonedActionCommand cmd) => ApplyAsync(a => Approvals.RejectAsync(cmd, a));
+    private Task OverrideAsync(OverrideCommand cmd) => ApplyAsync(a => Approvals.OverrideAsync(cmd, a));
 
     private async Task ApplyAsync(Func<GovErp.Application.Web.Common.ActorContext, Task<CommandResult<InvoiceVm>>> action)
     {

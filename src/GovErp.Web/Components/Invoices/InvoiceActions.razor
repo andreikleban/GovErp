@@ -1,16 +1,66 @@
-<p class="toolbar">
-    <button class="primary" type="button" disabled="@(Busy || !CanEdit)" @onclick="OnSave">Save</button>
-    <button type="button" disabled="@Busy" @onclick="OnValidate">Validate</button>
-    <button type="button" disabled="@(Busy || !CanEdit)" @onclick="OnSubmit">Submit</button>
-    @if (CanPost)
-    {
-        <button class="primary" type="button" disabled="@Busy" @onclick="OnPost">Post</button>
-    }
-    @if (CanReturn)
-    {
-        <button type="button" disabled="@Busy" @onclick="OnReturnToDraft">Return to draft</button>
-    }
-</p>
+@using GovErp.Application.Web.Approvals.Contracts
+
+@* Показываются только операции, которые сервер разрешит этому пользователю в этом статусе.
+   Решения по маршруту (согласовать, отклонить, снять Soft Stop) приходят из очереди пользователя. *@
+@if (CanEdit || CanValidate || CanPost || CanReturn)
+{
+    <p class="toolbar">
+        @if (CanEdit)
+        {
+            <button class="primary" type="button" disabled="@Busy" @onclick="OnSave">Save</button>
+        }
+        @if (CanValidate)
+        {
+            <button type="button" disabled="@Busy" @onclick="OnValidate">Validate</button>
+        }
+        @if (CanEdit)
+        {
+            <button type="button" disabled="@Busy" @onclick="OnSubmit">Submit</button>
+        }
+        @if (CanPost)
+        {
+            <button class="primary" type="button" disabled="@Busy" @onclick="OnPost">Post</button>
+        }
+        @if (CanReturn)
+        {
+            <button type="button" disabled="@Busy" @onclick="OnReturnToDraft">Return to draft</button>
+        }
+    </p>
+}
+
+@if (Pending.Count > 0)
+{
+    <section class="panel">
+        <h2>Waiting for your decision</h2>
+        <table>
+            <tbody>
+            @foreach (var item in Pending)
+            {
+                <tr>
+                    <td>@(item.Kind == "Approve" ? "Approval" : "Soft stop")</td>
+                    <td>@item.Role@(item.Department is null ? "" : $" · {item.Department}")</td>
+                    <td>@(item.Kind == "Override" ? $"{item.RuleId}{(item.Line is { } l ? $" · line {l}" : "")}: {item.Reason}" : item.Reason)</td>
+                    <td class="toolbar">
+                        @if (item.Kind == "Approve")
+                        {
+                            <button class="primary" type="button" disabled="@Busy" @onclick="() => OnApprove.InvokeAsync(item)">Approve</button>
+                            <button type="button" disabled="@(Busy || NoReason)" @onclick="() => OnReject.InvokeAsync((item, _decisionReason.Trim()))">Reject</button>
+                        }
+                        else
+                        {
+                            <button class="primary" type="button" disabled="@(Busy || NoReason)" @onclick="() => OnOverride.InvokeAsync((item, _decisionReason.Trim()))">Override</button>
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        <label>Reason (required to reject or override)
+            <input @bind="_decisionReason" @bind:event="oninput" autocomplete="off" />
+        </label>
+    </section>
+}
+
 @if (CanWithdraw)
 {
     <label>Withdrawal reason
@@ -25,18 +75,26 @@
     [Parameter] public Guid InvoiceId { get; set; }
     [Parameter] public bool Busy { get; set; }
     [Parameter] public bool CanEdit { get; set; }
+    [Parameter] public bool CanValidate { get; set; }
     [Parameter] public bool CanPost { get; set; }
     [Parameter] public bool CanWithdraw { get; set; }
     [Parameter] public bool CanReturn { get; set; }
+    [Parameter] public IReadOnlyList<ApprovalQueueItemVm> Pending { get; set; } = [];
     [Parameter] public EventCallback OnSave { get; set; }
     [Parameter] public EventCallback OnValidate { get; set; }
     [Parameter] public EventCallback OnSubmit { get; set; }
     [Parameter] public EventCallback OnPost { get; set; }
     [Parameter] public EventCallback<string> OnWithdraw { get; set; }
     [Parameter] public EventCallback OnReturnToDraft { get; set; }
+    [Parameter] public EventCallback<ApprovalQueueItemVm> OnApprove { get; set; }
+    [Parameter] public EventCallback<(ApprovalQueueItemVm Item, string Reason)> OnReject { get; set; }
+    [Parameter] public EventCallback<(ApprovalQueueItemVm Item, string Reason)> OnOverride { get; set; }
 
     private Guid _invoiceId;
     private string _withdrawReason = "";
+    private string _decisionReason = "";
+
+    private bool NoReason => string.IsNullOrWhiteSpace(_decisionReason);
 
     protected override void OnParametersSet()
     {
@@ -44,6 +102,7 @@
         {
             _invoiceId = InvoiceId;
             _withdrawReason = "";
+            _decisionReason = "";
         }
     }
 

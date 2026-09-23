@@ -1,0 +1,49 @@
+@using GovErp.Application.Web.Audit
+@using GovErp.Application.Web.Validation.Contracts
+
+@if (Open)
+{
+    <div class="modal-backdrop" @onclick="CloseAsync"></div>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="audit-title" tabindex="-1"
+         @ref="_dialog" @onkeydown="OnKeyDownAsync">
+        <header class="modal-header">
+            <h2 id="audit-title">Audit · @Title</h2>
+            <button type="button" aria-label="Close" @onclick="CloseAsync">Close</button>
+        </header>
+        <div class="modal-body">
+            <p class="note">Evaluations are immutable. Show opens a past evaluation in the invoice panels.</p>
+            <AuditPanel History="History" Events="Events" SelectedId="SelectedId" OnSelect="OnSelect" />
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public IReadOnlyList<EvaluationVm> History { get; set; } = [];
+    [Parameter] public IReadOnlyList<AuditEventVm> Events { get; set; } = [];
+    [Parameter] public Guid? SelectedId { get; set; }
+    [Parameter] public EventCallback<Guid> OnSelect { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private ElementReference _dialog;
+    private bool _focused;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Фокус в окно при открытии: Escape и Tab работают сразу, без щелчка мышью.
+        if (Open && !_focused)
+        {
+            _focused = true;
+            await _dialog.FocusAsync();
+        }
+        else if (!Open)
+        {
+            _focused = false;
+        }
+    }
+
+    private Task OnKeyDownAsync(KeyboardEventArgs e) => e.Key == "Escape" ? CloseAsync() : Task.CompletedTask;
+
+    private Task CloseAsync() => OnClose.InvokeAsync();
+}

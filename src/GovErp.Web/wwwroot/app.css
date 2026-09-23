@@ -111,6 +111,19 @@ h1 {
     font-weight: 600;
 }
 
+/* Заголовок страницы с действиями справа: линия под заголовком тянется на всю ширину. */
+.page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+}
+
+.page-header h1 { margin: 0; padding: 0; border: 0; }
+
 p { margin: 0.35rem 0 0.7rem; }
 
 .toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -228,30 +241,46 @@ main > form, .signin {
 .signin button { justify-self: start; min-width: 96px; }
 .signin .note { margin-top: 12px; }
 
-.tabs {
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(12, 35, 64, 0.45);
+    z-index: 100;
+}
+
+.modal {
+    position: fixed;
+    top: 5vh;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(1100px, calc(100vw - 32px));
+    max-height: 90vh;
     display: flex;
-    gap: 4px;
-    margin: 16px 0 0;
-    border-bottom: 2px solid var(--navy);
-}
-
-.tabs button {
-    margin: 0 0 -2px;
-    border: 1px solid #b7c3d1;
-    border-bottom: 0;
-    border-radius: 2px 2px 0 0;
-    background: var(--band);
-    color: var(--muted);
-}
-
-.tabs button[aria-selected="true"] {
+    flex-direction: column;
     background: var(--surface);
-    border-color: var(--navy);
-    color: var(--navy);
-    font-weight: 700;
+    border: 1px solid #b7c3d1;
+    border-top: 3px solid var(--navy);
+    box-shadow: 0 12px 32px rgba(12, 35, 64, 0.25);
+    z-index: 101;
 }
 
-.tabs + section { margin-top: 12px; }
+.modal:focus { outline: none; }
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+}
+
+.modal-header h2 { margin: 0; font-size: 14px; letter-spacing: 0.04em; text-transform: uppercase; }
+
+.modal-body {
+    padding: 12px 14px;
+    overflow: auto;
+}
 
 .panel {
     background: var(--surface);
@@ -288,6 +317,27 @@ main > form, .signin {
 .chip.bad { color: #8c3030; border-color: #e4c8c8; background: #f8eeee; }
 
 tbody tr.selected { background: #e7eef5; }
+
+/* Статус документа: скруглённая плашка, отличается от квадратных chip результатов проверки. */
+.badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #f4f7fa;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    vertical-align: middle;
+}
+
+h1 .badge { margin-left: 8px; }
+.badge.info { color: #1d4f86; border-color: #a9c3e0; background: #eef4fb; }
+.badge.ok { color: #1e5c38; border-color: #9dccb0; background: #f3faf6; }
+.badge.done { color: #f3f6fa; border-color: #1e5c38; background: #1e5c38; }
+.badge.bad { color: #8c3030; border-color: #e4c8c8; background: #f8eeee; }
 
 .payload {
     margin: 0;

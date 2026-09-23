@@ -1,0 +1,15 @@
+<span class="badge @Tone" title="Document status">@Status</span>
+
+@code {
+    [Parameter, EditorRequired] public string Status { get; set; } = "";
+
+    /// <summary>Цвет по смыслу статуса: в работе, ждёт решения, согласован или проведён, отклонён.</summary>
+    private string Tone => Status switch
+    {
+        "Submitted" => "info",
+        "Approved" => "ok",
+        "Posted" => "done",
+        "Rejected" => "bad",
+        _ => "muted",
+    };
+}
