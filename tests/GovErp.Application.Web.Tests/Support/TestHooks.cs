@@ -67,6 +67,7 @@ public sealed class HookedEncumbranceRepository(IEncumbranceRepository inner, Te
     }
 
     public Task<Encumbrance?> FindByClaimAsync(Guid claimId, CancellationToken ct = default) => inner.FindByClaimAsync(claimId, ct);
+    public Task<IReadOnlyList<Encumbrance>> ListAsync(CancellationToken ct = default) => inner.ListAsync(ct);
     public Task AddAsync(Encumbrance encumbrance, CancellationToken ct = default) => inner.AddAsync(encumbrance, ct);
 }
 
@@ -80,6 +81,7 @@ public sealed class HookedVendorInvoiceRepository(IVendorInvoiceRepository inner
     }
 
     public Task<VendorInvoice?> FindAsync(Guid id, CancellationToken ct = default) => inner.FindAsync(id, ct);
+    public Task<VendorInvoice?> FindByReferenceAsync(string reference, CancellationToken ct = default) => inner.FindByReferenceAsync(reference, ct);
     public Task<IReadOnlyList<VendorInvoice>> ListAsync(CancellationToken ct = default) => inner.ListAsync(ct);
     public Task AddAsync(VendorInvoice invoice, CancellationToken ct = default) => inner.AddAsync(invoice, ct);
 }
@@ -90,4 +92,5 @@ public sealed class HookedJournalRepository(IJournalRepository inner, TestHooks 
         hooks.FailJournalWrite ? throw new InvalidOperationException("Injected failure on journal write.") : inner.AddAsync(entry, ct);
 
     public Task<IReadOnlyList<JournalEntry>> ListBySourceAsync(string sourceRef, CancellationToken ct = default) => inner.ListBySourceAsync(sourceRef, ct);
+    public Task<IReadOnlyList<JournalEntry>> ListAsync(CancellationToken ct = default) => inner.ListAsync(ct);
 }

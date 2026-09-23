@@ -9,6 +9,9 @@ public sealed class EfVendorInvoiceRepository(GovErpDbContext db) : IVendorInvoi
     public Task<VendorInvoice?> FindAsync(Guid id, CancellationToken ct = default) =>
         db.VendorInvoices.SingleOrDefaultAsync(i => i.Id == id, ct);
 
+    public Task<VendorInvoice?> FindByReferenceAsync(string reference, CancellationToken ct = default) =>
+        db.VendorInvoices.SingleOrDefaultAsync(i => i.Reference == reference, ct);
+
     public async Task<IReadOnlyList<VendorInvoice>> ListAsync(CancellationToken ct = default) =>
         await db.VendorInvoices.OrderBy(i => i.Number).ToListAsync(ct);
 

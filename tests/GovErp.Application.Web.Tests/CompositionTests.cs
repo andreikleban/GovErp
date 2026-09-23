@@ -3,7 +3,9 @@ using GovErp.Application.Web.Budget;
 using GovErp.Application.Web.Explanation;
 using GovErp.Application.Web.Extensions;
 using GovErp.Application.Web.Invoices;
+using GovErp.Application.Web.Ledger;
 using GovErp.Application.Web.Posting;
+using GovErp.Application.Web.Purchasing;
 using GovErp.Application.Web.Reference;
 using GovErp.Application.Web.Tenancy;
 using GovErp.Infrastructure.Extensions;
@@ -31,6 +33,8 @@ public class CompositionTests
         sp.GetRequiredService<IApprovalAppService>().Should().NotBeNull();
         sp.GetRequiredService<IPostingAppService>().Should().NotBeNull();
         sp.GetRequiredService<IBudgetAppService>().Should().NotBeNull();
+        sp.GetRequiredService<IPurchasingAppService>().Should().NotBeNull();
+        sp.GetRequiredService<ILedgerAppService>().Should().NotBeNull();
         sp.GetRequiredService<IReferenceAppService>().Should().NotBeNull();
         sp.GetRequiredService<IExplanationAppService>().Should().NotBeNull();
 

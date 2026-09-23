@@ -2,7 +2,9 @@ using GovErp.Application.Web.Approvals;
 using GovErp.Application.Web.Budget;
 using GovErp.Application.Web.Explanation;
 using GovErp.Application.Web.Invoices;
+using GovErp.Application.Web.Ledger;
 using GovErp.Application.Web.Posting;
+using GovErp.Application.Web.Purchasing;
 using GovErp.Application.Web.Reference;
 using GovErp.Application.Web.Validation;
 using Microsoft.Extensions.Configuration;
@@ -21,6 +23,8 @@ public static class ServiceCollectionExtensions
         s.AddScoped<IApprovalAppService, ApprovalAppService>();
         s.AddScoped<IPostingAppService, PostingAppService>();
         s.AddScoped<IBudgetAppService, BudgetAppService>();
+        s.AddScoped<IPurchasingAppService, PurchasingAppService>();
+        s.AddScoped<ILedgerAppService, LedgerAppService>();
         s.AddScoped<IReferenceAppService, ReferenceAppService>();
         s.AddScoped<IExplanationAppService, ExplanationAppService>();
         return s;

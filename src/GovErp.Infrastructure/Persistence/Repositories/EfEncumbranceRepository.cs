@@ -13,6 +13,9 @@ public sealed class EfEncumbranceRepository(GovErpDbContext db) : IEncumbranceRe
     public Task<Encumbrance?> FindByClaimAsync(Guid claimId, CancellationToken ct = default) =>
         db.Encumbrances.SingleOrDefaultAsync(e => e.Claims.Any(c => c.Id == claimId) || e.BillingClaims.Any(c => c.Id == claimId), ct);
 
+    public async Task<IReadOnlyList<Encumbrance>> ListAsync(CancellationToken ct = default) =>
+        await db.Encumbrances.OrderBy(e => e.PoLineRef).ToListAsync(ct);
+
     public async Task AddAsync(Encumbrance encumbrance, CancellationToken ct = default) =>
         await db.Set<Encumbrance>().AddAsync(encumbrance, ct);
 }

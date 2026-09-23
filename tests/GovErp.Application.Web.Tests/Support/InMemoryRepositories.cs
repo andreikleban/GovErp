@@ -82,6 +82,8 @@ public sealed class InMemoryEncumbranceRepository(IEnumerable<Encumbrance> items
         Task.FromResult(Items.SingleOrDefault(e => e.PoLineRef == poLineRef));
     public Task<Encumbrance?> FindByClaimAsync(Guid id, CancellationToken ct = default) =>
         Task.FromResult(Items.SingleOrDefault(e => e.Claims.Any(c => c.Id == id) || e.BillingClaims.Any(c => c.Id == id)));
+    public Task<IReadOnlyList<Encumbrance>> ListAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<Encumbrance>>(Items.AsReadOnly());
     public Task AddAsync(Encumbrance encumbrance, CancellationToken ct = default)
     {
         Items.Add(encumbrance);
@@ -94,6 +96,8 @@ public sealed class InMemoryFiscalPeriodRepository(IEnumerable<FiscalPeriod> ite
     private readonly List<FiscalPeriod> Items = [.. items];
     public Task<FiscalPeriod?> FindAsync(int year, int month, CancellationToken ct = default) =>
         Task.FromResult(Items.SingleOrDefault(p => p.Year == year && p.Month == month));
+    public Task<IReadOnlyList<FiscalPeriod>> ListAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<FiscalPeriod>>(Items.AsReadOnly());
 }
 
 public sealed class InMemoryOpeningBalanceRepository(IEnumerable<OpeningBalance> items) : IOpeningBalanceRepository
@@ -118,6 +122,8 @@ public sealed class InMemoryJournalRepository(IEnumerable<JournalEntry> items) :
     }
     public Task<IReadOnlyList<JournalEntry>> ListBySourceAsync(string sourceRef, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<JournalEntry>>(Items.Where(j => j.SourceRef == sourceRef).ToList());
+    public Task<IReadOnlyList<JournalEntry>> ListAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<JournalEntry>>(Items.AsReadOnly());
 }
 
 public sealed class InMemoryPurchaseOrderRepository(IEnumerable<PurchaseOrder> items) : IPurchaseOrderRepository
@@ -143,6 +149,8 @@ public sealed class InMemoryVendorInvoiceRepository(IEnumerable<VendorInvoice> i
     private readonly List<VendorInvoice> Items = [.. items];
     public Task<VendorInvoice?> FindAsync(Guid id, CancellationToken ct = default) =>
         Task.FromResult(Items.SingleOrDefault(i => i.Id == id));
+    public Task<VendorInvoice?> FindByReferenceAsync(string reference, CancellationToken ct = default) =>
+        Task.FromResult(Items.SingleOrDefault(i => i.Reference == reference));
     public Task<IReadOnlyList<VendorInvoice>> ListAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<VendorInvoice>>(Items.AsReadOnly());
     public Task<bool> ExistsDuplicateAsync(Guid vendorId, string normalizedNumber, Guid? excludingInvoiceId, CancellationToken ct = default) =>
