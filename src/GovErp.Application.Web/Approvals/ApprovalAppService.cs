@@ -33,14 +33,14 @@ public sealed class ApprovalAppService(ITenantOperationRunner runner) : IApprova
                     items.AddRange((await ws.RouteForAsync(last, token))
                         .Select(r => (Role: r.Role.ToString(), Department: r.Department?.Value))
                         .Where(r => !satisfied.Contains(r) && Mine(r.Role, r.Department))
-                        .Select(r => new ApprovalQueueItemVm(inv.Id, inv.Reference, vendor, inv.Total.Amount, last.Overall.ToString(),
+                        .Select(r => new ApprovalQueueItemVm(inv.Id, inv.Reference, inv.Number, vendor, inv.Total.Amount, last.Overall.ToString(),
                             "Approve", r.Role, r.Department, "Approval required.", last.Id, null, null)));
                 }
 
                 items.AddRange(last.Outcomes
                     .Where(o => o.Severity == Severity.SoftStop && !o.IsOverridden && inv.CreatedBy != actor.UserId)
                     .SelectMany(o => o.OverridableBy.Where(r => Mine(r.ToString(), null)).Take(1).Select(r => (o, r)))
-                    .Select(x => new ApprovalQueueItemVm(inv.Id, inv.Reference, vendor, inv.Total.Amount, last.Overall.ToString(),
+                    .Select(x => new ApprovalQueueItemVm(inv.Id, inv.Reference, inv.Number, vendor, inv.Total.Amount, last.Overall.ToString(),
                         "Override", x.r.ToString(), null, x.o.Message, last.Id, x.o.RuleId, x.o.DistributionLine)));
             }
 
@@ -81,7 +81,7 @@ public sealed class ApprovalAppService(ITenantOperationRunner runner) : IApprova
             if (!record.Capabilities.CanApprove)
             {
                 ws.Audit.Record(actor, "ApprovalRefused", invoice.Reference, record.Id.ToString(), new { Overall = record.Overall.ToString() });
-                return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), InvoiceWorkspace.ReasonOf(record));
+                return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), InvoiceWorkspace.ReasonOf(record, Severity.SoftStop));
             }
 
             var route = await ws.RouteForAsync(record, token);

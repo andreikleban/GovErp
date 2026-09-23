@@ -142,7 +142,7 @@ tbody tr:nth-child(even) { background: #f7f9fb; }
 tbody tr:hover { background: #eef3f8; }
 .money { text-align: right; font-variant-numeric: tabular-nums; }
 
-button, input, select {
+button, a.button, input, select {
     font: inherit;
     color: var(--ink);
     background: var(--surface);
@@ -151,14 +151,15 @@ button, input, select {
     padding: 4px 8px;
 }
 
-button { cursor: pointer; }
+button, a.button { cursor: pointer; }
+a.button { display: inline-block; text-decoration: none; }
 button:hover:not(:disabled) { background: #f3f6f9; }
-button.primary {
+button.primary, a.button.primary {
     background: var(--navy);
     border-color: var(--navy);
     color: #f3f6fa;
 }
-button.primary:hover:not(:disabled) { background: #16375c; }
+button.primary:hover:not(:disabled), a.button.primary:hover { background: #16375c; }
 button:disabled { opacity: 0.45; cursor: default; }
 
 input:focus, select:focus, button:focus-visible {

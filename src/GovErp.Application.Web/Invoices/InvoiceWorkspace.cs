@@ -170,8 +170,12 @@ public sealed class InvoiceWorkspace(
             withRowVersion ? concurrency.VersionOf(invoice) : null, clock.BusinessDate);
     }
 
-    public static string ReasonOf(EvaluationRecord record) =>
-        string.Join(" ", record.Outcomes.Where(o => o.Severity >= Severity.SoftStop && !o.IsOverridden).Select(o => o.Message));
+    /// <summary>
+    /// Причина отказа — только outcome'ы, которые блокируют именно это действие: Submit блокирует лишь Hard Stop
+    /// (Soft Stop не мешает отправке), согласование и Post — ещё и неснятый Soft Stop.
+    /// </summary>
+    public static string ReasonOf(EvaluationRecord record, Severity blocking) =>
+        string.Join(" ", record.Outcomes.Where(o => o.Severity >= blocking && !o.IsOverridden).Select(o => o.Message));
 
     private async Task<EvaluationRecord> EvaluateOnceAsync(VendorInvoice invoice, EvaluationTrigger trigger, ActorContext actor, CancellationToken ct)
     {

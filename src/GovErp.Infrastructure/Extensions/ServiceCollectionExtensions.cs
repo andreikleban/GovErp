@@ -3,6 +3,7 @@ using GovErp.Application.Web.Commands;
 using GovErp.Application.Web.Common;
 using GovErp.Application.Web.Explanation;
 using GovErp.Application.Web.Identity;
+using GovErp.Application.Web.Invoices;
 using GovErp.Application.Web.Tenancy;
 using GovErp.Domain.ChartOfAccounts.Repositories;
 using GovErp.Domain.Ledger.Repositories;
@@ -57,6 +58,7 @@ public static class ServiceCollectionExtensions
         s.AddScoped<IVendorRepository, EfVendorRepository>();
         s.AddScoped<IPurchaseOrderRepository, EfPurchaseOrderRepository>();
         s.AddScoped<IVendorInvoiceRepository, EfVendorInvoiceRepository>();
+        s.AddScoped<IInvoiceNumbering, EfInvoiceNumbering>();
         s.AddScoped<IRuleDefinitionRepository, EfRuleDefinitionRepository>();
         s.AddScoped<IEvaluationRecordRepository, EfEvaluationRecordRepository>();
         s.AddScoped<IAuditTrail, EfAuditTrail>();

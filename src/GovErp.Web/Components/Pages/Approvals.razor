@@ -7,6 +7,7 @@
 @using GovErp.Application.Web.Invoices
 @using GovErp.Application.Web.Invoices.Commands
 @using GovErp.Web.Authentication
+@using GovErp.Web.Formatting
 @inject IApprovalAppService ApprovalsService
 @inject IInvoiceAppService Invoices
 @inject CurrentActor CurrentActor
@@ -34,7 +35,7 @@ else
             <tr class="@(_picked?.InvoiceId == item.InvoiceId && _picked.Kind == item.Kind && _picked.RuleId == item.RuleId ? "selected" : null)">
                 <td><a href="@($"/invoices/{item.InvoiceId}")">@item.Reference</a></td>
                 <td>@item.VendorName</td>
-                <td class="money">@item.Total.ToString("N2")</td>
+                <td class="money">@MoneyText.Usd(item.Total)</td>
                 <td>@item.Overall</td>
                 <td>@item.Kind</td>
                 <td>@item.Role</td>
@@ -54,7 +55,7 @@ else
         {
             <p class="note">Rule @_picked.RuleId, line @(_picked.Line?.ToString() ?? "header"). The server checks that you may waive this outcome.</p>
         }
-        <label>Reason <input @bind="_reason" @bind:event="oninput" /></label>
+        <label>@(_picked.Kind == "Approve" ? "Reason (required to reject)" : "Reason") <input @bind="_reason" @bind:event="oninput" /></label>
         <p class="toolbar">
             @if (_picked.Kind == "Approve")
             {
@@ -113,7 +114,7 @@ else
         {
             var actor = await CurrentActor.GetAsync();
             var result = await action(actor);
-            _error = result.IsAccepted ? null : result.Status == CommandStatus.Forbidden ? "Not allowed." : result.Reason;
+            _error = result.IsAccepted ? null : result.Status == CommandStatus.Forbidden ? $"Not allowed: {result.Reason}" : result.Reason;
             if (result.IsAccepted)
             {
                 _picked = null;

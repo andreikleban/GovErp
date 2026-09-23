@@ -43,6 +43,27 @@
         }
         </tbody>
     </table>
+    @if (_lines.Any(l => l.Amendments.Count > 0))
+    {
+        <section class="panel">
+            <h2>Amendments</h2>
+            <table>
+                <thead><tr><th>Account</th><th>Reference</th><th>Effective</th><th class="money">Amount</th></tr></thead>
+                <tbody>
+                @foreach (var line in _lines)
+                {
+                    @foreach (var a in line.Amendments)
+                    {
+                        <tr><td>@line.Account</td><td>@a.Reference</td><td>@a.EffectiveDate.ToString("yyyy-MM-dd")</td><td class="money">@a.Amount.ToString("N2")</td></tr>
+                    }
+                }
+                </tbody>
+            </table>
+        </section>
+    }
+    @if (_success is not null) { <p class="note">@_success</p> }
+    @if (_canAmend)
+    {
     <section class="panel">
         <h2>Amendment</h2>
         <div>
@@ -58,6 +79,7 @@
         </div>
         <p class="toolbar"><button class="primary" type="button" disabled="@_busy" @onclick="AmendAsync">Amend</button></p>
     </section>
+    }
 }
 
 @code {
@@ -69,7 +91,9 @@
     private DateOnly _effective = new(2026, 6, 15);
     private IReadOnlyList<BudgetLineVm>? _lines;
     private string? _error;
+    private string? _success;
     private bool _busy;
+    private bool _canAmend;
     private Guid _commandId = Guid.NewGuid();
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
@@ -77,7 +101,19 @@
     private async Task LoadAsync()
     {
         var actor = await CurrentActor.GetAsync();
-        _lines = await Budgets.ListAsync(_year, actor);
+        _canAmend = actor.IsInAnyRole(GovErp.Application.Web.Common.Roles.Overriders);
+        try
+        {
+            _lines = await Budgets.ListAsync(_year, actor);
+        }
+        catch (ArgumentException ex)
+        {
+            // Неверный бюджетный год из поля ввода — сообщение, а не обрыв circuit.
+            _error = ex.Message;
+            _lines = [];
+            return;
+        }
+
         if (_lines.Count > 0 && _lines.All(l => l.Account != _account))
         {
             _account = _lines[0].Account;
@@ -92,7 +128,10 @@
             var actor = await CurrentActor.GetAsync();
             var result = await Budgets.AmendAsync(new AmendBudgetCommand(
                 new CommandEnvelope(_commandId, null), _account, _amendYear, _amount, _reference, _effective), actor);
-            _error = result.IsAccepted ? null : result.Status == CommandStatus.Forbidden ? "Not allowed." : result.Reason;
+            _error = result.IsAccepted ? null : result.Status == CommandStatus.Forbidden ? $"Not allowed: {result.Reason}" : result.Reason;
+            _success = result.IsAccepted
+                ? $"Amendment {_reference} applied to {_account}: amended budget is now {result.Value!.Amended:N2}, available {result.Value.Available:N2}."
+                : null;
             if (result.IsAccepted)
             {
                 _amount = 0;

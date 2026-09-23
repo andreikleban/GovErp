@@ -282,6 +282,16 @@ public class VendorInvoiceTests
     }
 
     [Fact]
+    public void Registered_reference_is_kept_and_blank_reference_is_rejected()
+    {
+        new VendorInvoice("V-1", VendorId, Date, Date, Date, Date.AddDays(30), Money.Of(10), null, Author, At, "AP-2026-000001")
+            .Reference.Should().Be("AP-2026-000001");
+        FluentActions.Invoking(() => new VendorInvoice("V-1", VendorId, Date, Date, Date, Date.AddDays(30), Money.Of(10), null, Author, At, " "))
+            .Should().Throw<PayablesException>();
+        Draft().Reference.Should().StartWith("INV-");
+    }
+
+    [Fact]
     public void Changes_to_owned_collections_advance_change_stamp()
     {
         var inv = Submitted();

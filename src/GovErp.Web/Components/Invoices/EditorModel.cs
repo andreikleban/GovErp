@@ -27,6 +27,20 @@ public sealed class EditorModel
         Lines = invoice.Distributions.Select(LineModel.From).ToList(),
     };
 
+    /// <summary>Пустой черновик в памяти: в базу попадает только по Save (CreateDraftAsync).</summary>
+    public static EditorModel Blank(Guid vendorId, DateOnly documentDate) => new()
+    {
+        VendorId = vendorId,
+        DocumentDate = documentDate,
+        DueDate = documentDate.AddDays(30),
+        Lines = [LineModel.Default()],
+    };
+
+    public CreateInvoiceCommand ToCreate(GovErp.Application.Web.Commands.CommandEnvelope envelope) =>
+        new(envelope, Number, VendorId, DocumentDate, DocumentDate, DocumentDate, DueDate, Total,
+            string.IsNullOrWhiteSpace(PoRef) ? null : PoRef,
+            Lines.Select(l => new DistributionCommand(l.Account, l.Amount, l.PoLineNo)).ToList());
+
     public UpdateInvoiceCommand ToUpdate(GovErp.Application.Web.Commands.CommandEnvelope envelope, Guid id) =>
         new(envelope, id, Number, VendorId, DocumentDate, DocumentDate, DocumentDate, DueDate, Total,
             string.IsNullOrWhiteSpace(PoRef) ? null : PoRef,
@@ -43,6 +57,9 @@ public sealed class LineModel
     public int? PoLineNo { get; set; }
 
     public string Account => string.IsNullOrWhiteSpace(Grant) ? $"{Fund}-{Department}-{Object}" : $"{Fund}-{Department}-{Object}-{Grant}";
+
+    /// <summary>Выпадающие списки сегментов не имеют пустого значения, поэтому новая строка сразу получает валидные коды.</summary>
+    public static LineModel Default() => new() { Fund = "101", Department = "6000", Object = "53100" };
 
     public static LineModel From(DistributionVm d)
     {

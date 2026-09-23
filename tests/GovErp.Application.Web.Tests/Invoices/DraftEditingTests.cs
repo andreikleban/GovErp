@@ -60,6 +60,54 @@ public sealed class DraftEditingTests(SqlServerFixture fixture)
         updated.Status.Should().Be(CommandStatus.Refused);
     }
 
+    [Theory]
+    [InlineData("not-an-account", 10)]
+    [InlineData("101-6000-53100", 10.001)]
+    public async Task Malformed_form_input_is_refused_and_nothing_is_saved(string account, decimal amount)
+    {
+        var t = await fixture.CreateTenantAsync();
+        var created = await t.CreateAsync(10m, null, ("101-6000-53100", 10m, null));
+        var updated = await t.Service<IInvoiceAppService>().UpdateDraftAsync(new UpdateInvoiceCommand(
+            TenantDriver.Env(created.RowVersion), created.Id, created.Number, SpringfieldData.AcmeId,
+            SpringfieldData.Jun15, SpringfieldData.Jun15, SpringfieldData.Jun15, SpringfieldData.Jul15, amount, null,
+            [new DistributionCommand(account, amount, null)]), t.Clerk);
+        updated.Status.Should().Be(CommandStatus.Refused);
+        updated.Reason.Should().NotBeNullOrWhiteSpace().And.NotContain("(Parameter");
+        var loaded = await t.GetAsync(created.Id);
+        (loaded.ContentVersion, loaded.Total).Should().Be((created.ContentVersion, 10m));
+    }
+
+    [Fact]
+    public async Task Document_numbers_are_sequential_and_a_refused_create_leaves_no_gap()
+    {
+        var t = await fixture.CreateTenantAsync();
+        var svc = t.Service<IInvoiceAppService>();
+        CreateInvoiceCommand Cmd(string number) => new(TenantDriver.Env(), number, SpringfieldData.AcmeId, SpringfieldData.Jun15,
+            SpringfieldData.Jun15, SpringfieldData.Jun15, SpringfieldData.Jul15, 10m, null, [new DistributionCommand("101-6000-53100", 10m, null)]);
+
+        (await svc.SuggestNumberAsync(SpringfieldData.Jun15, t.Clerk)).Should().Be("INV-000001");
+        var first = await svc.CreateDraftAsync(Cmd("SEQ-1"), t.Clerk);
+        var duplicate = await svc.CreateDraftAsync(Cmd("SEQ-1"), t.Clerk);
+        var second = await svc.CreateDraftAsync(Cmd("SEQ-2"), t.Clerk);
+        var preset = await svc.CreateFromPresetAsync(InvoicePreset.MultiFund, TenantDriver.Env(), t.Clerk);
+
+        duplicate.Status.Should().Be(CommandStatus.Refused);
+        (first.Value!.Reference, second.Value!.Reference, preset.Value!.Reference)
+            .Should().Be(("AP-2026-000001", "AP-2026-000002", "AP-2026-000003"));
+        preset.Value.Number.Should().Be("MF-000003");
+        (await svc.SuggestNumberAsync(SpringfieldData.Jun15, t.Clerk)).Should().Be("INV-000004");   // подсказка ничего не резервирует
+    }
+
+    [Fact]
+    public async Task Submit_refusal_names_only_the_blocking_hard_stop()
+    {
+        var t = await fixture.CreateTenantAsync();
+        var created = await t.CreateAsync(160_000m, null, ("701-6000-53100-G-COPS-26", 160_000m, null));
+        var refused = await t.SubmitAsync(created.Id);
+        refused.Status.Should().Be(CommandStatus.Refused);
+        refused.Reason.Should().Contain("13,000.00").And.NotContain("procurement threshold");
+    }
+
     [Fact]
     public async Task Distinct_document_dates_are_rejected_with_demo_limitation()
     {

@@ -21,7 +21,7 @@
             @foreach (var step in Evaluation.Steps.OrderBy(s => s.Step))
             {
                 var outcomes = Evaluation.Outcomes.Where(o => o.Step == step.Step).ToList();
-                var result = ResultOf(step, outcomes);
+                var result = ResultOf(step, outcomes, Evaluation);
                 <tr>
                     <td>@step.Step</td>
                     <td>@Label(step.Name)</td>
@@ -35,7 +35,7 @@
                             <div>
                                 @outcome.RuleId v@(outcome.RuleVersion)
                                 @if (outcome.Line is { } line) { <span> · line @line</span> }
-                                · <span class="chip @Chip(outcome.Severity)">@outcome.Severity</span>
+                                · <span class="chip @(outcome.OverriddenBy is null ? Chip(outcome.Severity) : "muted")">@SeverityLabel(outcome)</span>
                             </div>
                             @if (outcome.Inputs.Count > 0)
                             {
@@ -66,21 +66,44 @@
 @code {
     [Parameter] public EvaluationVm? Evaluation { get; set; }
 
-    private static string ResultOf(StepVm step, IReadOnlyList<OutcomeVm> outcomes)
+    /// <summary>
+    /// Результат шага различает, что именно мешает: Hard Stop блокирует, неснятый Soft Stop требует override,
+    /// снятый override'ом Soft Stop шаг больше не блокирует. Шаг маршрута ничего не «проходит» — он строит список согласований.
+    /// </summary>
+    private static string ResultOf(StepVm step, IReadOnlyList<OutcomeVm> outcomes, EvaluationVm evaluation)
     {
         if (!step.Executed)
         {
             return "Not evaluated";
         }
 
-        return outcomes.Any(o => o.Severity is "HardStop" or "SoftStop") ? "Failed" : "Passed";
+        if (step.Name == "ApprovalRequirements")
+        {
+            var pending = evaluation.ApprovalRoute.Count(r => !r.IsSatisfied);
+            return pending == 0 ? "Route complete" : $"{pending} approvals pending";
+        }
+
+        if (step.Name == "PostingEligibility" && evaluation.PostingCheck is { Passed: false })
+        {
+            return "Blocked";
+        }
+
+        var open = outcomes.Where(o => o.OverriddenBy is null).ToList();
+        if (open.Any(o => o.Severity == "HardStop")) return "Blocked";
+        if (open.Any(o => o.Severity == "SoftStop")) return "Needs override";
+        if (open.Any(o => o.Severity == "Warning")) return "Warning";
+        return outcomes.Any(o => o.OverriddenBy is not null) ? "Overridden" : "Passed";
     }
+
+    private static string SeverityLabel(OutcomeVm outcome) =>
+        outcome.OverriddenBy is null ? outcome.Severity : $"{outcome.Severity} · overridden";
 
     private static string Chip(string value) => value switch
     {
-        "Passed" or "Allowed" => "ok",
-        "Warning" => "warn",
-        "Failed" or "SoftStop" or "HardStop" => "bad",
+        "Passed" or "Allowed" or "Route complete" => "ok",
+        "Warning" or "Needs override" or "SoftStop" => "warn",
+        "Blocked" or "HardStop" => "bad",
+        _ when value.EndsWith("pending", StringComparison.Ordinal) => "warn",
         _ => "muted",
     };
 

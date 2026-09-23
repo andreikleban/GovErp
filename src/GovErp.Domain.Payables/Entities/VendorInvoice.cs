@@ -11,8 +11,11 @@ public sealed class VendorInvoice
     private IReadOnlyList<ApprovalRequirement> _requirements = Array.Empty<ApprovalRequirement>();
     public Guid Id { get; private set; } = Guid.NewGuid();
     public string Number { get; private set; }
-    public string NormalizedInvoiceNumber => Number.Trim().ToUpperInvariant();
-    public string Reference => $"INV-{Id}";
+    public string NormalizedInvoiceNumber => NormalizeNumber(Number);
+    /// <summary>Правило сравнения номеров поставщика для проверки дубликатов (до создания инвойса тоже).</summary>
+    public static string NormalizeNumber(string number) => number.Trim().ToUpperInvariant();
+    /// <summary>Регистрационный номер документа в AP (в журнале — SourceRef, в оценках — TransactionRef). Неизменяем.</summary>
+    public string Reference { get; private set; }
     public Guid VendorId { get; private set; }
     public DateOnly InvoiceDate { get; private set; }
     public DateOnly ServiceDate { get; private set; }
@@ -41,17 +44,19 @@ public sealed class VendorInvoice
     public IReadOnlyList<Guid> PoBillingClaimRefs { get; private set; } = Array.Empty<Guid>();
     public Money DistributedTotal => _distributions.Aggregate(Money.Zero, (s, d) => s + d.Amount);
 
-    private VendorInvoice() { Number = null!; }
+    private VendorInvoice() { Number = null!; Reference = null!; }
 
     public VendorInvoice(string number, Guid vendorId, DateOnly invoiceDate, DateOnly serviceDate, DateOnly postingDate,
-        DateOnly dueDate, Money total, string? poRef, UserId createdBy, DateTimeOffset createdAt)
+        DateOnly dueDate, Money total, string? poRef, UserId createdBy, DateTimeOffset createdAt, string? reference = null)
     {
         CheckHeader(number, vendorId, total, poRef);
+        if (reference is not null && string.IsNullOrWhiteSpace(reference)) throw new PayablesException("Document reference cannot be blank.");
         CheckDates(invoiceDate, dueDate);
         CheckUser(createdBy);
         Number = number; VendorId = vendorId; InvoiceDate = invoiceDate; ServiceDate = serviceDate;
         PostingDate = postingDate; DueDate = dueDate; Total = total; PoRef = poRef;
         CreatedBy = createdBy; CreatedAt = createdAt;
+        Reference = reference ?? $"INV-{Id}";
     }
 
     public void UpdateHeader(string number, Guid vendorId, DateOnly invoiceDate, DateOnly serviceDate, DateOnly postingDate,

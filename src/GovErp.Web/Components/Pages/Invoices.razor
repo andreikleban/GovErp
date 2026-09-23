@@ -23,15 +23,26 @@
 @if (Id is null)
 {
     <h1>Invoices</h1>
-    <p class="toolbar">
-        <button class="primary" type="button" disabled="@_busy" @onclick="NewDraftAsync">New</button>
-        <button type="button" disabled="@_busy" @onclick="() => PresetAsync(InvoicePreset.NonPoGrant)">Non-PO</button>
-        <button type="button" disabled="@_busy" @onclick="() => PresetAsync(InvoicePreset.PoBackedGrant)">PO-backed</button>
-        <button type="button" disabled="@_busy" @onclick="() => PresetAsync(InvoicePreset.MultiFund)">Multi-fund</button>
-    </p>
+    @if (_canCreate)
+    {
+        <p class="toolbar">
+            <a class="button primary" href="/invoices/new">New</a>
+            <button type="button" disabled="@_busy" @onclick="() => PresetAsync(InvoicePreset.NonPoGrant)">Non-PO</button>
+            <button type="button" disabled="@_busy" @onclick="() => PresetAsync(InvoicePreset.PoBackedGrant)">PO-backed</button>
+            <button type="button" disabled="@_busy" @onclick="() => PresetAsync(InvoicePreset.MultiFund)">Multi-fund</button>
+        </p>
+    }
     @if (_error is not null) { <p class="error">@_error</p> }
+    @if (_list is { Count: 0 })
+    {
+        <p class="note">
+            @(_canCreate
+                ? "No invoices yet. New opens an empty form; Non-PO, PO-backed and Multi-fund create the demo invoices from the exercise."
+                : "No invoices yet. AP clerks create them; approvals waiting for you appear under Approvals.")
+        </p>
+    }
     <table>
-        <thead><tr><th>Number</th><th>Vendor</th><th class="money">Amount</th><th>Status</th><th>Last evaluation</th></tr></thead>
+        <thead><tr><th>Document</th><th>Vendor invoice</th><th>Vendor</th><th class="money">Amount</th><th>Status</th><th>Last evaluation</th></tr></thead>
         <tbody>
         @if (_list is not null)
         {
@@ -39,6 +50,7 @@
             {
                 <tr>
                     <td><a href="@($"/invoices/{row.Id}")">@row.Reference</a></td>
+                    <td>@row.Number</td>
                     <td>@row.VendorName</td>
                     <td class="money">@MoneyText.Usd(row.Total)</td>
                     <td>@row.Status</td>
@@ -64,11 +76,13 @@ else if (_invoice is not null)
     private IReadOnlyList<PurchaseOrderVm> _orders = [];
     private SegmentsVm? _segments;
     private bool _busy;
+    private bool _canCreate;
     private string? _error;
 
     protected override async Task OnParametersSetAsync()
     {
         var actor = await CurrentActor.GetAsync();
+        _canCreate = actor.IsInRole(GovErp.Application.Web.Common.Roles.ApClerk);
         _vendors = await Reference.GetVendorsAsync(actor);
         _orders = await Reference.GetPurchaseOrdersAsync(actor);
         _segments = await Reference.GetSegmentsAsync(actor);
@@ -80,21 +94,6 @@ else if (_invoice is not null)
         {
             _list = await InvoiceService.ListAsync(actor);
         }
-    }
-
-    private async Task NewDraftAsync()
-    {
-        var actor = await CurrentActor.GetAsync();
-        await RunAsync(async () =>
-        {
-            var env = new CommandEnvelope(Guid.NewGuid(), null);
-            var date = new DateOnly(2026, 6, 15);
-            var r = await InvoiceService.CreateDraftAsync(new CreateInvoiceCommand(env, $"INV-{env.CommandId:N}"[..12],
-                _vendors[0].Id, date, date, date, new DateOnly(2026, 7, 15), 1m, null,
-                [new DistributionCommand("101-6000-53100", 1m, null)]), actor);
-            if (!r.IsAccepted) { _error = r.Reason; return; }
-            Navigation.NavigateTo($"/invoices/{r.Value!.Id}", forceLoad: true);
-        });
     }
 
     private async Task PresetAsync(InvoicePreset preset)
@@ -123,7 +122,7 @@ else if (_invoice is not null)
         {
             var r = await action(actor);
             if (r.Status == CommandStatus.Conflict && r.Retryable) { _error = "Data changed — reload the document."; }
-            else if (r.Status == CommandStatus.Forbidden) { _error = "Not allowed."; }
+            else if (r.Status == CommandStatus.Forbidden) { _error = $"Not allowed: {r.Reason}"; }
             else if (!r.IsAccepted) { _error = r.Reason; }
             else { _error = null; }
             if (Id is { } id) { _invoice = await InvoiceService.GetAsync(id, actor); }

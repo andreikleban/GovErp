@@ -29,6 +29,5 @@ public static class Presets
 
     private static CreateInvoiceCommand Command(CommandEnvelope envelope, Guid vendorId, string prefix, decimal total, string? poRef,
         params DistributionCommand[] lines) =>
-        new(envelope, $"{prefix}-{envelope.CommandId:N}"[..16], vendorId, DocumentDate, DocumentDate, DocumentDate, DueDate,
-            total, poRef, lines);
+        new(envelope, "", vendorId, DocumentDate, DocumentDate, DocumentDate, DueDate, total, poRef, lines, GeneratedNumberPrefix: prefix);
 }

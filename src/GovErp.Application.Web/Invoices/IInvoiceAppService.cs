@@ -9,6 +9,8 @@ public interface IInvoiceAppService
 {
     Task<IReadOnlyList<InvoiceListItemVm>> ListAsync(ActorContext actor, CancellationToken ct = default);
     Task<InvoiceVm> GetAsync(Guid id, ActorContext actor, CancellationToken ct = default);
+    /// <summary>Номер поставщика, который получит новый документ, если его не заменить (без резервирования).</summary>
+    Task<string> SuggestNumberAsync(DateOnly postingDate, ActorContext actor, CancellationToken ct = default);
     Task<CommandResult<InvoiceVm>> CreateDraftAsync(CreateInvoiceCommand cmd, ActorContext actor, CancellationToken ct = default);
     Task<CommandResult<InvoiceVm>> CreateFromPresetAsync(InvoicePreset preset, CommandEnvelope envelope, ActorContext actor, CancellationToken ct = default);
     Task<CommandResult<InvoiceVm>> UpdateDraftAsync(UpdateInvoiceCommand cmd, ActorContext actor, CancellationToken ct = default);

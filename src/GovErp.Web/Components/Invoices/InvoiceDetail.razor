@@ -12,11 +12,15 @@
 @inject IPostingAppService Posting
 @inject CurrentActor CurrentActor
 
-<h1>Invoice @_edit.Number</h1>
+<h1>Invoice @_invoice.Reference</h1>
 <p class="note">Document status: @_invoice.Status</p>
 @if (Message is not null) { <p class="error">@Message</p> }
-<InvoiceEditor Edit="_edit" Vendors="Vendors" PurchaseOrders="PurchaseOrders" Segments="Segments" ReadOnly="@(_invoice.Status != "Draft")" />
-<InvoiceActions InvoiceId="_invoice.Id" Busy="Busy" CanEdit="@(_invoice.Status == "Draft")" CanPost="CanPost" CanWithdraw="CanWithdraw" CanReturn="CanReturn"
+@if (_invoice.Status == "Draft" && !CanEdit && _actorLoaded)
+{
+    <p class="note">Only the author edits and submits this draft. You can run Validate to see the current result.</p>
+}
+<InvoiceEditor Edit="_edit" Vendors="Vendors" PurchaseOrders="PurchaseOrders" Segments="Segments" ReadOnly="@(!CanEdit)" />
+<InvoiceActions InvoiceId="_invoice.Id" Busy="Busy" CanEdit="CanEdit" CanPost="CanPost" CanWithdraw="CanWithdraw" CanReturn="CanReturn"
                 OnSave="SaveAsync" OnValidate="ValidateAsync" OnSubmit="SubmitAsync" OnPost="PostAsync" OnWithdraw="WithdrawAsync" OnReturnToDraft="ReturnAsync" />
 <div class="tabs" role="tablist">
     <button type="button" role="tab" aria-selected="@(_tab == "invoice" ? "true" : "false")" @onclick="ShowInvoice">Invoice</button>
@@ -60,11 +64,15 @@ else
     private IReadOnlyList<AuditEventVm> _events = [];
     private IReadOnlyList<PreviewLineVm> _journal = [];
     private bool _isPoster;
+    private bool _isClerk;
+    private bool _actorLoaded;
     private Guid _userId;
     private string _tab = "invoice";
 
     private bool CanPost => _isPoster && _invoice.Status == "Approved" && (_invoice.LastEvaluation?.Capabilities.CanPost ?? false);
     private bool IsAuthor => _userId == _invoice.CreatedBy;
+    /// <summary>Сервер разрешает правку и Submit только автору-AP clerk в Draft; UI не предлагает то, что заведомо будет отклонено.</summary>
+    private bool CanEdit => _actorLoaded && _isClerk && IsAuthor && _invoice.Status == "Draft";
     private bool CanWithdraw => IsAuthor && _invoice.Status is "Submitted" or "Approved";
     private bool CanReturn => IsAuthor && _invoice.Status == "Rejected";
     private string VendorStatus => Vendors.FirstOrDefault(v => v.Id == _invoice.VendorId)?.Status ?? "";
@@ -79,8 +87,16 @@ else
     {
         if (!ReferenceEquals(_invoice, Invoice))
         {
+            // Форму пересобираем только когда документ на сервере действительно изменился (другой документ,
+            // новая версия содержания или статус). После отказа Save версия прежняя, и введённые правки остаются в форме.
+            var documentChanged = _invoice is null || _invoice.Id != Invoice.Id
+                || _invoice.ContentVersion != Invoice.ContentVersion || _invoice.Status != Invoice.Status;
             _invoice = Invoice;
-            _edit = EditorModel.From(Invoice);
+            if (documentChanged)
+            {
+                _edit = EditorModel.From(Invoice);
+            }
+
             _commandId = Guid.NewGuid();
             _selected = Invoice.LastEvaluationRef;
             _tab = "invoice";
@@ -99,6 +115,8 @@ else
         var actor = await CurrentActor.GetAsync();
         _userId = actor.UserKey;
         _isPoster = actor.IsInAnyRole(Roles.Posters);
+        _isClerk = actor.IsInRole(Roles.ApClerk);
+        _actorLoaded = true;
         _history = await Explanations.GetEvaluationHistoryAsync(_invoice.Id, actor);
         _events = await Explanations.GetAuditTrailAsync(_invoice.Id, actor);
         _journal = _invoice.Status == "Posted"

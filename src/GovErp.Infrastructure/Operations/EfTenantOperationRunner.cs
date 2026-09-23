@@ -87,6 +87,12 @@ public sealed class EfTenantOperationRunner(IServiceScopeFactory scopes) : ITena
             {
                 return CommandResult<T>.Refused(default, ex.Message);
             }
+            catch (ArgumentException ex)
+            {
+                // Значения домена (коды счетов, Money, обязательные строки) проверяют ввод конструктором.
+                // Неверный ввод формы — отказ с откатом, а не необработанное исключение в UI.
+                return CommandResult<T>.Refused(default, InputProblem(ex));
+            }
         }
     }
 
@@ -117,6 +123,10 @@ public sealed class EfTenantOperationRunner(IServiceScopeFactory scopes) : ITena
     private static bool IsTransient(Exception ex) =>
         ex is DbUpdateConcurrencyException
         || ex.GetBaseException() is SqlException { Number: 1205 or 3960 };   // deadlock victim, snapshot/serializable conflict
+
+    /// <summary>Сообщение без технического хвоста « (Parameter 'x')».</summary>
+    private static string InputProblem(ArgumentException ex) =>
+        ex.ParamName is { } name ? ex.Message.Replace($" (Parameter '{name}')", "", StringComparison.Ordinal) : ex.Message;
 
     private static string? UniqueIndexOf(DbUpdateException ex) =>
         ex.GetBaseException() is SqlException { Number: 2601 or 2627 } sql ? sql.Message : null;

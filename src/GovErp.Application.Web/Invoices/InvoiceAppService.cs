@@ -40,6 +40,11 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
             return await ws.ToVmAsync(await ws.LoadAsync(id, token), token, withRowVersion: true);
         }, ct);
 
+    public Task<string> SuggestNumberAsync(DateOnly postingDate, ActorContext actor, CancellationToken ct = default) =>
+        runner.QueryAsync(actor, async (sp, token) =>
+            IInvoiceNumbering.GeneratedNumber(IInvoiceNumbering.SuggestedPrefix,
+                await sp.GetRequiredService<IInvoiceNumbering>().PeekAsync(FiscalYear.FromDate(postingDate), token)), ct);
+
     public Task<CommandResult<InvoiceVm>> CreateDraftAsync(CreateInvoiceCommand cmd, ActorContext actor, CancellationToken ct = default) =>
         runner.ExecuteAsync(actor, cmd.Envelope, "CreateInvoice", cmd, async (sp, token) =>
         {
@@ -60,17 +65,35 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
                 return CommandResult<InvoiceVm>.Refused(null, $"Purchase order {cmd.PoRef} not found.");
             }
 
+            // Дубликат номера поставщика проверяется до выдачи регистрационного номера: пока ничего не изменено,
+            // отказ можно вернуть. Гонку двух одинаковых номеров закрывает уникальный индекс (runner → Refused).
+            if (cmd.GeneratedNumberPrefix is null
+                && await ws.Invoices.ExistsDuplicateAsync(cmd.VendorId, VendorInvoice.NormalizeNumber(cmd.Number), null, token))
+            {
+                return CommandResult<InvoiceVm>.Refused(null, "An invoice with this number already exists for this vendor.");
+            }
+
+            // Регистрационный номер — последним шагом перед созданием: блокировка счётчика держится до commit,
+            // поэтому её окно короткое, а любой отказ ниже (исключением) откатывает и номер — нумерация без пропусков.
+            var fiscalYear = FiscalYear.FromDate(cmd.PostingDate);
+            var sequence = await sp.GetRequiredService<IInvoiceNumbering>().NextAsync(fiscalYear, token);
+            var number = cmd.GeneratedNumberPrefix is { } prefix
+                ? IInvoiceNumbering.GeneratedNumber(prefix, sequence)
+                : cmd.Number;
+
             // Конструктор и AddDistribution проверяют инварианты; даты вне правила 6 отклонит конвейер (VALIDATION_INPUT).
-            var invoice = new VendorInvoice(cmd.Number, cmd.VendorId, cmd.InvoiceDate, cmd.ServiceDate, cmd.PostingDate, cmd.DueDate,
-                Money.Of(cmd.Total), cmd.PoRef, actor.UserId, ws.Clock.Now);
+            var invoice = new VendorInvoice(number, cmd.VendorId, cmd.InvoiceDate, cmd.ServiceDate, cmd.PostingDate, cmd.DueDate,
+                Money.Of(cmd.Total), cmd.PoRef, actor.UserId, ws.Clock.Now, IInvoiceNumbering.Reference(fiscalYear, sequence));
             foreach (var d in cmd.Distributions)
             {
                 invoice.AddDistribution(AccountCode.Parse(d.Account), Money.Of(d.Amount), d.PoLineNo);
             }
 
-            if (await ws.Invoices.ExistsDuplicateAsync(invoice.VendorId, invoice.NormalizedInvoiceNumber, null, token))
+            if (cmd.GeneratedNumberPrefix is not null
+                && await ws.Invoices.ExistsDuplicateAsync(invoice.VendorId, invoice.NormalizedInvoiceNumber, null, token))
             {
-                return CommandResult<InvoiceVm>.Refused(null, "An invoice with this number already exists for this vendor.");
+                // Сгенерированный номер уже занят вручную введённым: счётчик сдвинут, поэтому отказ исключением (откат номера).
+                throw new PayablesException("An invoice with this number already exists for this vendor.");
             }
 
             await ws.Invoices.AddAsync(invoice, token);
@@ -164,7 +187,7 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
             if (!draft.Capabilities.CanSubmit)
             {
                 ws.Audit.Record(actor, "InvoiceSubmitRefused", invoice.Reference, draft.Id.ToString(), new { Overall = draft.Overall.ToString() });
-                return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), InvoiceWorkspace.ReasonOf(draft));
+                return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), InvoiceWorkspace.ReasonOf(draft, Severity.HardStop));
             }
 
             var holds = await ws.HoldAsync(invoice, draft.InputSnapshot, token);

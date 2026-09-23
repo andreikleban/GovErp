@@ -23,5 +23,5 @@ public static class InvoiceMapping
         last is null ? null : EvaluationMapping.ToVm(last));
 
     public static InvoiceListItemVm ToListItem(VendorInvoice invoice, string vendorName, string? lastOverall) =>
-        new(invoice.Id, invoice.Reference, vendorName, invoice.Total.Amount, invoice.Status.ToString(), lastOverall, invoice.PostingDate);
+        new(invoice.Id, invoice.Reference, invoice.Number, vendorName, invoice.Total.Amount, invoice.Status.ToString(), lastOverall, invoice.PostingDate);
 }

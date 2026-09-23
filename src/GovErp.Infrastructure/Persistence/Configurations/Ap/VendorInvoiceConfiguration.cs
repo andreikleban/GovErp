@@ -25,7 +25,9 @@ public sealed class VendorInvoiceConfiguration : IEntityTypeConfiguration<Vendor
         b.Property(x => x.RuleFingerprint).HasMaxLength(64);
         b.Property(x => x.ChangeStamp);
         b.Property<byte[]>("RowVersion").IsRowVersion();
-        b.Ignore(x => x.Reference).Ignore(x => x.IsPoBacked).Ignore(x => x.DistributedTotal);
+        b.Property(x => x.Reference).HasMaxLength(40);
+        b.HasIndex(x => x.Reference).IsUnique();
+        b.Ignore(x => x.IsPoBacked).Ignore(x => x.DistributedTotal);
         b.PrimitiveCollection(x => x.ReservationRefs);
         b.PrimitiveCollection(x => x.EncumbranceClaimRefs);
         b.PrimitiveCollection(x => x.PoBillingClaimRefs);

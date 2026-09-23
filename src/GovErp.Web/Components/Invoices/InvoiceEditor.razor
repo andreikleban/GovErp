@@ -4,7 +4,7 @@
 
 <EditForm Model="Edit">
     <div>
-        <label>Number <InputText @bind-Value="Edit.Number" disabled="true" /></label>
+        <label>Vendor invoice no. <InputText @bind-Value="Edit.Number" disabled="@(!NumberEditable)" /></label>
         <label>Document date <InputDate @bind-Value="Edit.DocumentDate" disabled="@ReadOnly" /></label>
         <label>Due date <InputDate @bind-Value="Edit.DueDate" disabled="@ReadOnly" /></label>
         <label>Vendor
@@ -31,4 +31,6 @@
     [Parameter] public IReadOnlyList<PurchaseOrderVm> PurchaseOrders { get; set; } = [];
     [Parameter] public SegmentsVm? Segments { get; set; }
     [Parameter] public bool ReadOnly { get; set; }
+    /// <summary>Номер вводится только при создании: после него это идентичность для проверки дубликатов.</summary>
+    [Parameter] public bool NumberEditable { get; set; }
 }

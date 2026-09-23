@@ -44,5 +44,5 @@
     [Parameter] public IReadOnlyList<PurchaseOrderVm> PurchaseOrders { get; set; } = [];
     [Parameter] public bool ReadOnly { get; set; }
 
-    private void AddLine() => Edit.Lines.Add(new LineModel { Fund = "101", Department = "6000", Object = "53100", Amount = 0m });
+    private void AddLine() => Edit.Lines.Add(LineModel.Default());
 }

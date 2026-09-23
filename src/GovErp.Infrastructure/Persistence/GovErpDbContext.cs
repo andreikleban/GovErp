@@ -29,6 +29,7 @@ public sealed class GovErpDbContext(DbContextOptions<GovErpDbContext> options) :
     public DbSet<ExplanationRecord> Explanations => Set<ExplanationRecord>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<CommandReceipt> CommandReceipts => Set<CommandReceipt>();
+    public DbSet<DocumentCounter> DocumentCounters => Set<DocumentCounter>();
 
     protected override void OnModelCreating(ModelBuilder b) =>
         b.ApplyConfigurationsFromAssembly(typeof(GovErpDbContext).Assembly,
