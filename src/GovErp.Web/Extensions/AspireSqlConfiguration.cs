@@ -22,7 +22,7 @@ public static class AspireSqlConfiguration
         var server = Required(parsed, "Server", "Data Source");
         var user = Required(parsed, "User ID", "User Id", "UID");
         var password = Required(parsed, "Password", "Pwd");
-        var masterPassword = configuration["Startup:MasterRuntimePassword"] ?? "GovErp!MasterRo2026";
+        var masterPassword = configuration["Startup:MasterRuntimePassword"] ?? "1!Qwertyui";
 
         configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {

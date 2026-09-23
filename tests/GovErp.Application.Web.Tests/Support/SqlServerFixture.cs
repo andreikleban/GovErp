@@ -22,8 +22,8 @@ public sealed class SqlServerFixture : IAsyncLifetime
 {
     private const string Image = "mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04";
     private const string RuntimeUser = "goverp_test";
-    private const string RuntimePassword = "GovErp!Test2026";
-    private readonly MsSqlContainer _sql = new MsSqlBuilder(Image).Build();
+    private const string DemoPassword = "1!Qwertyui";
+    private readonly MsSqlContainer _sql = new MsSqlBuilder(Image).WithPassword(DemoPassword).Build();
 
     private AsyncServiceScope _appScope;
 
@@ -50,14 +50,14 @@ public sealed class SqlServerFixture : IAsyncLifetime
             ["Startup:MigrationConnectionTemplate"] = Template(sa.UserID, sa.Password),
             ["Startup:MasterDatabase"] = "GovErp_Master",
             ["Startup:MasterRuntimeLogin"] = "goverp_master_ro",
-            ["Startup:MasterRuntimePassword"] = "GovErp!MasterRo2026",
+            ["Startup:MasterRuntimePassword"] = "1!Qwertyui",
             ["Startup:DemoResetAllowlist:0"] = "GovErp_Springfield",
             ["ConnectionStrings:Master"] = string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                Template("goverp_master_ro", "GovErp!MasterRo2026"), "GovErp_Master"),
+                Template("goverp_master_ro", "1!Qwertyui"), "GovErp_Master"),
             ["Tenancy:RuntimeConnectionTemplate"] = $"Server={sa.DataSource};Database={{0}};User Id={{1}};Password={{2}};TrustServerCertificate=True",
-            ["Tenancy:Credentials:springfield:User"] = "goverp_springfield", ["Tenancy:Credentials:springfield:Password"] = "GovErp!Springfield2026",
-            ["Tenancy:Credentials:shelbyville:User"] = "goverp_shelbyville", ["Tenancy:Credentials:shelbyville:Password"] = "GovErp!Shelbyville2026",
-            ["Tenancy:Credentials:test:User"] = RuntimeUser, ["Tenancy:Credentials:test:Password"] = RuntimePassword,
+            ["Tenancy:Credentials:springfield:User"] = "goverp_springfield", ["Tenancy:Credentials:springfield:Password"] = "1!Qwertyui",
+            ["Tenancy:Credentials:shelbyville:User"] = "goverp_shelbyville", ["Tenancy:Credentials:shelbyville:Password"] = "1!Qwertyui",
+            ["Tenancy:Credentials:test:User"] = RuntimeUser, ["Tenancy:Credentials:test:Password"] = DemoPassword,
             ["Clock:BusinessDate"] = "2026-07-15",
         }).Build();
         Configuration = cfg;

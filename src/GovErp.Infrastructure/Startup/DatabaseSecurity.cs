@@ -13,10 +13,10 @@ public static partial class DatabaseSecurity
     {
         RequireIdentifier(database);
         RequireIdentifier(login);
+        ArgumentException.ThrowIfNullOrWhiteSpace(password);   // пустой пароль из недонастроенной конфигурации — ошибка старта, а не открытый логин
         var pwd = password.Replace("'", "''", StringComparison.Ordinal);
         var sql = $"""
-            IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'{login}')
-                CREATE LOGIN [{login}] WITH PASSWORD = N'{pwd}', CHECK_POLICY = OFF;
+            {LoginSql(login, pwd)}
             USE [{database}];
             IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'{login}')
                 CREATE USER [{login}] FOR LOGIN [{login}];
@@ -35,10 +35,10 @@ public static partial class DatabaseSecurity
     {
         RequireIdentifier(database);
         RequireIdentifier(login);
+        ArgumentException.ThrowIfNullOrWhiteSpace(password);   // пустой пароль из недонастроенной конфигурации — ошибка старта, а не открытый логин
         var pwd = password.Replace("'", "''", StringComparison.Ordinal);
         var sql = $"""
-            IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'{login}')
-                CREATE LOGIN [{login}] WITH PASSWORD = N'{pwd}', CHECK_POLICY = OFF;
+            {LoginSql(login, pwd)}
             USE [{database}];
             IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'{login}')
                 CREATE USER [{login}] FOR LOGIN [{login}];
@@ -49,6 +49,17 @@ public static partial class DatabaseSecurity
         await using var command = new SqlCommand(sql, connection);
         await command.ExecuteNonQueryAsync(ct);
     }
+
+    /// <summary>
+    /// Логин создаётся при первом старте, а при следующих получает пароль из текущей конфигурации:
+    /// смена пароля в .env / AppHost применяется к уже существующей базе без ручного ALTER LOGIN.
+    /// </summary>
+    private static string LoginSql(string login, string escapedPassword) => $"""
+        IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'{login}')
+            CREATE LOGIN [{login}] WITH PASSWORD = N'{escapedPassword}', CHECK_POLICY = OFF;
+        ELSE
+            ALTER LOGIN [{login}] WITH PASSWORD = N'{escapedPassword}';
+        """;
 
     /// <summary>Идентификаторы нельзя передать параметром — только проверенные имена.</summary>
     private static void RequireIdentifier(string value)
