@@ -23,7 +23,8 @@
             @foreach (var hold in Holds)
             {
                 <tr>
-                    <td><a href="@($"/rules?rule={Uri.EscapeDataString(hold.RuleId)}")" title="Setup › Rules">@hold.RuleId</a> <span class="note">v@(hold.RuleVersion)</span></td>
+                    <td><a href="@($"/rules?rule={Uri.EscapeDataString(hold.RuleId)}")" title="Setup › Rules">@hold.RuleId</a> <span class="note">v@(hold.RuleVersion)</span>
+                        <button type="button" title="What this rule checks" @onclick="() => _describing = hold.RuleId">?</button></td>
                     <td>@(hold.Line?.ToString() ?? "Header")</td>
                     <td><span class="chip @(hold.OverriddenBy is not null ? "muted" : hold.Severity == "HardStop" ? "bad" : "warn")">@SeverityText(hold.Severity)</span></td>
                     <td>
@@ -57,7 +58,11 @@
     }
 </section>
 
+<RuleDescriptionDialog RuleId="@_describing" OnClose="() => _describing = null" />
+
 @code {
+    private string? _describing;
+
     [Parameter] public EvaluationVm? Evaluation { get; set; }
     /// <summary>Soft Stop, которые текущий пользователь вправе снять (из его очереди).</summary>
     [Parameter] public IReadOnlyList<ApprovalQueueItemVm> Releasable { get; set; } = [];

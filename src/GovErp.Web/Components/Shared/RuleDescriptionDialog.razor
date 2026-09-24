@@ -1,0 +1,173 @@
+@using GovErp.Application.Web.Explanation
+@using GovErp.Application.Web.Reference
+@using GovErp.Application.Web.Reference.Contracts
+@using GovErp.Web.Authentication
+@inject IReferenceAppService Reference
+@inject CurrentActor CurrentActor
+
+@if (RuleId is not null)
+{
+    <div class="modal-backdrop" @onclick="CloseAsync"></div>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="rule-description-title" tabindex="-1"
+         @ref="_dialog" @onkeydown="OnKeyDownAsync">
+        <header class="modal-header">
+            <h2 id="rule-description-title">@(_detail?.Description.Title ?? RuleId) · @RuleId</h2>
+            <button type="button" @onclick="CloseAsync">Close</button>
+        </header>
+        <div class="modal-body">
+            @if (_error is not null)
+            {
+                <p class="error">@_error</p>
+            }
+            else if (_detail is null)
+            {
+                <p class="note">Loading.</p>
+            }
+            else
+            {
+                var d = _detail.Description;
+                var current = _detail.Current;
+                <p class="note">Step @d.Step · @d.StepName
+                    @if (current is not null) { <span> · version @current.Version, @current.Layer layer, effective @current.EffectiveFrom.ToString("yyyy-MM-dd")</span> }
+                </p>
+                <section class="panel">
+                    <h3>What it checks</h3>
+                    <p>@d.Checks</p>
+                    <h3>Facts evaluated</h3>
+                    <ul>@foreach (var fact in d.Facts) { <li>@fact</li> }</ul>
+                    @if (d.Parameters.Count > 0)
+                    {
+                        <h3>Parameters</h3>
+                        <table>
+                            <thead><tr><th>Name</th><th>Current value</th><th>Meaning</th></tr></thead>
+                            <tbody>
+                            @foreach (var p in d.Parameters)
+                            {
+                                <tr><td>@p.Key</td><td>@(current?.Parameters.GetValueOrDefault(p.Key) ?? "—")</td><td>@p.Value</td></tr>
+                            }
+                            </tbody>
+                        </table>
+                    }
+                    <h3>When it fires</h3>
+                    <p>@d.WhenFired</p>
+                    <h3>What to do</h3>
+                    <p>@d.Resolution
+                        @if (current is { OverridableBy.Count: > 0 }) { <span> Overridable by: @string.Join(", ", current.OverridableBy).</span> }
+                    </p>
+                    <h3>Source</h3>
+                    <p>@d.Source</p>
+                    <h3>To confirm with a government finance expert</h3>
+                    <ul>@foreach (var question in d.SmeQuestions) { <li>@question</li> }</ul>
+                </section>
+
+                <section class="panel">
+                    <h3>Explain with AI</h3>
+                    <p class="note">A generated retelling of the description above for the chosen audience. The written description stays authoritative.</p>
+                    <p class="toolbar">
+                        <select @bind="_audience">
+                            @foreach (var audience in Enum.GetValues<ExplanationAudience>()) { <option value="@audience">@audience</option> }
+                        </select>
+                        <button type="button" disabled="@_explaining" @onclick="ExplainAsync">Explain</button>
+                    </p>
+                    @if (_explanation is { } e)
+                    {
+                        <p class="note">@e.Provider@(e.Model is null ? "" : $" · {e.Model}") · @e.PromptVersion
+                            @if (e.FallbackReason is not null) { <span> · fallback: @e.FallbackReason</span> }
+                        </p>
+                        <p style="white-space: pre-line">@e.Text</p>
+                    }
+                </section>
+
+                @if (_detail.Versions.Count > 1)
+                {
+                    <section class="panel">
+                        <h3>Versions</h3>
+                        <table>
+                            <thead><tr><th>Version</th><th>Layer</th><th>Scope</th><th>From</th><th>Parameters</th><th></th></tr></thead>
+                            <tbody>
+                            @foreach (var v in _detail.Versions)
+                            {
+                                <tr>
+                                    <td>@v.Version</td>
+                                    <td>@v.Layer</td>
+                                    <td>@(v.ScopeFund ?? v.ScopeGrant ?? "all")</td>
+                                    <td>@v.EffectiveFrom.ToString("yyyy-MM-dd")</td>
+                                    <td>@string.Join("; ", v.Parameters.Select(p => $"{p.Key}={p.Value}"))</td>
+                                    <td>@if (v.IsCurrent) { <span class="chip ok">Current</span> } else { <span class="chip">History</span> }</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </section>
+                }
+            }
+        </div>
+    </div>
+}
+
+@code {
+    /// <summary>Код правила; null — окно закрыто.</summary>
+    [Parameter] public string? RuleId { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private ElementReference _dialog;
+    private string? _loadedFor;
+    private RuleDetailVm? _detail;
+    private string? _error;
+    private ExplanationAudience _audience = ExplanationAudience.FinanceUser;
+    private ExplanationResult? _explanation;
+    private bool _explaining;
+    private bool _focus;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (RuleId is null || RuleId == _loadedFor)
+        {
+            return;
+        }
+
+        _loadedFor = RuleId;
+        _detail = null;
+        _error = null;
+        _explanation = null;
+        _focus = true;
+        try
+        {
+            _detail = await Reference.GetRuleDetailAsync(RuleId, await CurrentActor.GetAsync());
+        }
+        catch (GovErp.Application.Web.Common.NotFoundException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focus && RuleId is not null)
+        {
+            _focus = false;
+            await _dialog.FocusAsync();
+        }
+    }
+
+    private async Task ExplainAsync()
+    {
+        _explaining = true;
+        try
+        {
+            _explanation = await Reference.ExplainRuleAsync(RuleId!, _audience, await CurrentActor.GetAsync());
+        }
+        finally
+        {
+            _explaining = false;
+        }
+    }
+
+    private Task OnKeyDownAsync(KeyboardEventArgs e) => e.Key == "Escape" ? CloseAsync() : Task.CompletedTask;
+
+    private Task CloseAsync()
+    {
+        _loadedFor = null;
+        return OnClose.InvokeAsync();
+    }
+}

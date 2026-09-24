@@ -64,6 +64,24 @@ public sealed class RuleVersionTests(SqlServerFixture fixture)
     }
 
     [Fact]
+    public async Task Rule_detail_shows_the_description_the_current_version_and_its_history()
+    {
+        var t = await fixture.CreateTenantAsync();
+        var reference = t.Service<IReferenceAppService>();
+        var source = Current(await reference.GetRulesAsync(t.Clerk), "PROCUREMENT_THRESHOLD");
+        (await t.Service<IRuleAppService>().CreateVersionAsync(Raise(source, "30000"), t.FinanceDirector)).IsAccepted.Should().BeTrue();
+
+        var detail = await reference.GetRuleDetailAsync("PROCUREMENT_THRESHOLD", t.Clerk);
+        detail.Description.Title.Should().NotBeNullOrWhiteSpace();
+        detail.Current!.Parameters["threshold"].Should().Be("30000");
+        detail.Versions.Select(v => v.Version).Should().Equal(2, 1);
+
+        var explained = await reference.ExplainRuleAsync("PROCUREMENT_THRESHOLD", Application.Web.Explanation.ExplanationAudience.Auditor, t.Clerk);
+        explained.Text.Should().Contain("threshold = 30000");                // шаблон (провайдер в тестах — Template) видит действующую версию
+        await Assert.ThrowsAsync<Application.Web.Common.NotFoundException>(() => reference.GetRuleDetailAsync("NO_SUCH_RULE", t.Clerk));
+    }
+
+    [Fact]
     public async Task Only_the_finance_director_changes_rules_and_parameters_stay_fixed_by_the_rule()
     {
         var t = await fixture.CreateTenantAsync();

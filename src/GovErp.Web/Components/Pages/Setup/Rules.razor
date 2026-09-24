@@ -43,7 +43,8 @@ else
                 <td>@if (rule.IsCurrent) { <span class="chip ok">Current</span> } else { <span class="chip">History</span> }</td>
                 <td>@string.Join("; ", rule.Parameters.Select(p => $"{p.Key}={p.Value}"))</td>
                 <td>@(rule.OverridableBy.Count == 0 ? "—" : string.Join(", ", rule.OverridableBy))</td>
-                <td>
+                <td class="toolbar">
+                    <button type="button" @onclick="() => _describing = rule.RuleId">Description</button>
                     @if (_canConfigure && rule.IsCurrent && (rule.Parameters.Count > 0 || rule.Severity is not null))
                     {
                         <button type="button" @onclick="() => Open(rule)">New version</button>
@@ -54,6 +55,8 @@ else
         </tbody>
     </table>
 }
+
+<RuleDescriptionDialog RuleId="@_describing" OnClose="() => _describing = null" />
 
 @if (_editing is { } source)
 {
@@ -102,6 +105,7 @@ else
     private RuleSetVm? _set;
     private bool _canConfigure;
     private RuleVm? _editing;
+    private string? _describing;
     private Dictionary<string, string> _parameters = [];
     private string? _severity;
     private DateOnly _effectiveFrom;

@@ -3,6 +3,7 @@ using GovErp.Application.Web.Budget;
 using GovErp.Application.Web.Budget.Contracts;
 using GovErp.Application.Web.Commands;
 using GovErp.Application.Web.Common;
+using GovErp.Application.Web.Explanation;
 using GovErp.Application.Web.Reference.Contracts;
 using GovErp.Application.Web.Tenancy;
 using GovErp.Domain.ChartOfAccounts.Entities;
@@ -17,7 +18,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace GovErp.Application.Web.Reference;
 
 /// <summary>Справочники только на чтение: сегменты, комбинации, правила, поставщики и PO с балансами encumbrance.</summary>
-public sealed class ReferenceAppService(ITenantOperationRunner runner) : IReferenceAppService
+public sealed class ReferenceAppService(ITenantOperationRunner runner, IRuleExplanationGenerator ruleExplanations) : IReferenceAppService
 {
     private static readonly IReadOnlyDictionary<string, string> NoAttributes = new Dictionary<string, string>();
 
@@ -75,6 +76,30 @@ public sealed class ReferenceAppService(ITenantOperationRunner runner) : IRefere
                 .ToList();
             return new RuleSetVm(rules, RuleResolution.Resolve(all, clock.BusinessDate).Fingerprint, RuleResolution.EngineVersion);
         }, ct);
+
+    public Task<RuleDetailVm> GetRuleDetailAsync(string ruleId, ActorContext actor, CancellationToken ct = default) =>
+        runner.QueryAsync(actor, async (sp, token) =>
+        {
+            var description = RuleDescriptions.Find(ruleId) ?? throw new NotFoundException($"Rule {ruleId} is not in the engine's catalog.");
+            var all = await sp.GetRequiredService<IRuleDefinitionRepository>().ListAsync(token);
+            var current = RuleVmMapping.CurrentIds(all, sp.GetRequiredService<IClock>().BusinessDate);
+            var versions = all.Where(r => r.RuleId == ruleId)
+                .OrderBy(r => r.Layer).ThenBy(r => r.ScopeFund, StringComparer.Ordinal).ThenBy(r => r.ScopeGrant, StringComparer.Ordinal)
+                .ThenByDescending(r => r.Version)
+                .Select(r => RuleVmMapping.ToVm(r, current.Contains(r.Id)))
+                .ToList();
+            // Действующая версия общего набора; scoped-версии видны в истории.
+            var applied = versions.FirstOrDefault(v => v.IsCurrent && v.ScopeFund is null && v.ScopeGrant is null)
+                ?? versions.FirstOrDefault(v => v.IsCurrent);
+            return new RuleDetailVm(description, applied, versions);
+        }, ct);
+
+    /// <summary>LLM вызывается вне транзакции и без сохранения: объяснение правила — справка, а не запись решения.</summary>
+    public async Task<ExplanationResult> ExplainRuleAsync(string ruleId, ExplanationAudience audience, ActorContext actor, CancellationToken ct = default)
+    {
+        var detail = await GetRuleDetailAsync(ruleId, actor, ct);
+        return await ruleExplanations.ExplainAsync(detail.Description, detail.Current, audience, ct);
+    }
 
     public Task<IReadOnlyList<VendorVm>> GetVendorsAsync(ActorContext actor, CancellationToken ct = default) =>
         runner.QueryAsync<IReadOnlyList<VendorVm>>(actor, async (sp, token) =>

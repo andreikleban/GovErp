@@ -30,6 +30,7 @@ public static class ExplanationRegistration
         }
 
         services.AddSingleton<TemplateExplanationGenerator>();
+        services.AddSingleton<IRuleExplanationGenerator>(sp => new LlmRuleExplanationGenerator(options, sp.GetService<IChatClient>()));
         services.AddSingleton<IExplanationGenerator>(sp => new LlmExplanationGenerator(
             sp.GetRequiredService<TemplateExplanationGenerator>(),
             options,
