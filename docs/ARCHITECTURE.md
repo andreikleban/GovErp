@@ -119,7 +119,7 @@ Domain.Shared ──► BCL
 | Аутентификация | cookie auth, пользователи и роли в `GovErp_Master`, `PasswordHasher<T>` |
 | LLM | `Microsoft.Extensions.AI`; провайдер из конфигурации (`Template` / `Anthropic` / `OpenAI` / `Ollama`) |
 | Тесты | xUnit, FluentAssertions, Testcontainers, NetArchTest |
-| Развёртывание | Локально: `dotnet run --project src/GovErp.AppHost`. Демо-образ: `docker compose`: `sqlserver` + `web` |
+| Развёртывание | Локально: `dotnet run --project src/GovErp.AppHost`. Демо-стек: `docker compose -f docker/docker-compose.yml up` — образ `klebanab/goverp-web:latest` с Docker Hub (каталог `docker/`). Не запускать Aspire и Compose одновременно, если оба пробрасывают SQL на localhost:1433 |
 
 ---
 

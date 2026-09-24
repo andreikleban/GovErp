@@ -1,6 +1,8 @@
-**/bin
-**/obj
+**
+!artifacts/
+!artifacts/publish/
+!artifacts/publish/GovErp.Web/
+!artifacts/publish/GovErp.Web/**
 .git
 .vs
-**/TestResults
 .env

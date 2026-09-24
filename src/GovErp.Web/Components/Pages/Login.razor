@@ -1,9 +1,11 @@
 @page "/login"
 @attribute [AllowAnonymous]
 @layout MainLayout
+@using GovErp.Infrastructure.Seed
 <PageTitle>Sign in</PageTitle>
 <section class="signin">
     <h1>Sign in</h1>
+    <p class="note">All demo users share the password <strong>@MasterSeed.DemoPassword</strong>.</p>
     @if (Error)
     {
         <p class="error">Invalid user name or password.</p>
