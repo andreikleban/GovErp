@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace GovErp.Infrastructure.Persistence.Configurations.Coa;
 
+/// <summary>
+/// EF Core mapping for a grant.
+/// </summary>
 public sealed class GrantConfiguration : IEntityTypeConfiguration<Grant>
 {
     public void Configure(EntityTypeBuilder<Grant> b)

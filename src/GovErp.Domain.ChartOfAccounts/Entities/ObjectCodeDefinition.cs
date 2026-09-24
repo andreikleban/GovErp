@@ -1,6 +1,8 @@
 namespace GovErp.Domain.ChartOfAccounts.Entities;
 
-/// <summary>Reference entry of an object code: expense / asset / liability / budgetary account.</summary>
+/// <summary>
+/// Reference entry of an object code: expense / asset / liability / budgetary account.
+/// </summary>
 public sealed class ObjectCodeDefinition
 {
     public ObjectCode Code { get; private set; }

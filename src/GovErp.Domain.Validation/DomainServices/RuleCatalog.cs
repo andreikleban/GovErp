@@ -3,7 +3,9 @@ using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.DomainServices;
 
-/// <summary>Rules known to the code. A definition for steps 1–6 without an implementation here is a configuration error.</summary>
+/// <summary>
+/// Rules known to the code. A definition for steps 1–6 without an implementation here is a configuration error.
+/// </summary>
 public sealed class RuleCatalog
 {
     public const string ApprovalRouteRuleId = "APPROVAL_ROUTE";
@@ -31,10 +33,14 @@ public sealed class RuleCatalog
 
     public IValidationRule? Find(string ruleId) => _byId.GetValueOrDefault(ruleId);
 
-    /// <summary>The meaning of a rule parameter as the code declares it; null when the code does not know the parameter.</summary>
+    /// <summary>
+    /// The meaning of a rule parameter as the code declares it; null when the code does not know the parameter.
+    /// </summary>
     public ParameterSpec? ParameterOf(string ruleId, string name) =>
         _parameters.GetValueOrDefault(ruleId)?.FirstOrDefault(spec => spec.Name == name);
 
-    /// <summary>All implemented rules and the route parameters are mandatory: their absence from the set is a refusal, not a silent skip.</summary>
+    /// <summary>
+    /// All implemented rules and the route parameters are mandatory: their absence from the set is a refusal, not a silent skip.
+    /// </summary>
     public IReadOnlyCollection<string> MandatoryRuleIds => _byId.Keys.Append(ApprovalRouteRuleId).ToArray();
 }

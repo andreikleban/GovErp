@@ -3,6 +3,9 @@ using OllamaSharp;
 
 namespace GovErp.Infrastructure.Explanation.Providers;
 
+/// <summary>
+/// Registers Ollama as an explanation provider.
+/// </summary>
 public static class OllamaRegistration
 {
     public static void Add(IServiceCollection services, ExplanationOptions options)

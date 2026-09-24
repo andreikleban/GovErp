@@ -1,5 +1,10 @@
+using GovErp.Domain.ChartOfAccounts.Exceptions;
+
 namespace GovErp.Domain.ChartOfAccounts.Entities;
 
+/// <summary>
+/// A grant: its period, allowed departments and objects, and status.
+/// </summary>
 public sealed class Grant
 {
     public GrantCode Code { get; private set; }
@@ -7,9 +12,13 @@ public sealed class Grant
     public string Sponsor { get; private set; }
     public bool IsFederal { get; private set; }
     public DatePeriod Period { get; private set; }
-    /// <summary>Empty means no restriction.</summary>
+    /// <summary>
+    /// Empty means no restriction.
+    /// </summary>
     public IReadOnlyList<DepartmentCode> AllowedDepartments { get; private set; }
-    /// <summary>Empty means no restriction.</summary>
+    /// <summary>
+    /// Empty means no restriction.
+    /// </summary>
     public IReadOnlyList<ObjectCode> AllowableObjects { get; private set; }
     public GrantStatus Status { get; private set; }
 
@@ -23,7 +32,7 @@ public sealed class Grant
         ArgumentNullException.ThrowIfNull(allowedDepartments);
         if (allowedDepartments.Any(item => item is null))
         {
-            throw new ArgumentException("Departments cannot contain null.", nameof(allowedDepartments));
+            throw new InvalidValueException(nameof(allowedDepartments), ChartOfAccountsErrors.NullDepartment);
         }
         Code = code;
         Name = name;
@@ -35,7 +44,7 @@ public sealed class Grant
         ArgumentNullException.ThrowIfNull(allowableObjects);
         if (allowableObjects.Any(item => item is null))
         {
-            throw new ArgumentException("Objects cannot contain null.", nameof(allowableObjects));
+            throw new InvalidValueException(nameof(allowableObjects), ChartOfAccountsErrors.NullObject);
         }
         AllowableObjects = Array.AsReadOnly(allowableObjects.ToArray());
         Status = status;

@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace GovErp.Infrastructure.Persistence.Configurations.Validation;
 
+/// <summary>
+/// EF Core mapping for a rule definition.
+/// </summary>
 public sealed class RuleDefinitionConfiguration : IEntityTypeConfiguration<RuleDefinition>
 {
     public void Configure(EntityTypeBuilder<RuleDefinition> b)

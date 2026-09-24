@@ -1,6 +1,9 @@
 using GovErp.Domain.Ledger.Exceptions;
 namespace GovErp.Domain.Ledger.Entities;
 
+/// <summary>
+/// Opening actuals and encumbered amounts on a date inside the budget year.
+/// </summary>
 public sealed class OpeningBalance
 {
     public Guid Id { get; private set; } = Guid.NewGuid();
@@ -14,8 +17,8 @@ public sealed class OpeningBalance
     public OpeningBalance(AccountCode account, FiscalYear fiscalYear, DateOnly asOfDate, Money initialActuals, Money initialEncumbered, string sourceReference)
     {
         ArgumentNullException.ThrowIfNull(account); ArgumentException.ThrowIfNullOrWhiteSpace(sourceReference);
-        if (fiscalYear.Year is < 2 or > 9999 || !fiscalYear.Contains(asOfDate)) throw new LedgerException("Opening date must belong to the budget year.");
-        if (initialActuals.IsNegative || initialEncumbered.IsNegative) throw new LedgerException("Opening balances cannot be negative.");
+        if (fiscalYear.Year is < 2 or > 9999 || !fiscalYear.Contains(asOfDate)) throw new LedgerException(LedgerErrors.OpeningDateOutsideYear);
+        if (initialActuals.IsNegative || initialEncumbered.IsNegative) throw new LedgerException(LedgerErrors.NegativeOpeningBalance);
         Account = account; FiscalYear = fiscalYear; AsOfDate = asOfDate; InitialActuals = initialActuals; InitialEncumbered = initialEncumbered; SourceReference = sourceReference;
     }
 }

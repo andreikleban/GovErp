@@ -303,6 +303,22 @@ public class VendorInvoiceTests
     }
 
     [Fact]
+    public void Payment_is_recorded_once_and_only_when_the_handoff_is_ready()
+    {
+        var invoice = Submitted();
+        Approve(invoice);
+        Post(invoice);
+        var due = invoice.DueDate;
+        FluentActions.Invoking(() => invoice.RecordPayment(true, due.AddDays(-1), At)).Should().Throw<PayablesException>();
+        invoice.RecordPayment(true, due, At);
+        invoice.PaidAt.Should().Be(At);
+        invoice.Status.Should().Be(InvoiceStatus.Posted);
+        invoice.ReadyForPaymentHandoff(true, due).Should().BeFalse();
+        FluentActions.Invoking(() => invoice.RecordPayment(true, due, At)).Should().Throw<PayablesException>()
+            .Which.Problem.Code.Should().Be(PayablesErrors.AlreadyPaid);
+    }
+
+    [Fact]
     public void Registered_reference_is_kept_and_blank_reference_is_rejected()
     {
         new VendorInvoice("V-1", VendorId, Date, Date, Date, Date.AddDays(30), Money.Of(10), null, Author, At, "AP-2026-000001")

@@ -2,6 +2,9 @@ using GovErp.Domain.Ledger.Exceptions;
 
 namespace GovErp.Domain.Ledger.Entities;
 
+/// <summary>
+/// One month of a fiscal year, open or closed for posting.
+/// </summary>
 public sealed class FiscalPeriod
 {
     public int Year { get; private set; }
@@ -12,7 +15,7 @@ public sealed class FiscalPeriod
     {
         if (month is < 1 or > 12 || year is < 1 or > 9999)
         {
-            throw new LedgerException($"Month {month} is out of range.");
+            throw new LedgerException(LedgerErrors.MonthOutOfRange, ("month", month));
         }
 
         Year = year;
@@ -28,7 +31,7 @@ public sealed class FiscalPeriod
     {
         if (!IsOpen)
         {
-            throw new LedgerException($"Period {Year}-{Month:00} is already closed.");
+            throw new LedgerException(LedgerErrors.PeriodAlreadyClosed, ("period", $"{Year}-{Month:00}"));
         }
 
         Status = PeriodStatus.Closed;

@@ -2,6 +2,9 @@ using GovErp.Domain.ChartOfAccounts.Entities;
 
 namespace GovErp.Domain.ChartOfAccounts.Repositories;
 
+/// <summary>
+/// Collection of account combinations.
+/// </summary>
 public interface IAccountCombinationRepository
 {
     Task<AccountCombination?> FindAsync(AccountCode code, CancellationToken ct = default);

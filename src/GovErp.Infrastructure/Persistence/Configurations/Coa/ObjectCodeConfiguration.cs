@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace GovErp.Infrastructure.Persistence.Configurations.Coa;
 
+/// <summary>
+/// EF Core mapping for an object code.
+/// </summary>
 public sealed class ObjectCodeConfiguration : IEntityTypeConfiguration<ObjectCodeDefinition>
 {
     public void Configure(EntityTypeBuilder<ObjectCodeDefinition> b)

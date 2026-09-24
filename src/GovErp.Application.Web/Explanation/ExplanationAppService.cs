@@ -10,7 +10,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace GovErp.Application.Web.Explanation;
 
-/// <summary>Evaluation explanations. Generation (network, LLM) runs before and outside the transaction (consistency §4); the transaction only stores the result.</summary>
+/// <summary>
+/// Evaluation explanations. Generation (network, LLM) runs before and outside the transaction (consistency §4); the transaction only stores the result.
+/// </summary>
 public sealed class ExplanationAppService(ITenantOperationRunner runner, IExplanationGenerator generator) : IExplanationAppService
 {
     public async Task<CommandResult<ExplanationVm>> ExplainAsync(Guid evaluationId, ExplanationAudience audience, CommandEnvelope envelope,
@@ -19,7 +21,7 @@ public sealed class ExplanationAppService(ITenantOperationRunner runner, IExplan
         var record = await runner.QueryAsync(actor, (sp, token) => sp.GetRequiredService<IEvaluationRecordRepository>().FindAsync(evaluationId, token), ct);
         if (record is null)
         {
-            return CommandResult<ExplanationVm>.NotFound($"Evaluation {evaluationId} not found.");
+            return CommandResult<ExplanationVm>.NotFound(AppErrors.EvaluationNotFound, ("id", evaluationId));
         }
 
         var result = await generator.ExplainAsync(record, audience, ct);   // network: before and outside the transaction
@@ -40,7 +42,9 @@ public sealed class ExplanationAppService(ITenantOperationRunner runner, IExplan
             (await sp.GetRequiredService<IExplanationRepository>().ListByEvaluationAsync(evaluationId, token))
                 .Select(ExplanationMapping.ToVm).ToList(), ct);
 
-    /// <summary>Actor names use the same logic as Audit (Tenancy.TenantUserNaming): cheap at the demo tenant size.</summary>
+    /// <summary>
+    /// Actor names use the same logic as Audit (Tenancy.TenantUserNaming): cheap at the demo tenant size.
+    /// </summary>
     public Task<IReadOnlyList<EvaluationVm>> GetEvaluationHistoryAsync(Guid invoiceId, ActorContext actor, CancellationToken ct = default) =>
         runner.QueryAsync<IReadOnlyList<EvaluationVm>>(actor, async (sp, token) =>
         {
@@ -60,6 +64,6 @@ public sealed class ExplanationAppService(ITenantOperationRunner runner, IExplan
         }, ct);
 
     private static async Task<string> ReferenceOfAsync(IServiceProvider sp, Guid invoiceId, CancellationToken ct) =>
-        (await sp.GetRequiredService<IVendorInvoiceRepository>().FindAsync(invoiceId, ct) ?? throw new NotFoundException($"Invoice {invoiceId} not found."))
+        (await sp.GetRequiredService<IVendorInvoiceRepository>().FindAsync(invoiceId, ct) ?? throw new NotFoundException(AppErrors.InvoiceNotFound, ("id", invoiceId)))
             .Reference;
 }

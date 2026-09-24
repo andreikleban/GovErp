@@ -56,7 +56,9 @@ public static class OutcomeAggregation
             && SameEvidence(previous.Inputs, current.Inputs);
     }
 
-    /// <summary>An override is granted for specific figures: if the inputs changed, it is a new exception, not the old one.</summary>
+    /// <summary>
+    /// An override is granted for specific figures: if the inputs changed, it is a new exception, not the old one.
+    /// </summary>
     private static bool SameEvidence(IReadOnlyDictionary<string, string> a, IReadOnlyDictionary<string, string> b) =>
         a.Count == b.Count && a.All(pair => b.TryGetValue(pair.Key, out var value) && value == pair.Value);
 }

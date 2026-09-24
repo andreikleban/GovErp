@@ -43,7 +43,9 @@ internal sealed class RuleStepRunner
         return (outcomes, steps);
     }
 
-    /// <summary>Each definition gets the lines of the scopes where it is in force, in a stable order.</summary>
+    /// <summary>
+    /// Each definition gets the lines of the scopes where it is in force, in a stable order.
+    /// </summary>
     private static IReadOnlyList<(RuleDefinition Definition, ValidationSubject Scoped)> Assign(ValidationSubject subject, EffectiveRuleSet rules)
     {
         var lines = new Dictionary<RuleDefinition, List<DistributionSnapshot>>(ReferenceEqualityComparer.Instance);

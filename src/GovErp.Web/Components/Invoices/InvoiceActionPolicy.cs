@@ -44,7 +44,9 @@ public sealed partial class InvoiceActionPolicy
     private IEnumerable<OutcomeVm> OpenSoftStops => Last?.Outcomes.Where(o => o.Severity == "SoftStop" && o.OverriddenBy is null) ?? [];
     private bool HasOpenHolds => Last?.Outcomes.Any(o => o.Severity is "SoftStop" or "HardStop" && o.OverriddenBy is null) == true;
 
-    /// <summary>In-place editing of the header and lines: only the author clerk and only in Draft; a new document: any clerk.</summary>
+    /// <summary>
+    /// In-place editing of the header and lines: only the author clerk and only in Draft; a new document: any clerk.
+    /// </summary>
     public string? Edit =>
         !_isClerk ? "Only AP clerks edit invoices."
         : IsNew ? null
@@ -109,6 +111,15 @@ public sealed partial class InvoiceActionPolicy
         : Status != "Rejected" ? $"Only a rejected invoice returns to draft; this invoice is {Status}."
         : null;
 
+    public string? Pay =>
+        IsNew ? SaveFirst
+        : !_isPoster ? $"{Posters} records a payment."
+        : Status != "Posted" ? $"Only a posted invoice is paid; this invoice is {Status}."
+        : _invoice!.PaidAt is not null ? "This invoice is already paid."
+        : _invoice.PaymentHold ? "A payment hold is on."
+        : !_invoice.ReadyForPaymentHandoff ? "Payment waits until the vendor is active and the due date is on or before the business date."
+        : null;
+
     public string? PaymentHold =>
         IsNew ? SaveFirst
         : !_isPoster ? $"{Posters} holds or releases payment."
@@ -124,7 +135,9 @@ public sealed partial class InvoiceActionPolicy
         : IsAuthor ? "The author cannot approve or reject their own invoice (separation of duties)."
         : "No approval step on this invoice is waiting for you.";
 
-    /// <summary>«BudgetOfficer» → «Budget Officer».</summary>
+    /// <summary>
+    /// «BudgetOfficer» → «Budget Officer».
+    /// </summary>
     public static string RoleLabel(string role) => WordBoundary().Replace(role, "$1 $2");
 
     [GeneratedRegex("([a-z])([A-Z])")]

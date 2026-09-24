@@ -3,6 +3,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GovErp.Infrastructure.Persistence;
 
+/// <summary>
+/// Stores command receipts in the ProcessedCommands table.
+/// </summary>
 public sealed class EfCommandReceipts(GovErpDbContext db) : ICommandReceipts
 {
     public Task<CommandReceipt?> FindAsync(Guid commandId, CancellationToken ct = default) =>

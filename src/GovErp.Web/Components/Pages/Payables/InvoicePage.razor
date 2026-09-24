@@ -32,7 +32,7 @@ else if (Id is null ? _draft is not null : _invoice is not null)
 {
     <InvoiceCard Invoice="_invoice" Draft="_draft" Vendors="_vendors" PurchaseOrders="_orders" Segments="_segments"
                  Busy="_busy" Message="@_error" InitialEvaluationId="Evaluation"
-                 OnCreate="CreateAsync" OnSave="SaveAsync" OnValidate="ValidateAsync" OnSubmit="SubmitAsync" OnPost="PostAsync"
+                 OnCreate="CreateAsync" OnSave="SaveAsync" OnValidate="ValidateAsync" OnSubmit="SubmitAsync" OnPost="PostAsync" OnPay="PayAsync"
                  OnWithdraw="WithdrawAsync" OnReturnToDraft="ReturnAsync" OnPaymentHold="HoldAsync"
                  OnApprove="ApproveAsync" OnReject="RejectAsync" OnOverride="OverrideAsync" />
 }
@@ -125,6 +125,7 @@ else
     private Task ValidateAsync(InvoiceActionCommand cmd) => ApplyAsync(a => InvoiceService.ValidateAsync(cmd, a));
     private Task SubmitAsync(InvoiceActionCommand cmd) => ApplyAsync(a => InvoiceService.SubmitAsync(cmd, a));
     private Task PostAsync(InvoiceActionCommand cmd) => ApplyAsync(a => Posting.PostAsync(cmd, a));
+    private Task PayAsync(InvoiceActionCommand cmd) => ApplyAsync(a => Posting.PayAsync(cmd, a));
     private Task WithdrawAsync(ReasonedActionCommand cmd) => ApplyAsync(a => InvoiceService.WithdrawAsync(cmd, a));
     private Task ReturnAsync(InvoiceActionCommand cmd) => ApplyAsync(a => InvoiceService.ReturnToDraftAsync(cmd, a));
     private Task HoldAsync(PaymentHoldCommand cmd) => ApplyAsync(a => InvoiceService.SetPaymentHoldAsync(cmd, a));

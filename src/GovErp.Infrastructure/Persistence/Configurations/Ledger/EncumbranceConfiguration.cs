@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace GovErp.Infrastructure.Persistence.Configurations.Ledger;
 
+/// <summary>
+/// EF Core mapping for an encumbrance.
+/// </summary>
 public sealed class EncumbranceConfiguration : IEntityTypeConfiguration<Encumbrance>
 {
     public void Configure(EntityTypeBuilder<Encumbrance> b)
@@ -42,7 +45,9 @@ public sealed class EncumbranceConfiguration : IEntityTypeConfiguration<Encumbra
         b.Navigation(x => x.BillingClaims).HasField("_billingClaims").UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 
-    /// <summary>Liquidation claims and billing claims have the same shape: owning invoice id, content version, amount, status.</summary>
+    /// <summary>
+    /// Liquidation claims and billing claims have the same shape: owning invoice id, content version, amount, status.
+    /// </summary>
     private static void Claim<T>(OwnedNavigationBuilder<Encumbrance, T> o, string table) where T : class
     {
         o.ToTable(table, "ledger");

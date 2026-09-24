@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GovErp.Infrastructure.Persistence.Repositories;
 
+/// <summary>
+/// SQL repository of vendors for the current tenant.
+/// </summary>
 public sealed class EfVendorRepository(GovErpDbContext db) : IVendorRepository
 {
     public Task<Vendor?> FindAsync(Guid id, CancellationToken ct = default) =>

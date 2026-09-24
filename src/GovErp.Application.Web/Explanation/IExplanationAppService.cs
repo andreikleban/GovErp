@@ -5,6 +5,9 @@ using GovErp.Application.Web.Validation.Contracts;
 
 namespace GovErp.Application.Web.Explanation;
 
+/// <summary>
+/// Use cases for an evaluation explanation and an invoice's audit log.
+/// </summary>
 public interface IExplanationAppService
 {
     Task<CommandResult<ExplanationVm>> ExplainAsync(Guid evaluationId, ExplanationAudience audience, CommandEnvelope envelope, ActorContext actor,

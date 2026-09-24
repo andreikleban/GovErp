@@ -1,5 +1,8 @@
 namespace GovErp.Domain.Shared.ValueObjects;
 
+/// <summary>
+/// A fiscal year running from 1 July of the previous calendar year through 30 June.
+/// </summary>
 public readonly record struct FiscalYear
 {
     public int Year { get; }
@@ -7,7 +10,7 @@ public readonly record struct FiscalYear
     public DateOnly End => new(Year, 6, 30);
     public FiscalYear(int year)
     {
-        if (year is < 2 or > 9999) throw new ArgumentOutOfRangeException(nameof(year));
+        if (year is < 2 or > 9999) throw new InvalidValueException(nameof(year), ValueErrors.FiscalYearRange, ("year", year));
         Year = year;
     }
     public bool Contains(DateOnly date) => date >= Start && date <= End;

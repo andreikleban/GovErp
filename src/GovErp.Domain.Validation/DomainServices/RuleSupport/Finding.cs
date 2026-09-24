@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using GovErp.Domain.Validation.Entities;
+using GovErp.Domain.Validation.Exceptions;
 using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.DomainServices.RuleSupport;
@@ -42,16 +43,18 @@ public sealed class Finding
     }
 
     internal RuleOutcome ToOutcome(RuleDefinition definition, Severity configured) =>
-        RuleOutcome.From(definition, _verdict.Severity ?? configured, _line, _inputs, _computed, _verdict.Reason);
+        RuleOutcome.From(definition, _verdict.Severity ?? configured, _line, _inputs, _computed, _verdict.ReasonCode);
 
-    /// <summary>"invoice.Total" → "total", "threshold" → "threshold".</summary>
+    /// <summary>
+    /// "invoice.Total" → "total", "threshold" → "threshold".
+    /// </summary>
     private static string NameOf(string expression)
     {
         var path = expression.Trim().TrimEnd('!');
         var name = path[(path.LastIndexOf('.') + 1)..];
         if (name.Length == 0 || !char.IsLetter(name[0]) || !name.All(c => char.IsLetterOrDigit(c) || c == '_'))
         {
-            throw new InvalidOperationException($"The fact '{expression}' needs an explicit name: use InputAs or ComputedAs.");
+            throw new InvalidOperationException(Problem.Of(ValidationErrors.FactNeedsName, ("expression", expression)).ToString());
         }
 
         return char.ToLowerInvariant(name[0]) + name[1..];

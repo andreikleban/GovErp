@@ -5,9 +5,14 @@ using GovErp.Domain.Payables.Repositories;
 
 namespace GovErp.Application.Web.Budget;
 
+/// <summary>
+/// Builds the budget-line card and list for the screen.
+/// </summary>
 public static class BudgetMapping
 {
-    /// <summary>The line's opening balance, found by OpeningBalanceId among the opening balances of its fiscal year.</summary>
+    /// <summary>
+    /// The line's opening balance, found by OpeningBalanceId among the opening balances of its fiscal year.
+    /// </summary>
     public static async Task<BudgetLineVm> ToVmAsync(BudgetLine line, IOpeningBalanceRepository openings, CancellationToken ct) =>
         ToVm(line, await openings.ListAsync(line.FiscalYear, ct));
 
@@ -20,7 +25,9 @@ public static class BudgetMapping
             line.Amendments.Select(a => new AmendmentVm(a.Amount.Amount, a.Reference, a.EffectiveDate)).ToList());
     }
 
-    /// <summary>The line's reservations with the number of the invoice that holds (or held) each; if the invoice is no longer visible, its id is shown instead.</summary>
+    /// <summary>
+    /// The line's reservations with the number of the invoice that holds (or held) each; if the invoice is no longer visible, its id is shown instead.
+    /// </summary>
     public static async Task<IReadOnlyList<BudgetReservationVm>> ReservationsAsync(BudgetLine line, IVendorInvoiceRepository invoices, CancellationToken ct)
     {
         var result = new List<BudgetReservationVm>();
@@ -33,7 +40,9 @@ public static class BudgetMapping
         return result;
     }
 
-    /// <summary>Encumbrance with liquidation claims and billing claims, each with an invoice number instead of a bare id.</summary>
+    /// <summary>
+    /// Encumbrance with liquidation claims and billing claims, each with an invoice number instead of a bare id.
+    /// </summary>
     public static async Task<EncumbranceVm> ToEncumbranceVmAsync(Encumbrance encumbrance, IVendorInvoiceRepository invoices, CancellationToken ct)
     {
         var claims = new List<EncumbranceClaimVm>();

@@ -2,8 +2,7 @@
 @inject IClock Clock
 
 <section class="panel">
-    <h2>Payment handoff</h2>
-    <p class="note">Readiness for a payment module. This screen does not send a payment.</p>
+    <h2>Payment handoff <HelpNote Title="Payment handoff">Pay writes a journal entry for each fund: debit accounts payable, credit cash. It does not check the cash balance and does not send a bank payment.</HelpNote></h2>
     <p>
         Due date @DueDate.ToString("yyyy-MM-dd")
         · Business date @Clock.BusinessDate.ToString("yyyy-MM-dd")
@@ -32,7 +31,9 @@
             </tr>
         </tbody>
     </table>
-    <p>Ready <span class="chip @Chip(Ready)">@(Ready ? "Yes" : "No")</span></p>
+    <p>Ready <span class="chip @Chip(Ready)">@(Ready ? "Yes" : "No")</span>
+        @if (PaidAt is { } paid) { <span> · Paid @paid.LocalDateTime.ToString("yyyy-MM-dd")</span> }
+    </p>
     @if (CanSetHold)
     {
         <p class="toolbar">
@@ -47,6 +48,7 @@
     [Parameter] public bool PaymentHold { get; set; }
     [Parameter] public DateOnly DueDate { get; set; }
     [Parameter] public bool Ready { get; set; }
+    [Parameter] public DateTimeOffset? PaidAt { get; set; }
     [Parameter] public bool CanSetHold { get; set; }
     [Parameter] public bool Busy { get; set; }
     [Parameter] public EventCallback<bool> OnSetHold { get; set; }

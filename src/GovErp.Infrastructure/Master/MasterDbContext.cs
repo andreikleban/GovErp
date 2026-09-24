@@ -3,6 +3,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GovErp.Infrastructure.Master;
 
+/// <summary>
+/// EF context for the tenant catalog and user accounts.
+/// </summary>
 public sealed class MasterDbContext(DbContextOptions<MasterDbContext> options) : DbContext(options)
 {
     public DbSet<Tenant> Tenants => Set<Tenant>();

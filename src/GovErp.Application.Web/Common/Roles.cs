@@ -1,5 +1,8 @@
 namespace GovErp.Application.Web.Common;
 
+/// <summary>
+/// Application role names and the groups built from them (approvers, posters).
+/// </summary>
 public static class Roles
 {
     public const string ApClerk = "ApClerk";

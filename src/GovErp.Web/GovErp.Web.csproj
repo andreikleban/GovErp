@@ -3,6 +3,12 @@
     <UserSecretsId>dc7bffd2-fd45-45f1-aa73-812bf673e267</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../GovErp.Application.Web/GovErp.Application.Web.csproj" />
     <ProjectReference Include="../GovErp.Infrastructure/GovErp.Infrastructure.csproj" />
   </ItemGroup>

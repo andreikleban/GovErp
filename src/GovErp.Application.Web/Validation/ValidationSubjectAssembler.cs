@@ -10,7 +10,9 @@ using Microsoft.Extensions.Options;
 
 namespace GovErp.Application.Web.Validation;
 
-/// <summary>The only place where the four contexts meet (GE-9): reads the aggregates and builds the snapshots.</summary>
+/// <summary>
+/// The only place where the four contexts meet (GE-9): reads the aggregates and builds the snapshots.
+/// </summary>
 public sealed class ValidationSubjectAssembler(
     IFundRepository funds, IGrantRepository grants, IAccountCombinationRepository combinations,
     IBudgetLineRepository budgetLines, IEncumbranceRepository encumbrances, IFiscalPeriodRepository periods,
@@ -19,7 +21,7 @@ public sealed class ValidationSubjectAssembler(
 {
     public async Task<ValidationSubject> BuildAsync(VendorInvoice invoice, DateOnly businessDate, CancellationToken ct = default)
     {
-        var vendor = await vendors.FindAsync(invoice.VendorId, ct) ?? throw new NotFoundException($"Vendor {invoice.VendorId} not found.");
+        var vendor = await vendors.FindAsync(invoice.VendorId, ct) ?? throw new NotFoundException(AppErrors.VendorNotFound, ("id", invoice.VendorId));
         var fy = FiscalYear.FromDate(invoice.PostingDate);
         var (py, pm) = FiscalPeriod.KeyFor(invoice.PostingDate);
         var period = await periods.FindAsync(py, pm, ct);

@@ -1,14 +1,18 @@
+using GovErp.Domain.Validation.Codes;
 using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.DomainServices;
 
+/// <summary>
+/// Builds the future posting lines from the snapshot and the allocation.
+/// </summary>
 public static class PostingPreviewBuilder
 {
     public static PostingPreview Build(ValidationSubject subject)
     {
         var allocation = BudgetAllocation.Allocate(subject);
-        var failures = allocation.Where(a => a.Error is not null).Select(a => a.Error!).ToList();
-        if (subject.Distributions.Any(d => d.Fund is null)) failures.Add("Fund facts are missing.");
+        var failures = allocation.Where(a => a.Error is not null).Select(a => Problem.Of(a.Error!, ("line", a.Distribution.LineNo))).ToList();
+        if (subject.Distributions.Any(d => d.Fund is null)) failures.Add(Problem.Of(AllocationErrors.FundFactsMissing));
         if (failures.Count > 0) return new([], failures);
 
         var lines = new List<PostingPreviewLine>();

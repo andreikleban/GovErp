@@ -1,0 +1,21 @@
+@host = https://localhost:56381
+
+### Sign in (sets the GovErp.Auth cookie)
+POST {{host}}/api/session
+Content-Type: application/json
+
+{
+  "userName": "budget.officer",
+  "password": "1!Qwertyui"
+}
+
+###
+
+GET {{host}}/api/funds/101/report
+
+###
+
+GET {{host}}/api/observability
+
+### OpenAPI document (Development only)
+GET {{host}}/openapi/v1.json

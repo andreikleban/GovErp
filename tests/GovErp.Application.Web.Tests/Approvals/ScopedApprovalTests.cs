@@ -4,6 +4,7 @@ using GovErp.Application.Web.Common;
 using GovErp.Application.Web.Invoices;
 using GovErp.Application.Web.Invoices.Commands;
 using GovErp.Application.Web.Posting;
+using GovErp.Domain.Payables.Exceptions;
 using GovErp.Infrastructure.Seed;
 
 namespace GovErp.Application.Web.Tests.Approvals;
@@ -56,7 +57,7 @@ public sealed class ScopedApprovalTests(SqlServerFixture fixture)
         var result = await t.Service<IApprovalAppService>().OverrideAsync(
             new OverrideCommand(TenantDriver.Env(current.RowVersion), current.Id, current.LastEvaluation.Id, soft.RuleId, soft.Line, " "), t.FinanceDirector);
         result.IsAccepted.Should().BeFalse();
-        result.Reason.Should().Contain("Reason");
+        result.Code.Should().Be(PayablesErrors.ReasonRequired);
     }
 
     [Fact]

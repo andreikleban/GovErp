@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Code → message template. "{name}" is replaced by the argument of that name (Problem.Args, or an outcome's facts). -->
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="VALUE.AMOUNT_TOO_LARGE" xml:space="preserve"><value>The amount {amount} does not fit 16 digits with 2 decimals.</value></data>
+  <data name="VALUE.FRACTIONAL_CENTS" xml:space="preserve"><value>The amount {amount} has fractions of a cent.</value></data>
+  <data name="VALUE.SEGMENT_FORMAT" xml:space="preserve"><value>{segment} code &quot;{value}&quot; does not have the expected format.</value></data>
+  <data name="VALUE.ACCOUNT_SEGMENTS" xml:space="preserve"><value>Account &quot;{account}&quot; needs fund, department and object segments.</value></data>
+  <data name="VALUE.PERIOD_ORDER" xml:space="preserve"><value>The period end {to} is before its start {from}.</value></data>
+  <data name="VALUE.EMPTY_USER" xml:space="preserve"><value>A user is required.</value></data>
+  <data name="VALUE.FISCAL_YEAR_RANGE" xml:space="preserve"><value>Fiscal year {year} is out of range.</value></data>
+  <data name="LEDGER.BUDGET_CHANGED_CONCURRENTLY" xml:space="preserve"><value>Budget line {account} FY{fiscalYear} was changed by another user. Reload and try again.</value></data>
+  <data name="LEDGER.INVALID_BUDGET_CONFIGURATION" xml:space="preserve"><value>The budget line configuration is not valid.</value></data>
+  <data name="LEDGER.ZERO_AMENDMENT" xml:space="preserve"><value>A budget amendment cannot be zero.</value></data>
+  <data name="LEDGER.AMENDMENT_OUTSIDE_YEAR" xml:space="preserve"><value>The amendment date {date} is outside budget year FY{fiscalYear}.</value></data>
+  <data name="LEDGER.OPENING_BALANCE_NEEDS_PRISTINE_LINE" xml:space="preserve"><value>An opening balance needs a budget line without activity.</value></data>
+  <data name="LEDGER.LIQUIDATION_EXCEEDS_ENCUMBERED" xml:space="preserve"><value>Liquidation {amount} exceeds the encumbered balance {encumbered}.</value></data>
+  <data name="LEDGER.UNKNOWN_RESERVATION" xml:space="preserve"><value>The budget reservation was not found on this line.</value></data>
+  <data name="LEDGER.RESERVATION_NOT_HELD" xml:space="preserve"><value>The budget reservation is not held by this invoice version.</value></data>
+  <data name="LEDGER.INVALID_PO_OPENING" xml:space="preserve"><value>The purchase order opening amounts are not valid.</value></data>
+  <data name="LEDGER.INSUFFICIENT_ENCUMBRANCE" xml:space="preserve"><value>PO line {poLine} has less unclaimed encumbrance than {amount}.</value></data>
+  <data name="LEDGER.INVALID_TOLERANCE" xml:space="preserve"><value>The PO billing tolerance must be a share from 0 to 1.</value></data>
+  <data name="LEDGER.PO_BILLING_EXCEEDS_TOLERANCE" xml:space="preserve"><value>Cumulative billing on PO line {poLine} exceeds its tolerance.</value></data>
+  <data name="LEDGER.UNKNOWN_CLAIM" xml:space="preserve"><value>The liquidation claim was not found.</value></data>
+  <data name="LEDGER.UNKNOWN_BILLING_CLAIM" xml:space="preserve"><value>The billing claim was not found.</value></data>
+  <data name="LEDGER.CLAIM_NOT_HELD" xml:space="preserve"><value>The claim is not held by this invoice version.</value></data>
+  <data name="LEDGER.LIQUIDATION_EXCEEDS_REMAINING" xml:space="preserve"><value>Liquidation {amount} exceeds the unclaimed remaining amount of PO line {poLine}.</value></data>
+  <data name="LEDGER.ENCUMBRANCE_NOT_RELEASABLE" xml:space="preserve"><value>PO line {poLine} is closed or has open claims and cannot be released.</value></data>
+  <data name="LEDGER.MONTH_OUT_OF_RANGE" xml:space="preserve"><value>Month {month} is out of range.</value></data>
+  <data name="LEDGER.PERIOD_ALREADY_CLOSED" xml:space="preserve"><value>Period {period} is already closed.</value></data>
+  <data name="LEDGER.JOURNAL_INCOMPLETE" xml:space="preserve"><value>A journal entry needs an actor and lines.</value></data>
+  <data name="LEDGER.PERIOD_CLOSED" xml:space="preserve"><value>Period {period} is closed for posting.</value></data>
+  <data name="LEDGER.JOURNAL_TOO_SHORT" xml:space="preserve"><value>A journal entry needs at least two lines.</value></data>
+  <data name="LEDGER.JOURNAL_UNBALANCED" xml:space="preserve"><value>Entry {source} does not balance for fund {fund} ({family}): debit {debit}, credit {credit}.</value></data>
+  <data name="LEDGER.UNKNOWN_FAMILY" xml:space="preserve"><value>Unknown ledger family.</value></data>
+  <data name="LEDGER.NEGATIVE_JOURNAL_AMOUNT" xml:space="preserve"><value>Journal amounts cannot be negative.</value></data>
+  <data name="LEDGER.DEBIT_OR_CREDIT" xml:space="preserve"><value>A journal line has either a debit or a credit.</value></data>
+  <data name="LEDGER.AMOUNT_NOT_POSITIVE" xml:space="preserve"><value>The amount {amount} must be positive.</value></data>
+  <data name="LEDGER.INVOICE_VERSION_REQUIRED" xml:space="preserve"><value>The invoice and its content version are required.</value></data>
+  <data name="LEDGER.OPENING_DATE_OUTSIDE_YEAR" xml:space="preserve"><value>The opening date is outside the budget year.</value></data>
+  <data name="LEDGER.NEGATIVE_OPENING_BALANCE" xml:space="preserve"><value>Opening balances cannot be negative.</value></data>
+  <data name="LEDGER.BUDGET_LINE_NOT_FOUND" xml:space="preserve"><value>Budget line {account} FY{fiscalYear} was not found.</value></data>
+  <data name="LEDGER.BUDGET_NO_LONGER_AVAILABLE" xml:space="preserve"><value>Budget on {account} is no longer available: short by {shortfall}.</value></data>
+  <data name="LEDGER.ENCUMBRANCE_NOT_FOUND" xml:space="preserve"><value>The encumbrance of PO line {poLine} was not found.</value></data>
+  <data name="LEDGER.POSTING_TOTAL_MISMATCH" xml:space="preserve"><value>Posting would change actuals by {charged}, expected {expected}.</value></data>
+  <data name="PAYABLES.PO_LINES_INVALID" xml:space="preserve"><value>Purchase order {po} needs distinct, non-empty lines.</value></data>
+  <data name="PAYABLES.PO_LINE_NOT_FOUND" xml:space="preserve"><value>Purchase order {po} has no line {line}.</value></data>
+  <data name="PAYABLES.PO_LINE_NOT_POSITIVE" xml:space="preserve"><value>A PO line number and amount must be positive.</value></data>
+  <data name="PAYABLES.BLANK_REFERENCE" xml:space="preserve"><value>The document reference cannot be blank.</value></data>
+  <data name="PAYABLES.DISTRIBUTION_NOT_POSITIVE" xml:space="preserve"><value>Line amounts and PO line numbers must be positive.</value></data>
+  <data name="PAYABLES.DISTRIBUTION_NOT_FOUND" xml:space="preserve"><value>Line {line} was not found.</value></data>
+  <data name="PAYABLES.DISTRIBUTIONS_NOT_EQUAL_TOTAL" xml:space="preserve"><value>The lines add up to {distributed}, not the invoice total {total}.</value></data>
+  <data name="PAYABLES.STALE_EVALUATION" xml:space="preserve"><value>The invoice was evaluated again. Reload and retry.</value></data>
+  <data name="PAYABLES.ALREADY_APPROVED" xml:space="preserve"><value>The {role} step is already approved.</value></data>
+  <data name="PAYABLES.APPROVALS_MISSING" xml:space="preserve"><value>Required approvals are missing.</value></data>
+  <data name="PAYABLES.OVERRIDE_ROLE_INVALID" xml:space="preserve"><value>The override needs a valid role.</value></data>
+  <data name="PAYABLES.OVERRIDE_MISMATCH" xml:space="preserve"><value>The override does not match this invoice&apos;s outcome or actor.</value></data>
+  <data name="PAYABLES.ALREADY_OVERRIDDEN" xml:space="preserve"><value>This stop is already released.</value></data>
+  <data name="PAYABLES.STALE_CONTENT" xml:space="preserve"><value>The invoice content changed. Reload and retry.</value></data>
+  <data name="PAYABLES.ONLY_AUTHOR_WITHDRAWS" xml:space="preserve"><value>Only the author withdraws an invoice.</value></data>
+  <data name="PAYABLES.POSTING_NOT_APPROVED" xml:space="preserve"><value>Posting needs the approved content, cycle and rules.</value></data>
+  <data name="PAYABLES.APPROVAL_NOT_ALLOWED" xml:space="preserve"><value>This approval needs the step&apos;s role, and the author cannot approve their own invoice.</value></data>
+  <data name="PAYABLES.ROUTE_INVALID" xml:space="preserve"><value>The approval route has an invalid step.</value></data>
+  <data name="PAYABLES.HOLD_IDS_INVALID" xml:space="preserve"><value>Hold identifiers must be distinct and non-empty.</value></data>
+  <data name="PAYABLES.HEADER_INVALID" xml:space="preserve"><value>An invoice needs a vendor, a number, a positive total and a valid purchase order reference.</value></data>
+  <data name="PAYABLES.DUE_BEFORE_INVOICE" xml:space="preserve"><value>The due date {dueDate} is before the invoice date {invoiceDate}.</value></data>
+  <data name="PAYABLES.EVALUATION_REQUIRED" xml:space="preserve"><value>An evaluation and a rule fingerprint are required.</value></data>
+  <data name="PAYABLES.ACTOR_REQUIRED" xml:space="preserve"><value>A user is required.</value></data>
+  <data name="PAYABLES.REASON_REQUIRED" xml:space="preserve"><value>A reason is required.</value></data>
+  <data name="PAYABLES.WRONG_STATUS" xml:space="preserve"><value>The invoice is {status}; this needs {expected}.</value></data>
+  <data name="PAYABLES.NO_ACTIVE_CYCLE" xml:space="preserve"><value>The invoice is {status} and has no active approval cycle.</value></data>
+  <data name="PAYABLES.DUPLICATE_NUMBER" xml:space="preserve"><value>An invoice with this number already exists for this vendor.</value></data>
+  <data name="PAYABLES.ALREADY_PAID" xml:space="preserve"><value>This invoice is already paid.</value></data>
+  <data name="PAYABLES.PAYMENT_NOT_READY" xml:space="preserve"><value>The invoice is not ready to pay: it is {status}, due {dueDate}.</value></data>
+  <data name="PAYABLES.VENDOR_ID_REQUIRED" xml:space="preserve"><value>A vendor id is required.</value></data>
+  <data name="PAYABLES.VENDOR_REQUIRED" xml:space="preserve"><value>A vendor is required.</value></data>
+  <data name="PAYABLES.VENDOR_STATUS_INVALID" xml:space="preserve"><value>Vendor status {status} is not valid.</value></data>
+  <data name="COA.COMBINATION_NOT_PENDING" xml:space="preserve"><value>Combination {combination} is {status}; only a pending combination can be approved.</value></data>
+  <data name="COA.COMBINATION_NOT_ACTIVE" xml:space="preserve"><value>Combination {combination} is {status}; only an active combination can be deactivated.</value></data>
+  <data name="COA.EFFECTIVE_TO_BEFORE_FROM" xml:space="preserve"><value>The end date {to} is before the start date {from}.</value></data>
+  <data name="COA.NULL_DEPARTMENT" xml:space="preserve"><value>The department list cannot contain an empty entry.</value></data>
+  <data name="COA.NULL_OBJECT" xml:space="preserve"><value>The object list cannot contain an empty entry.</value></data>
+  <data name="RULES.DEFINITION_INVALID" xml:space="preserve"><value>Rule {rule} has an invalid version or effective period.</value></data>
+  <data name="RULES.DEFINITION_ENUM_INVALID" xml:space="preserve"><value>Rule {rule} has an invalid step, layer, severity or role.</value></data>
+  <data name="RULES.PARAMETER_MISSING" xml:space="preserve"><value>Rule {rule} version {version} has no parameter {parameter}.</value></data>
+  <data name="RULES.PARAMETER_NOT_DECIMAL" xml:space="preserve"><value>Parameter {parameter} of rule {rule} version {version} is not a number.</value></data>
+  <data name="RULES.PARAMETER_NOT_POSITIVE_AMOUNT" xml:space="preserve"><value>Parameter {parameter} of rule {rule} must be a positive amount.</value></data>
+  <data name="RULES.PARAMETER_NOT_SHARE" xml:space="preserve"><value>Parameter {parameter} of rule {rule} must be a share from 0 to 1.</value></data>
+  <data name="RULES.AMBIGUOUS_DEFINITIONS" xml:space="preserve"><value>Rule {rule} has two definitions with the same layer and version.</value></data>
+  <data name="RULES.LAYER_SWITCHES_OFF" xml:space="preserve"><value>Rule {rule}: the {layer} layer cannot switch off the {upperLayer} rule.</value></data>
+  <data name="RULES.LAYER_MOVES_STEP" xml:space="preserve"><value>Rule {rule}: the {layer} layer cannot move the {upperLayer} rule to another step.</value></data>
+  <data name="RULES.LAYER_LOWERS_SEVERITY" xml:space="preserve"><value>Rule {rule}: the {layer} layer cannot lower the severity of the {upperLayer} rule.</value></data>
+  <data name="RULES.LAYER_ADDS_OVERRIDERS" xml:space="preserve"><value>Rule {rule}: the {layer} layer cannot let more roles release the {upperLayer} rule.</value></data>
+  <data name="RULES.LAYER_CHANGES_PARAMETER_SET" xml:space="preserve"><value>Rule {rule}: the {layer} layer must keep the parameters of the {upperLayer} rule.</value></data>
+  <data name="RULES.LAYER_CHANGES_FIXED_PARAMETER" xml:space="preserve"><value>Rule {rule}: nobody may override the {upperLayer} rule, so the {layer} layer cannot change {parameter}.</value></data>
+  <data name="RULES.LAYER_CHANGES_UNDECLARED_PARAMETER" xml:space="preserve"><value>Rule {rule}: the code does not declare which way {parameter} is stricter, so the {layer} layer cannot change it.</value></data>
+  <data name="RULES.LAYER_RELAXES_PARAMETER" xml:space="preserve"><value>Rule {rule}: the {layer} layer cannot relax {parameter} of the {upperLayer} rule.</value></data>
+  <data name="RULES.NO_SET_FOR_SCOPE" xml:space="preserve"><value>No rule set was resolved for fund {fund} and grant {grant}.</value></data>
+  <data name="RULES.MULTIPLE_SCOPES" xml:space="preserve"><value>Rule {rule} has several scopes in force; specify the fund and grant.</value></data>
+  <data name="RULES.WITHOUT_CODE" xml:space="preserve"><value>These configured rules have no implementation: {rules}.</value></data>
+  <data name="RULES.MANDATORY_MISSING" xml:space="preserve"><value>Mandatory rules are missing or disabled for fund {fund}: {rules}.</value></data>
+  <data name="RULES.FACT_NEEDS_NAME" xml:space="preserve"><value>The fact &quot;{expression}&quot; needs an explicit name.</value></data>
+  <data name="INPUT.ACTOR_REQUIRED" xml:space="preserve"><value>The evaluating user is required.</value></data>
+  <data name="INPUT.NO_LINES" xml:space="preserve"><value>The invoice has no lines.</value></data>
+  <data name="INPUT.LINE_NUMBER_NOT_POSITIVE" xml:space="preserve"><value>Line numbers must be positive.</value></data>
+  <data name="INPUT.LINE_NUMBER_DUPLICATE" xml:space="preserve"><value>Line numbers must be unique.</value></data>
+  <data name="INPUT.LINE_AMOUNT_NOT_POSITIVE" xml:space="preserve"><value>Line amounts must be positive.</value></data>
+  <data name="INPUT.LINE_AMOUNTS_TOO_LARGE" xml:space="preserve"><value>The line amounts are too large to add up.</value></data>
+  <data name="INPUT.LINES_NOT_EQUAL_TOTAL" xml:space="preserve"><value>The lines add up to {distributed}, not the invoice total {total}.</value></data>
+  <data name="INPUT.CONTENT_VERSION_NOT_POSITIVE" xml:space="preserve"><value>The content version must be positive.</value></data>
+  <data name="INPUT.AUTHOR_REQUIRED" xml:space="preserve"><value>The invoice author is required.</value></data>
+  <data name="INPUT.UNKNOWN_STATUS" xml:space="preserve"><value>Unknown document status {status}.</value></data>
+  <data name="INPUT.APPROVAL_CYCLE_REQUIRED" xml:space="preserve"><value>An active document needs an approval cycle.</value></data>
+  <data name="INPUT.DATES_REQUIRED" xml:space="preserve"><value>Service and posting dates are required.</value></data>
+  <data name="INPUT.DATES_MUST_MATCH" xml:space="preserve"><value>This demo supports only the same invoice, service and posting date.</value></data>
+  <data name="INPUT.BUDGET_YEAR_MISMATCH" xml:space="preserve"><value>Budget snapshots must belong to FY{fiscalYear} of the posting date.</value></data>
+  <data name="INPUT.VENDOR_NOT_IDENTIFIED" xml:space="preserve"><value>The invoice vendor is not identified.</value></data>
+  <data name="INPUT.COMBINATION_FACTS_MISSING" xml:space="preserve"><value>Line {line}: the account combination facts are missing.</value></data>
+  <data name="INPUT.FUND_FACTS_MISSING" xml:space="preserve"><value>Line {line}: the fund of {account} is not known.</value></data>
+  <data name="INPUT.FUND_FACTS_MISMATCH" xml:space="preserve"><value>Line {line}: fund facts {fund} do not match the account fund {accountFund}.</value></data>
+  <data name="INPUT.GRANT_FACTS_MISSING" xml:space="preserve"><value>Line {line}: grant {grant} is not known.</value></data>
+  <data name="INPUT.GRANT_FACTS_MISMATCH" xml:space="preserve"><value>Line {line}: grant facts {grant} do not match the account grant {accountGrant}.</value></data>
+  <data name="INPUT.PO_LINE_MISSING" xml:space="preserve"><value>Line {line} of a PO-backed invoice is not linked to a PO line.</value></data>
+  <data name="INPUT.INVALID" xml:space="preserve"><value>The value of {parameter} is not valid.</value></data>
+  <data name="ALLOCATION.DUPLICATE_LINE" xml:space="preserve"><value>Duplicate line number.</value></data>
+  <data name="ALLOCATION.CONFLICTING_BUDGET_SNAPSHOTS" xml:space="preserve"><value>Conflicting budget snapshots for the same account and year.</value></data>
+  <data name="ALLOCATION.INCONSISTENT_BUDGET" xml:space="preserve"><value>The budget balances are inconsistent.</value></data>
+  <data name="ALLOCATION.NON_PO_INVOICE_WITH_ENCUMBRANCE" xml:space="preserve"><value>An invoice without a purchase order cannot liquidate an encumbrance.</value></data>
+  <data name="ALLOCATION.CONFLICTING_PO_SNAPSHOTS" xml:space="preserve"><value>Conflicting PO snapshots, or the PO line is on another account or year.</value></data>
+  <data name="ALLOCATION.PO_LINE_CLOSED" xml:space="preserve"><value>The PO line is closed.</value></data>
+  <data name="ALLOCATION.PO_LINE_INVALID" xml:space="preserve"><value>The PO line needs a reference and a positive authorized amount.</value></data>
+  <data name="ALLOCATION.INCONSISTENT_PO_BALANCES" xml:space="preserve"><value>The PO balances or liquidation claims are inconsistent.</value></data>
+  <data name="ALLOCATION.AMOUNT_NOT_POSITIVE" xml:space="preserve"><value>The amount must be positive.</value></data>
+  <data name="ALLOCATION.PO_LINE_SNAPSHOT_MISSING" xml:space="preserve"><value>The PO line was not found.</value></data>
+  <data name="ALLOCATION.FUND_FACTS_MISSING" xml:space="preserve"><value>Fund facts are missing.</value></data>
+  <data name="POSTING.NOT_APPROVED" xml:space="preserve"><value>Only an approved invoice can be posted; this one is {status}.</value></data>
+  <data name="POSTING.OPEN_STOPS" xml:space="preserve"><value>The evaluation has unresolved stops.</value></data>
+  <data name="POSTING.PERIOD_CLOSED" xml:space="preserve"><value>The posting period is closed.</value></data>
+  <data name="POSTING.REVALIDATION_REQUIRED" xml:space="preserve"><value>REVALIDATION_REQUIRED: the rules changed after approval.</value></data>
+  <data name="POSTING.ROUTE_MISSING" xml:space="preserve"><value>The approval route is missing.</value></data>
+  <data name="POSTING.APPROVAL_MISSING" xml:space="preserve"><value>Approval missing: {role} {department}.</value></data>
+  <data name="POSTING.PREVIEW_MISSING" xml:space="preserve"><value>The posting preview is missing.</value></data>
+  <data name="POSTING.PREVIEW_MISMATCH" xml:space="preserve"><value>The posting preview does not match the invoice.</value></data>
+  <data name="POSTING.PREVIEW_UNBALANCED" xml:space="preserve"><value>The posting preview must balance per fund and family.</value></data>
+  <data name="ROUTE.DEPARTMENT_CHARGED" xml:space="preserve"><value>Department {department} is charged.</value></data>
+  <data name="ROUTE.GRANT_FUNDED" xml:space="preserve"><value>A line is charged to a grant.</value></data>
+  <data name="ROUTE.FINANCE_DIRECTOR_THRESHOLD" xml:space="preserve"><value>The total {total} reaches the finance director threshold {threshold}.</value></data>
+  <data name="ROUTE.OVERRIDE_REQUIRED" xml:space="preserve"><value>Release of the {rule} soft stop is required.</value></data>
+  <data name="SEG_REQUIRED.GRANT_SEGMENT_MISSING" xml:space="preserve"><value>Fund {fund} ({fundName}) requires a grant segment on line {line}.</value></data>
+  <data name="SEG_GRANT_FORBIDDEN.GRANT_SEGMENT_NOT_ACCEPTED" xml:space="preserve"><value>Fund {fund} ({fundName}) does not accept a grant segment; line {line} carries {grant}.</value></data>
+  <data name="COA_COMBINATION_ACTIVE.COMBINATION_UNKNOWN" xml:space="preserve"><value>Account combination {account} does not exist in the chart of accounts (line {line}).</value></data>
+  <data name="COA_COMBINATION_ACTIVE.COMBINATION_INACTIVE" xml:space="preserve"><value>Account combination {account} is {status} on {date} (line {line}).</value></data>
+  <data name="FUND_DEPT_OBJECT_ALLOWED.FUND_INACTIVE" xml:space="preserve"><value>Fund {fund} is inactive (line {line}).</value></data>
+  <data name="FUND_DEPT_OBJECT_ALLOWED.DEPARTMENT_NOT_ALLOWED" xml:space="preserve"><value>Department {department} may not spend from fund {fund} ({fundName}) (line {line}).</value></data>
+  <data name="FUND_DEPT_OBJECT_ALLOWED.OBJECT_NOT_ALLOWED" xml:space="preserve"><value>Object {object} is not an allowed use of fund {fund} ({fundName}) (line {line}).</value></data>
+  <data name="GRANT_ELIGIBLE.GRANT_NOT_ACTIVE" xml:space="preserve"><value>Grant {grant} is {grantStatus} (line {line}).</value></data>
+  <data name="GRANT_ELIGIBLE.OUTSIDE_PERIOD" xml:space="preserve"><value>Service date (or invoice date when absent) {date} is outside the period of grant {grant} (line {line}).</value></data>
+  <data name="GRANT_ELIGIBLE.DEPARTMENT_NOT_COVERED" xml:space="preserve"><value>Department {department} is not covered by grant {grant} (line {line}).</value></data>
+  <data name="GRANT_ELIGIBLE.OBJECT_NOT_ALLOWABLE" xml:space="preserve"><value>Object {object} is not an allowable cost under grant {grant} (line {line}).</value></data>
+  <data name="VENDOR_ELIGIBLE.VENDOR_INACTIVE" xml:space="preserve"><value>Vendor {vendor} is inactive.</value></data>
+  <data name="VENDOR_ELIGIBLE.VENDOR_DEBARRED" xml:space="preserve"><value>Vendor {vendor} is debarred from government contracts.</value></data>
+  <data name="VENDOR_ELIGIBLE.SAM_REGISTRATION_REQUIRED" xml:space="preserve"><value>Demo policy requires vendor {vendor} to be registered in SAM.gov for federal grant payments.</value></data>
+  <data name="PROCUREMENT_THRESHOLD.PURCHASE_ORDER_REQUIRED" xml:space="preserve"><value>Non-PO invoice of {total} meets the {threshold} procurement threshold; a purchase order or documented procurement exception is required.</value></data>
+  <data name="INVOICE_DUPLICATE.POSSIBLE_DUPLICATE" xml:space="preserve"><value>An invoice with the same number from {vendor} already exists.</value></data>
+  <data name="BUDGET_AVAILABILITY.NO_BUDGET_LINE" xml:space="preserve"><value>No budget line exists for {account} in FY{fiscalYear}.</value></data>
+  <data name="BUDGET_AVAILABILITY.EXCEEDS_AVAILABLE" xml:space="preserve"><value>Invoice exceeds available budget for {account} in FY{fiscalYear} by {overage}.</value></data>
+  <data name="BUDGET_LOW_REMAINING.LITTLE_REMAINS" xml:space="preserve"><value>After this invoice, {availableAfter} ({remainingPct}%) remains for {account}.</value></data>
+  <data name="PO_LIQUIDATION.EXCEEDS_TOLERANCE" xml:space="preserve"><value>Cumulative billing for {poLine} exceeds its authorized tolerance; a change order is required.</value></data>
+  <data name="PO_LIQUIDATION.NEEDS_NEW_BUDGET" xml:space="preserve"><value>Invoice liquidates {liquidation} of {poLine}; {excess} requires new budget.</value></data>
+  <data name="PO_LIQUIDATION.FULLY_LIQUIDATED" xml:space="preserve"><value>Invoice liquidates {liquidation} of {poLine} in full.</value></data>
+  <data name="APP.ONLY_AP_CLERK_CREATES" xml:space="preserve"><value>Only AP clerks create invoices.</value></data>
+  <data name="APP.ONLY_AUTHOR_EDITS" xml:space="preserve"><value>Only the author edits a draft.</value></data>
+  <data name="APP.ONLY_AUTHOR_SUBMITS" xml:space="preserve"><value>Only the author submits the invoice.</value></data>
+  <data name="APP.ONLY_AUTHOR_REOPENS" xml:space="preserve"><value>Only the author reopens a rejected invoice.</value></data>
+  <data name="APP.ONLY_POSTERS_HOLD_PAYMENT" xml:space="preserve"><value>Only the budget officer or finance director sets a payment hold.</value></data>
+  <data name="APP.ONLY_POSTERS_POST" xml:space="preserve"><value>Only the budget officer or finance director posts.</value></data>
+  <data name="APP.ONLY_POSTERS_PAY" xml:space="preserve"><value>Only the budget officer or finance director records a payment.</value></data>
+  <data name="APP.ONLY_APPROVERS_APPROVE" xml:space="preserve"><value>Only approvers approve.</value></data>
+  <data name="APP.AUTHOR_CANNOT_APPROVE" xml:space="preserve"><value>The author cannot approve their own invoice (separation of duties).</value></data>
+  <data name="APP.NOT_PENDING_APPROVER" xml:space="preserve"><value>{user} is not a pending approver for {invoice}.</value></data>
+  <data name="APP.ONLY_ROUTE_APPROVER_REJECTS" xml:space="preserve"><value>Only an approver on this invoice&apos;s route rejects it.</value></data>
+  <data name="APP.ONLY_OVERRIDERS_OVERRIDE" xml:space="preserve"><value>Only the budget officer or finance director releases a soft stop.</value></data>
+  <data name="APP.CANNOT_OVERRIDE" xml:space="preserve"><value>{user} cannot release {rule}.</value></data>
+  <data name="APP.ONLY_OVERRIDERS_AMEND" xml:space="preserve"><value>Only the budget officer or finance director amends budgets.</value></data>
+  <data name="APP.ONLY_FINANCE_DIRECTOR_CONFIGURES_RULES" xml:space="preserve"><value>Only the finance director changes rule configuration.</value></data>
+  <data name="APP.INVOICE_STATUS" xml:space="preserve"><value>The invoice is {status}.</value></data>
+  <data name="APP.EVALUATION_NOT_CURRENT" xml:space="preserve"><value>The evaluation is not current for this invoice. Reload and retry.</value></data>
+  <data name="APP.NO_OPEN_SOFT_STOP" xml:space="preserve"><value>There is no open {rule} soft stop on that line.</value></data>
+  <data name="APP.DEMO_DATES_MUST_MATCH" xml:space="preserve"><value>Demo limitation: the invoice, service and posting dates must be the same.</value></data>
+  <data name="APP.PURCHASE_ORDER_UNKNOWN" xml:space="preserve"><value>Purchase order {po} was not found.</value></data>
+  <data name="APP.BLOCKED_BY" xml:space="preserve"><value>{reasons}</value></data>
+  <data name="APP.REVALIDATION_REQUIRED" xml:space="preserve"><value>REVALIDATION_REQUIRED: the rules or the approval route changed since approval; the invoice returned to approval.</value></data>
+  <data name="APP.APPROVAL_REQUIRED" xml:space="preserve"><value>Approval required.</value></data>
+  <data name="APP.RULE_CHANGE_REASON_REQUIRED" xml:space="preserve"><value>A reason is required for a rule change.</value></data>
+  <data name="APP.VERSION_STARTS_TOO_EARLY" xml:space="preserve"><value>A new version cannot start before {from}, when version {version} started.</value></data>
+  <data name="APP.SEVERITY_NOT_CONFIGURABLE" xml:space="preserve"><value>{rule} computes its severity from the facts; it cannot be configured.</value></data>
+  <data name="APP.SEVERITY_INVALID" xml:space="preserve"><value>&quot;{severity}&quot; is not a configurable severity (Warning, SoftStop, HardStop).</value></data>
+  <data name="APP.RULE_HAS_NO_PARAMETERS" xml:space="preserve"><value>{rule} has no parameters.</value></data>
+  <data name="APP.RULE_PARAMETERS_FIXED" xml:space="preserve"><value>{rule} parameters are fixed by the rule: {parameters}.</value></data>
+  <data name="APP.PARAMETER_UNDECLARED" xml:space="preserve"><value>{parameter} has no meaning declared by the rule&apos;s code and cannot be changed.</value></data>
+  <data name="APP.PARAMETER_NOT_NUMBER" xml:space="preserve"><value>{parameter} must be a number (digits and a dot for decimals).</value></data>
+  <data name="APP.INVOICE_NOT_FOUND" xml:space="preserve"><value>Invoice {id} was not found.</value></data>
+  <data name="APP.VENDOR_NOT_FOUND" xml:space="preserve"><value>Vendor {id} was not found.</value></data>
+  <data name="APP.BUDGET_LINE_NOT_FOUND" xml:space="preserve"><value>Budget line {account} FY{fiscalYear} was not found.</value></data>
+  <data name="APP.EVALUATION_NOT_FOUND" xml:space="preserve"><value>Evaluation {id} was not found.</value></data>
+  <data name="APP.PERIOD_NOT_FOUND" xml:space="preserve"><value>Fiscal period {period} was not found.</value></data>
+  <data name="APP.PURCHASE_ORDER_NOT_FOUND" xml:space="preserve"><value>Purchase order {po} was not found.</value></data>
+  <data name="APP.FUND_NOT_FOUND" xml:space="preserve"><value>Fund {fund} was not found.</value></data>
+  <data name="APP.GRANT_NOT_FOUND" xml:space="preserve"><value>Grant {grant} was not found.</value></data>
+  <data name="APP.RULE_NOT_IN_CATALOG" xml:space="preserve"><value>Rule {rule} is not in the engine&apos;s catalog.</value></data>
+  <data name="APP.RULE_DEFINITION_NOT_FOUND" xml:space="preserve"><value>Rule definition {id} was not found.</value></data>
+  <data name="APP.TENANT_NOT_REGISTERED" xml:space="preserve"><value>Tenant {tenant} is not registered.</value></data>
+  <data name="APP.UNKNOWN_INVOICE_PRESET" xml:space="preserve"><value>Unknown invoice preset {preset}.</value></data>
+  <data name="COMMAND.DATA_CHANGED" xml:space="preserve"><value>The data was changed by another user. Reload and try again.</value></data>
+  <data name="COMMAND.ALREADY_APPLIED" xml:space="preserve"><value>The operation was already applied.</value></data>
+  <data name="COMMAND.OF_ANOTHER_USER" xml:space="preserve"><value>This command belongs to another user.</value></data>
+  <data name="COMMAND.ID_REUSED" xml:space="preserve"><value>This command id was already used for a different request.</value></data>
+</root>

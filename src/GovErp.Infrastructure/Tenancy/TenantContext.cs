@@ -2,6 +2,9 @@ using GovErp.Application.Web.Tenancy;
 
 namespace GovErp.Infrastructure.Tenancy;
 
+/// <summary>
+/// The tenant of the current scope: its id and connection string.
+/// </summary>
 public sealed class TenantContext : ITenantContext, ITenantContextInitializer
 {
     private TenantId? _tenantId;
@@ -11,7 +14,9 @@ public sealed class TenantContext : ITenantContext, ITenantContextInitializer
     public string ConnectionString => _connectionString ?? throw new InvalidOperationException("Tenant context is not initialized.");
     public bool IsInitialized => _tenantId is not null;
 
-    /// <summary>Once per operation scope; re-initializing with another tenant is an error.</summary>
+    /// <summary>
+    /// Once per operation scope; re-initializing with another tenant is an error.
+    /// </summary>
     public void Initialize(TenantId tenantId, string connectionString)
     {
         if (_tenantId is not null && _tenantId != tenantId)

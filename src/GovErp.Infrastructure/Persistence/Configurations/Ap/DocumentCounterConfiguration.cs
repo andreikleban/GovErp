@@ -3,6 +3,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace GovErp.Infrastructure.Persistence.Configurations.Ap;
 
+/// <summary>
+/// EF Core mapping for a document counter.
+/// </summary>
 public sealed class DocumentCounterConfiguration : IEntityTypeConfiguration<DocumentCounter>
 {
     public void Configure(EntityTypeBuilder<DocumentCounter> b)

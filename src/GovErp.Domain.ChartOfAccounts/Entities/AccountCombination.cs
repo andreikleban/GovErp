@@ -2,7 +2,9 @@ using GovErp.Domain.ChartOfAccounts.Exceptions;
 
 namespace GovErp.Domain.ChartOfAccounts.Entities;
 
-/// <summary>A registered and approved full account address (whitelist) with effective dating.</summary>
+/// <summary>
+/// A registered and approved full account address (whitelist) with effective dating.
+/// </summary>
 public sealed class AccountCombination
 {
     public Guid Id { get; private set; }
@@ -22,7 +24,7 @@ public sealed class AccountCombination
         ArgumentNullException.ThrowIfNull(code);
         if (createdBy.Value == Guid.Empty)
         {
-            throw new ArgumentException("Requester is required.", nameof(createdBy));
+            throw new InvalidValueException(nameof(createdBy), ValueErrors.EmptyUser);
         }
         Id = id;
         Code = code;
@@ -43,11 +45,11 @@ public sealed class AccountCombination
     {
         if (approvedBy.Value == Guid.Empty)
         {
-            throw new ArgumentException("Approver is required.", nameof(approvedBy));
+            throw new InvalidValueException(nameof(approvedBy), ValueErrors.EmptyUser);
         }
         if (Status != CombinationStatus.Pending)
         {
-            throw new ChartOfAccountsException($"Combination {Code} is {Status}; only Pending can be approved.");
+            throw new ChartOfAccountsException(ChartOfAccountsErrors.NotPending, ("combination", Code), ("status", Status));
         }
 
         Status = CombinationStatus.Active;
@@ -59,12 +61,12 @@ public sealed class AccountCombination
     {
         if (Status != CombinationStatus.Active)
         {
-            throw new ChartOfAccountsException($"Combination {Code} is {Status}; only Active can be deactivated.");
+            throw new ChartOfAccountsException(ChartOfAccountsErrors.NotActive, ("combination", Code), ("status", Status));
         }
 
         if (effectiveTo < EffectiveFrom)
         {
-            throw new ChartOfAccountsException($"EffectiveTo {effectiveTo} is before EffectiveFrom {EffectiveFrom}.");
+            throw new ChartOfAccountsException(ChartOfAccountsErrors.EffectiveToBeforeFrom, ("to", effectiveTo), ("from", EffectiveFrom));
         }
 
         Status = CombinationStatus.Inactive;

@@ -9,6 +9,9 @@ namespace GovErp.Domain.Validation.DomainServices.Rules;
 /// </summary>
 public sealed class BudgetAvailabilityRule : ValidationRule
 {
+    private const string NoBudgetLine = "BUDGET_AVAILABILITY.NO_BUDGET_LINE";
+    private const string ExceedsAvailable = "BUDGET_AVAILABILITY.EXCEEDS_AVAILABLE";
+
     public override string RuleId => "BUDGET_AVAILABILITY";
 
     protected override IEnumerable<Finding> Check(ValidationSubject subject, RuleParameters parameters)
@@ -23,11 +26,11 @@ public sealed class BudgetAvailabilityRule : ValidationRule
             if (demand.Error is { } error)
                 verdict = HardStop(error);
             else if (!budget.Exists)
-                verdict = HardStop($"No budget line exists for {demand.Account} in FY{budget.FiscalYear}.");
+                verdict = HardStop(NoBudgetLine);
             else if (demand.AvailableAfter.IsNegative && demand.Control == BudgetControl.Soft)
-                verdict = SoftStop($"Invoice exceeds available budget for {demand.Account} in FY{budget.FiscalYear} by {demand.Overage}.");
+                verdict = SoftStop(ExceedsAvailable);
             else if (demand.AvailableAfter.IsNegative)
-                verdict = HardStop($"Invoice exceeds available budget for {demand.Account} in FY{budget.FiscalYear} by {demand.Overage}.");
+                verdict = HardStop(ExceedsAvailable);
             else
                 continue;
 

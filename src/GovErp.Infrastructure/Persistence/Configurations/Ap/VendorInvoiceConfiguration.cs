@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace GovErp.Infrastructure.Persistence.Configurations.Ap;
 
+/// <summary>
+/// EF Core mapping for a vendor invoice.
+/// </summary>
 public sealed class VendorInvoiceConfiguration : IEntityTypeConfiguration<VendorInvoice>
 {
     public void Configure(EntityTypeBuilder<VendorInvoice> b)

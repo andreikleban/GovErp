@@ -3,6 +3,9 @@ using GovErp.Application.Web.Reference.Contracts;
 
 namespace GovErp.Application.Web.Reference;
 
+/// <summary>
+/// Use cases for reference data and the role matrix.
+/// </summary>
 public interface IReferenceAppService
 {
     Task<SegmentsVm> GetSegmentsAsync(ActorContext actor, CancellationToken ct = default);

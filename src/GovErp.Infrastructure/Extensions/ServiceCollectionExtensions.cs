@@ -25,11 +25,13 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace GovErp.Infrastructure.Extensions;
 
+/// <summary>
+/// Registers EF, identity, tenancy and explanations.
+/// </summary>
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// EnableRetryOnFailure is not enabled: the EF retry strategy is incompatible with an explicit user transaction,
-    /// and the runner retries the whole command.
+    /// EnableRetryOnFailure is not enabled: the EF retry strategy is incompatible with an explicit user transaction, and the runner retries the whole command.
     /// </summary>
     public static IServiceCollection AddInfrastructure(this IServiceCollection s, IConfiguration cfg)
     {

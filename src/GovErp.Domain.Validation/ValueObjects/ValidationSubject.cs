@@ -1,5 +1,8 @@
 namespace GovErp.Domain.Validation.ValueObjects;
 
+/// <summary>
+/// The full document snapshot the validation rules run against.
+/// </summary>
 public sealed record ValidationSubject
 {
     private readonly IReadOnlyList<DistributionSnapshot> _distributions = Array.Empty<DistributionSnapshot>();

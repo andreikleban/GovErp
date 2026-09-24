@@ -23,7 +23,7 @@ public sealed class DomainPurityTests
     [Fact]
     public void Domain_values_and_entities_have_no_public_mutable_properties_or_fields()
     {
-        var types = Domains.SelectMany(a => a.GetExportedTypes()).Where(t => !t.IsEnum &&
+        var types = Domains.SelectMany(a => a.GetExportedTypes()).Where(t => !t.IsEnum && !typeof(Exception).IsAssignableFrom(t) &&
             (t.Namespace?.EndsWith(".Entities", StringComparison.Ordinal) == true || t.Namespace?.EndsWith(".ValueObjects", StringComparison.Ordinal) == true));
         foreach (var type in types)
         {

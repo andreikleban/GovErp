@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace GovErp.Infrastructure.Persistence.Configurations.Coa;
 
+/// <summary>
+/// EF Core mapping for an account combination.
+/// </summary>
 public sealed class AccountCombinationConfiguration : IEntityTypeConfiguration<AccountCombination>
 {
     public void Configure(EntityTypeBuilder<AccountCombination> b)

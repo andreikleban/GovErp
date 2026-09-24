@@ -7,6 +7,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GovErp.Infrastructure.Audit;
 
+/// <summary>
+/// Writes audit events into the tenant database.
+/// </summary>
 public sealed class EfAuditTrail(GovErpDbContext db, ITenantContext tenant, IClock clock) : IAuditTrail
 {
     public void Record(ActorContext actor, string action, string subjectRef, string correlationId, object payload) =>

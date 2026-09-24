@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GovErp.Infrastructure.Persistence.Repositories;
 
+/// <summary>
+/// SQL repository of purchase orders for the current tenant.
+/// </summary>
 public sealed class EfPurchaseOrderRepository(GovErpDbContext db) : IPurchaseOrderRepository
 {
     public Task<PurchaseOrder?> FindByNumberAsync(string number, CancellationToken ct = default) =>

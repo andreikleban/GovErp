@@ -3,7 +3,9 @@ using Microsoft.Data.SqlClient;
 
 namespace GovErp.Infrastructure.Startup;
 
-/// <summary>The tenant runtime user: read/write of its own database, UPDATE/DELETE denied on append-only tables (GE-12). Migrations use a separate user.</summary>
+/// <summary>
+/// The tenant runtime user: read/write of its own database, UPDATE/DELETE denied on append-only tables (GE-12). Migrations use a separate user.
+/// </summary>
 public static partial class DatabaseSecurity
 {
     private static readonly string[] AppendOnlyTables =
@@ -30,7 +32,9 @@ public static partial class DatabaseSecurity
         await command.ExecuteNonQueryAsync(ct);
     }
 
-    /// <summary>The Master runtime user: read-only access to the tenant catalog and user accounts (no db_datawriter, no DENY).</summary>
+    /// <summary>
+    /// The Master runtime user: read-only access to the tenant catalog and user accounts (no db_datawriter, no DENY).
+    /// </summary>
     public static async Task EnsureReadOnlyUserAsync(string migrationConnection, string database, string login, string password, CancellationToken ct)
     {
         RequireIdentifier(database);
@@ -61,7 +65,9 @@ public static partial class DatabaseSecurity
             ALTER LOGIN [{login}] WITH PASSWORD = N'{escapedPassword}';
         """;
 
-    /// <summary>Identifiers cannot be passed as parameters, so only validated names are used.</summary>
+    /// <summary>
+    /// Identifiers cannot be passed as parameters, so only validated names are used.
+    /// </summary>
     private static void RequireIdentifier(string value)
     {
         if (!Identifier().IsMatch(value))

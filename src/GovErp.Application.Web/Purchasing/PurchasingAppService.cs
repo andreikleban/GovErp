@@ -8,7 +8,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace GovErp.Application.Web.Purchasing;
 
-/// <summary>Read-only purchase orders: lines are enriched with the same line's encumbrance (the same pairing as IReferenceAppService.GetPurchaseOrdersAsync).</summary>
+/// <summary>
+/// Read-only purchase orders: lines are enriched with the same line's encumbrance (the same pairing as IReferenceAppService.GetPurchaseOrdersAsync).
+/// </summary>
 public sealed class PurchasingAppService(ITenantOperationRunner runner) : IPurchasingAppService
 {
     public Task<IReadOnlyList<PurchaseOrderListItemVm>> ListOrdersAsync(ActorContext actor, CancellationToken ct = default) =>
@@ -37,7 +39,7 @@ public sealed class PurchasingAppService(ITenantOperationRunner runner) : IPurch
         runner.QueryAsync(actor, async (sp, token) =>
         {
             var po = await sp.GetRequiredService<IPurchaseOrderRepository>().FindByNumberAsync(number, token)
-                ?? throw new NotFoundException($"Purchase order {number} not found.");
+                ?? throw new NotFoundException(AppErrors.PurchaseOrderNotFound, ("po", number));
             var vendor = await sp.GetRequiredService<IVendorRepository>().FindAsync(po.VendorId, token);
             var invoices = sp.GetRequiredService<IVendorInvoiceRepository>();
             var encumbrances = sp.GetRequiredService<IEncumbranceRepository>();

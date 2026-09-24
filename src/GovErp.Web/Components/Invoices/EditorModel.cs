@@ -4,7 +4,9 @@ using GovErp.Application.Web.Invoices.Contracts;
 
 namespace GovErp.Web.Components.Invoices;
 
-/// <summary>The invoice card form: header and lines. For a new document it lives only in memory until Save.</summary>
+/// <summary>
+/// The invoice card form: header and lines. For a new document it lives only in memory until Save.
+/// </summary>
 public sealed class EditorModel
 {
     public string Number { get; set; } = "";
@@ -30,7 +32,9 @@ public sealed class EditorModel
         Lines = invoice.Distributions.Select(LineModel.From).ToList(),
     };
 
-    /// <summary>An empty in-memory draft: it reaches the database only on Save (CreateDraftAsync).</summary>
+    /// <summary>
+    /// An empty in-memory draft: it reaches the database only on Save (CreateDraftAsync).
+    /// </summary>
     public static EditorModel Blank(Guid vendorId, DateOnly documentDate) => new()
     {
         VendorId = vendorId,
@@ -39,7 +43,9 @@ public sealed class EditorModel
         Lines = [LineModel.Default()],
     };
 
-    /// <summary>Whether the content matches another form: unsaved edits block Submit and Check Funds.</summary>
+    /// <summary>
+    /// Whether the content matches another form: unsaved edits block Submit and Check Funds.
+    /// </summary>
     public bool SameContent(EditorModel other) =>
         (Number.Trim(), VendorId, DocumentDate, DueDate, Total, HasPo ? PoRef!.Trim() : null) ==
         (other.Number.Trim(), other.VendorId, other.DocumentDate, other.DueDate, other.Total, other.HasPo ? other.PoRef!.Trim() : null)
@@ -52,7 +58,9 @@ public sealed class EditorModel
     public UpdateInvoiceCommand ToUpdate(CommandEnvelope envelope, Guid id) =>
         new(envelope, id, Number, VendorId, DocumentDate, DocumentDate, DocumentDate, DueDate, Total, HasPo ? PoRef : null, Distributions());
 
-    /// <summary>Without a PO the order line number is not sent: the column is hidden, and an earlier choice must not reach the server.</summary>
+    /// <summary>
+    /// Without a PO the order line number is not sent: the column is hidden, and an earlier choice must not reach the server.
+    /// </summary>
     private List<DistributionCommand> Distributions() =>
         Lines.Select(l => new DistributionCommand(l.Account, l.Amount, HasPo ? l.PoLineNo : null)).ToList();
 }

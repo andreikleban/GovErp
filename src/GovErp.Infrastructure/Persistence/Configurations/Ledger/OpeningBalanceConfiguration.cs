@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace GovErp.Infrastructure.Persistence.Configurations.Ledger;
 
+/// <summary>
+/// EF Core mapping for an opening balance.
+/// </summary>
 public sealed class OpeningBalanceConfiguration : IEntityTypeConfiguration<OpeningBalance>
 {
     public void Configure(EntityTypeBuilder<OpeningBalance> b)

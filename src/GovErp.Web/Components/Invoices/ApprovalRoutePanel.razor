@@ -2,10 +2,9 @@
 @using GovErp.Application.Web.Validation.Contracts
 
 <section class="panel">
-    <h2>Approval route</h2>
+    <h2>Approval route <HelpNote Title="Approval route">A warning on the evaluation is not approval of the document.</HelpNote></h2>
     <p>Document status: @DocumentStatus</p>
     <p>Evaluation: @(Evaluation?.Overall ?? "none")</p>
-    <p class="note">A warning on the evaluation is not approval of the document.</p>
     @if (Evaluation is null || Evaluation.ApprovalRoute.Count == 0)
     {
         <p class="note">No route on this evaluation.</p>
@@ -29,8 +28,7 @@
             </tbody>
         </table>
     }
-    <h3>Decisions</h3>
-    <p class="note">Earlier approval cycles stay on the document.</p>
+    <h3>Decisions <HelpNote Title="Decisions">Earlier approval cycles stay on the document.</HelpNote></h3>
     @if (Approvals.Count == 0)
     {
         <p class="note">No approval decisions recorded.</p>

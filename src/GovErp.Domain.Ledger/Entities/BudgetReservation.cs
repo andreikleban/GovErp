@@ -1,5 +1,8 @@
 namespace GovErp.Domain.Ledger.Entities;
 
+/// <summary>
+/// A hold on available budget for an invoice between submit and post.
+/// </summary>
 public sealed class BudgetReservation
 {
     public Guid Id { get; private set; }

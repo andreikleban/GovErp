@@ -19,7 +19,7 @@ public sealed class RuleParameters
         var value = _definition.DecimalParameter(spec.Name);
         if (!spec.Accepts(value))
         {
-            throw new ValidationException($"Rule {_definition.RuleId}: {spec.Name} must be {spec.Requirement}.");
+            throw new ValidationException(spec.InvalidValueCode, ("rule", _definition.RuleId), ("parameter", spec.Name), ("value", value));
         }
 
         return value;

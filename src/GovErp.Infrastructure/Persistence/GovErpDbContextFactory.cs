@@ -3,7 +3,9 @@ using Microsoft.EntityFrameworkCore.Design;
 
 namespace GovErp.Infrastructure.Persistence;
 
-/// <summary>For dotnet ef only: the migration generator needs a connection string, no connection is opened.</summary>
+/// <summary>
+/// For dotnet ef only: the migration generator needs a connection string, no connection is opened.
+/// </summary>
 public sealed class GovErpDbContextFactory : IDesignTimeDbContextFactory<GovErpDbContext>
 {
     public GovErpDbContext CreateDbContext(string[] args) =>

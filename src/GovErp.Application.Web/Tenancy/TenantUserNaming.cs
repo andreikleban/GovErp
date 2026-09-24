@@ -11,7 +11,9 @@ public static class TenantUserNaming
         CancellationToken ct = default) =>
         (await directory.ListAsync(tenantId, ct)).ToDictionary(u => u.Id, u => u.DisplayName);
 
-    /// <summary>An unknown (for example, deleted) user falls back to the raw id, as for invoice links.</summary>
+    /// <summary>
+    /// An unknown (for example, deleted) user falls back to the raw id, as for invoice links.
+    /// </summary>
     public static string NameOf(this IReadOnlyDictionary<Guid, string> names, Guid userId) =>
         names.GetValueOrDefault(userId, userId.ToString());
 }

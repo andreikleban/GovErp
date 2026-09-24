@@ -12,11 +12,12 @@
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="explanation-title" tabindex="-1"
          @ref="_dialog" @onkeydown="OnKeyDownAsync">
         <header class="modal-header">
-            <h2 id="explanation-title">Explanation · @Title</h2>
+            <h2 id="explanation-title">Explanation · @Title
+                <HelpNote Title="Explanation">The validation log stays authoritative. This text does not change the decision.</HelpNote>
+            </h2>
             <button type="button" @onclick="CloseAsync">Close</button>
         </header>
         <div class="modal-body">
-            <p class="note">The validation log stays authoritative. This text does not change the decision.</p>
             <p class="toolbar">
                 <label>Audience
                     <select @bind="_audience" @bind:after="NewCommand">

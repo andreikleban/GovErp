@@ -16,25 +16,25 @@ internal sealed class OverrideGuard
 
     public void EnsureKept(RuleDefinition upper, RuleDefinition local)
     {
-        if (!local.IsEnabled) Reject(upper, local, "switches it off");
-        if (local.Step != upper.Step) Reject(upper, local, "moves it to another step");
-        if (local.IsMilderThan(upper)) Reject(upper, local, "lowers its severity");
-        if (local.AllowsMoreOverridersThan(upper)) Reject(upper, local, "lets more roles override it");
+        if (!local.IsEnabled) Reject(ValidationErrors.LayerSwitchesOff, upper, local);
+        if (local.Step != upper.Step) Reject(ValidationErrors.LayerMovesStep, upper, local);
+        if (local.IsMilderThan(upper)) Reject(ValidationErrors.LayerLowersSeverity, upper, local);
+        if (local.AllowsMoreOverridersThan(upper)) Reject(ValidationErrors.LayerAddsOverriders, upper, local);
         if (!local.Parameters.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(upper.Parameters.Keys))
-            Reject(upper, local, "changes its parameter set");
+            Reject(ValidationErrors.LayerChangesParameterSet, upper, local);
 
         foreach (var (name, value) in upper.Parameters)
         {
             if (local.Parameters[name] == value) continue;
-            if (upper.OverridableBy.Count == 0) Reject(upper, local, $"changes {name} of a guard nobody may override");
+            if (upper.OverridableBy.Count == 0) Reject(ValidationErrors.LayerChangesFixedParameter, upper, local, name);
             var spec = _catalog.ParameterOf(upper.RuleId, name);
-            if (spec is null) Reject(upper, local, $"changes {name}, whose direction the code does not declare");
-            if (!spec.KeepsGuard(upper.DecimalParameter(name), local.DecimalParameter(name))) Reject(upper, local, $"relaxes {name}");
+            if (spec is null) Reject(ValidationErrors.LayerChangesUndeclaredParameter, upper, local, name);
+            if (!spec.KeepsGuard(upper.DecimalParameter(name), local.DecimalParameter(name)))
+                Reject(ValidationErrors.LayerRelaxesParameter, upper, local, name);
         }
     }
 
     [DoesNotReturn]
-    private static void Reject(RuleDefinition upper, RuleDefinition local, string how) =>
-        throw new ValidationException(
-            $"Rule {upper.RuleId}: the {local.Layer} layer {how}; it cannot weaken or replace the {upper.Layer} guard.");
+    private static void Reject(string code, RuleDefinition upper, RuleDefinition local, string? parameter = null) =>
+        throw new ValidationException(code, ("rule", upper.RuleId), ("layer", local.Layer), ("upperLayer", upper.Layer), ("parameter", parameter));
 }

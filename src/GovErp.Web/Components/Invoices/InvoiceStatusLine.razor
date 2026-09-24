@@ -100,6 +100,7 @@
     /// <summary>Readiness for payment handoff: the same conditions as ReadyForPaymentHandoff; the first unmet one is the reason.</summary>
     private (string Text, string? Tone) Payment =>
         Invoice is null ? ("—", (string?)null)
+        : Invoice.PaidAt is { } paid ? ($"Paid {paid.LocalDateTime:yyyy-MM-dd}", "ok")
         : Invoice.PaymentHold ? ("On hold", "bad")
         : Invoice.ReadyForPaymentHandoff ? ("Ready", "ok")
         : Invoice.Status != "Posted" ? ("Not ready: not posted", (string?)null)

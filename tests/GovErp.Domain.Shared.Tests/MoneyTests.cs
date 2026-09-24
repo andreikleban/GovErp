@@ -10,8 +10,8 @@ public class MoneyTests
     {
         foreach (var amount in new[] { 1.005m, 1.015m, -0.001m, 0.0000000000000000000000000001m })
         {
-            Assert.Throws<ArgumentException>(() => Money.Of(amount));
-            Assert.Throws<ArgumentException>(() => new Money(amount));
+            Assert.Equal(ValueErrors.FractionalCents, Assert.Throws<InvalidValueException>(() => Money.Of(amount)).Problem.Code);
+            Assert.Throws<InvalidValueException>(() => new Money(amount));
         }
     }
 
@@ -22,9 +22,9 @@ public class MoneyTests
         Assert.Equal(limit, Money.Of(limit).Amount);
         Assert.Equal(-limit, Money.Of(-limit).Amount);
         foreach (var amount in new[] { 10000000000000000m, -10000000000000000m, decimal.MaxValue, decimal.MinValue })
-            Assert.Throws<ArgumentOutOfRangeException>(() => Money.Of(amount));
-        Assert.Throws<ArgumentOutOfRangeException>(() => Money.Of(limit) + Money.Of(.01m));
-        Assert.Throws<ArgumentOutOfRangeException>(() => Money.Of(-limit) - Money.Of(.01m));
+            Assert.Equal(ValueErrors.AmountTooLarge, Assert.Throws<InvalidValueException>(() => Money.Of(amount)).Problem.Code);
+        Assert.Throws<InvalidValueException>(() => Money.Of(limit) + Money.Of(.01m));
+        Assert.Throws<InvalidValueException>(() => Money.Of(-limit) - Money.Of(.01m));
     }
 
     [Fact]

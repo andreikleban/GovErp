@@ -608,6 +608,9 @@ namespace GovErp.Infrastructure.Persistence.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<DateTimeOffset?>("PaidAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<bool>("PaymentHold")
                         .HasColumnType("bit");
 

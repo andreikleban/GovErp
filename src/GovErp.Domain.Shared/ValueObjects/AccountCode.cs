@@ -1,5 +1,8 @@
 namespace GovErp.Domain.Shared.ValueObjects;
 
+/// <summary>
+/// A full account code: fund-department-object, and a grant when present.
+/// </summary>
 public sealed record AccountCode
 {
     public FundCode Fund { get; }
@@ -22,7 +25,7 @@ public sealed record AccountCode
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(text);
         var parts = text.Split('-', 4);
-        if (parts.Length < 3) throw new ArgumentException("An account requires fund, department and object.", nameof(text));
+        if (parts.Length < 3) throw new InvalidValueException(nameof(text), ValueErrors.AccountSegments, ("account", text));
         return new(new(parts[0]), new(parts[1]), new(parts[2]), parts.Length == 4 ? new(parts[3]) : null);
     }
 

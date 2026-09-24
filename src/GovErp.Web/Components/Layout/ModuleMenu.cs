@@ -19,8 +19,8 @@ public static class ModuleMenu
         new("Purchasing", "Purchase orders and their encumbrances.", [new MenuEntry("Purchase Orders", "/purchasing/orders")]),
         new("Payables", "Vendor invoices and the approval queue.",
             [new MenuEntry("Invoices", "/invoices"), new MenuEntry("Approvals", "/approvals")]),
-        new("General Ledger", "Journal and fiscal periods.",
-            [new MenuEntry("Journal", "/ledger/journal"), new MenuEntry("Periods", "/ledger/periods")]),
+        new("General Ledger", "Journal, fund balances and fiscal periods.",
+            [new MenuEntry("Journal", "/ledger/journal"), new MenuEntry("Fund balances", "/ledger/funds"), new MenuEntry("Periods", "/ledger/periods")]),
         new("Audit", "Evaluations and audit events.",
             [new MenuEntry("Evaluations", "/audit/evaluations"), new MenuEntry("Events", "/audit/events")]),
     ];

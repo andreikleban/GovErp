@@ -6,6 +6,9 @@ using GovErp.Application.Web.Invoices.Contracts;
 
 namespace GovErp.Application.Web.Approvals;
 
+/// <summary>
+/// Use cases for approving an invoice.
+/// </summary>
 public interface IApprovalAppService
 {
     Task<IReadOnlyList<ApprovalQueueItemVm>> GetQueueAsync(ActorContext actor, CancellationToken ct = default);

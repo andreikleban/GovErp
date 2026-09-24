@@ -5,7 +5,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GovErp.Infrastructure.Seed;
 
-/// <summary>Master demo users (spec §2). Tenants are created by TenantProvisioner, not by this class.</summary>
+/// <summary>
+/// Master demo users (spec §2). Tenants are created by TenantProvisioner, not by this class.
+/// </summary>
 public static class MasterSeed
 {
     public const string DemoPassword = "1!Qwertyui";
@@ -54,8 +56,7 @@ public static class MasterSeed
     }
 
     /// <summary>
-    /// Adds users missing by UserName. Existing users get the shared demo password
-    /// if the stored hash does not match it.
+    /// Adds users missing by UserName. Existing users get the shared demo password if the stored hash does not match it.
     /// </summary>
     public static async Task SeedUsersAsync(MasterDbContext master, IPasswordHasher<UserAccount> hasher, CancellationToken ct)
     {

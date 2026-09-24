@@ -21,7 +21,7 @@ public class DistributionSnapshotTests
             "RULE", 1, ValidationStep.TransactionPurpose, RuleLayer.Core, Severity.SoftStop,
             new Dictionary<string, string>(), [ApproverRole.FinanceDirector], SubjectBuilder.June15, null,
             "message", "resolution", true), Severity.SoftStop, null,
-            new Dictionary<string, string>(), new Dictionary<string, string>());
+            new Dictionary<string, string>(), new Dictionary<string, string>(), "TEST.STOP");
         var previous = new List<RuleOutcome> { outcome };
         var id = Guid.NewGuid();
         var subject = new ValidationSubject(example.Transaction, example.Distributions, [], [], true, null,

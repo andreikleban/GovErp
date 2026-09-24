@@ -2,7 +2,9 @@ using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.Entities;
 
-/// <summary>An immutable record of one evaluation (GE-12). Created only by the pipeline.</summary>
+/// <summary>
+/// An immutable record of one evaluation (GE-12). Created only by the pipeline.
+/// </summary>
 public sealed class EvaluationRecord
 {
     public Guid Id { get; private set; }

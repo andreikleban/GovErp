@@ -35,5 +35,5 @@ public class DatePeriodTests
 
     [Fact]
     public void Rejects_reversed_period() =>
-        Assert.Throws<ArgumentException>(() => new DatePeriod(new DateOnly(2026, 1, 2), new DateOnly(2026, 1, 1)));
+        Assert.Throws<InvalidValueException>(() => new DatePeriod(new DateOnly(2026, 1, 2), new DateOnly(2026, 1, 1)));
 }

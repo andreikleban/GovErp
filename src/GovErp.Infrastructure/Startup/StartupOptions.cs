@@ -10,6 +10,8 @@ public sealed class StartupOptions
     public string MasterDatabase { get; set; } = "GovErp_Master";
     public string MasterRuntimeLogin { get; set; } = "";
     public string MasterRuntimePassword { get; set; } = "";
-    /// <summary>Names of tenant databases that may be reset via demo-reset (spec §5, rule 10).</summary>
+    /// <summary>
+    /// Names of tenant databases that may be reset via demo-reset (spec §5, rule 10).
+    /// </summary>
     public string[] DemoResetAllowlist { get; set; } = [];
 }

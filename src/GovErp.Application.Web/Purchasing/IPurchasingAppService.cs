@@ -3,9 +3,14 @@ using GovErp.Application.Web.Purchasing.Contracts;
 
 namespace GovErp.Application.Web.Purchasing;
 
+/// <summary>
+/// Use cases for the purchase-order card and list.
+/// </summary>
 public interface IPurchasingAppService
 {
     Task<IReadOnlyList<PurchaseOrderListItemVm>> ListOrdersAsync(ActorContext actor, CancellationToken ct = default);
-    /// <summary>Purchase order card by number. NotFound for an unknown number.</summary>
+    /// <summary>
+    /// Purchase order card by number. NotFound for an unknown number.
+    /// </summary>
     Task<PurchaseOrderDetailVm> GetOrderAsync(string number, ActorContext actor, CancellationToken ct = default);
 }

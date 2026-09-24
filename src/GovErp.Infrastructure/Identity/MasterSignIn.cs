@@ -6,6 +6,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GovErp.Infrastructure.Identity;
 
+/// <summary>
+/// Signs a user in against the master database user table.
+/// </summary>
 public sealed class MasterSignIn(MasterDbContext master, IPasswordHasher<UserAccount> hasher) : ISignIn
 {
     public async Task<ActorContext?> AuthenticateAsync(string userName, string password, CancellationToken ct = default)

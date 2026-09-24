@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace GovErp.Infrastructure.Persistence.Configurations.Validation;
 
+/// <summary>
+/// EF Core mapping for an evaluation record.
+/// </summary>
 public sealed class EvaluationRecordConfiguration : IEntityTypeConfiguration<EvaluationRecord>
 {
     public void Configure(EntityTypeBuilder<EvaluationRecord> b)

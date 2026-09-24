@@ -2,6 +2,9 @@ using System.Globalization;
 
 namespace GovErp.Domain.Shared.ValueObjects;
 
+/// <summary>
+/// A USD amount to the cent. Fractions of a cent are rejected, not rounded.
+/// </summary>
 public readonly record struct Money : IComparable<Money>
 {
     private const decimal Limit = 9999999999999999.99m;
@@ -11,9 +14,9 @@ public readonly record struct Money : IComparable<Money>
     public Money(decimal amount)
     {
         if (amount < -Limit || amount > Limit)
-            throw new ArgumentOutOfRangeException(nameof(amount), "Amount must fit decimal(18,2).");
+            throw new InvalidValueException(nameof(amount), ValueErrors.AmountTooLarge, ("amount", amount));
         if (decimal.Round(amount, 2) != amount)
-            throw new ArgumentException("Amount cannot contain fractional cents.", nameof(amount));
+            throw new InvalidValueException(nameof(amount), ValueErrors.FractionalCents, ("amount", amount));
         Amount = amount;
     }
 

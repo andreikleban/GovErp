@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GovErp.Infrastructure.Persistence.Repositories;
 
+/// <summary>
+/// SQL repository of funds for the current tenant.
+/// </summary>
 public sealed class EfFundRepository(GovErpDbContext db) : IFundRepository
 {
     public Task<Fund?> FindAsync(FundCode code, CancellationToken ct = default) =>

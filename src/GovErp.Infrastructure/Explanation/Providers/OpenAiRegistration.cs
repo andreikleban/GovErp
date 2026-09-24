@@ -7,6 +7,9 @@ using System.ClientModel;
 
 namespace GovErp.Infrastructure.Explanation.Providers;
 
+/// <summary>
+/// Registers OpenAI as an explanation provider.
+/// </summary>
 public static class OpenAiRegistration
 {
     public static void Add(IServiceCollection services, ExplanationOptions options, IConfiguration configuration)

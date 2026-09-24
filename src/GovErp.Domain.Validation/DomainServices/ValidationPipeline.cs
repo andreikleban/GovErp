@@ -27,7 +27,9 @@ public sealed class ValidationPipeline
         _steps = new RuleStepRunner(catalog);
     }
 
-    /// <summary>Resolves the definitions by the scope of the subject's lines and evaluates. An unresolvable configuration is a refusal, not an exception.</summary>
+    /// <summary>
+    /// Resolves the definitions by the scope of the subject's lines and evaluates. An unresolvable configuration is a refusal, not an exception.
+    /// </summary>
     public EvaluationRecord Evaluate(ValidationSubject subject, IReadOnlyList<RuleDefinition> definitions, EvaluationTrigger trigger,
         UserId evaluatedBy, DateTimeOffset evaluatedAt)
     {
@@ -41,7 +43,7 @@ public sealed class ValidationPipeline
         catch (ValidationException ex)
         {
             var none = new EffectiveRuleSet([], new RuleSetVersions(RuleResolver.EngineVersion, 0, 0, 0, 0));
-            return Refuse(subject, none, trigger, evaluatedBy, evaluatedAt, RuleConfigurationRuleId, ex.Message);
+            return Refuse(subject, none, trigger, evaluatedBy, evaluatedAt, RuleConfigurationRuleId, ex.Problem);
         }
 
         return Evaluate(subject, rules, trigger, evaluatedBy, evaluatedAt);
@@ -54,9 +56,9 @@ public sealed class ValidationPipeline
         ArgumentNullException.ThrowIfNull(rules);
 
         // Fail closed: an incomplete input or configuration is refused, never evaluated in part.
-        if (InputCheck.Problem(subject, evaluatedBy) is { } input)
+        if (InputCheck.FirstProblem(subject, evaluatedBy) is { } input)
             return Refuse(subject, rules, trigger, evaluatedBy, evaluatedAt, ValidationInputRuleId, input);
-        if (_configuration.Problem(subject, rules) is { } configuration)
+        if (_configuration.FirstProblem(subject, rules) is { } configuration)
             return Refuse(subject, rules, trigger, evaluatedBy, evaluatedAt, RuleConfigurationRuleId, configuration);
 
         // Steps 1–6: the catalog rules.
@@ -84,19 +86,19 @@ public sealed class ValidationPipeline
     private static bool ReadyForPaymentHandoff(ValidationSubject subject) =>
         subject.BusinessDate is { } businessDate && PostingEligibility.ReadyForPaymentHandoff(subject, businessDate);
 
-    /// <summary>A refusal is recorded like any evaluation: one Hard Stop outcome carrying the reason, every rule step skipped.</summary>
+    /// <summary>
+    /// A refusal is recorded like any evaluation: one Hard Stop outcome carrying the problem (code and arguments), every rule step skipped.
+    /// </summary>
     private static EvaluationRecord Refuse(ValidationSubject subject, EffectiveRuleSet rules, EvaluationTrigger trigger,
-        UserId evaluatedBy, DateTimeOffset evaluatedAt, string ruleId, string message)
+        UserId evaluatedBy, DateTimeOffset evaluatedAt, string ruleId, Problem problem)
     {
         var definition = new RuleDefinition(ruleId, 1, ValidationStep.RequiredSegments, RuleLayer.Core, Severity.HardStop,
-            new ReadOnlyDictionary<string, string>(new Dictionary<string, string>()), [], DateOnly.MinValue, null, message,
-            "Correct the input or rule configuration and evaluate again.");
-        var outcome = RuleOutcome.From(definition, Severity.HardStop, null, new Dictionary<string, string>(),
-            new Dictionary<string, string>(), message);
+            new ReadOnlyDictionary<string, string>(new Dictionary<string, string>()), [], DateOnly.MinValue, null, problem.Code, "");
+        var outcome = RuleOutcome.From(definition, Severity.HardStop, null, problem.Args, new Dictionary<string, string>(), problem.Code);
         var steps = Enum.GetValues<ValidationStep>()
             .Select(step => new StepExecution(step, step == ValidationStep.RequiredSegments ? StepExecutionStatus.Executed : StepExecutionStatus.Skipped))
             .ToArray();
-        var check = trigger == EvaluationTrigger.Post ? new PostingCheck(false, [message]) : null;
+        var check = trigger == EvaluationTrigger.Post ? new PostingCheck(false, [problem]) : null;
         return new EvaluationRecord(subject, trigger, evaluatedAt, evaluatedBy, rules.Versions, [outcome], Severity.HardStop,
             Capabilities.ForDocument(subject.Transaction.Status, Severity.HardStop, false), steps, [], [], check, false);
     }

@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace GovErp.Infrastructure.Persistence.Configurations.Validation;
 
+/// <summary>
+/// EF Core mapping for an explanation record.
+/// </summary>
 public sealed class ExplanationRecordConfiguration : IEntityTypeConfiguration<ExplanationRecord>
 {
     public void Configure(EntityTypeBuilder<ExplanationRecord> b)

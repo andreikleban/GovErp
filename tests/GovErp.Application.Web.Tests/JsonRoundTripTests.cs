@@ -1,4 +1,5 @@
 using System.Text.Json;
+using GovErp.Domain.Validation.Codes;
 using GovErp.Domain.Validation.DomainServices;
 using GovErp.Domain.Validation.ValueObjects;
 using GovErp.Infrastructure.Persistence;
@@ -30,6 +31,17 @@ public class JsonRoundTripTests
         RoundTrip(record.RuleSetVersions).Should().Be(record.RuleSetVersions);
         RoundTrip(record.Steps).Should().BeEquivalentTo(record.Steps);
         RoundTrip(record.PostingCheck).Should().BeEquivalentTo(record.PostingCheck);
+    }
+
+    [Fact]
+    public void Approval_reason_reads_a_code_object_and_a_legacy_sentence()
+    {
+        var coded = new ApprovalRequirement(ApproverRole.GrantsManager, null, Problem.Of(RouteReasons.GrantFunded), false);
+        RoundTrip(coded).Should().BeEquivalentTo(coded);
+
+        const string legacy = """[{"Role":"DepartmentHead","Department":"6000","Reason":"Department 6000 is charged.","IsSatisfied":false}]""";
+        var read = JsonSerializer.Deserialize<List<ApprovalRequirement>>(legacy, JsonColumn.Options)!;
+        read.Should().ContainSingle().Which.Reason.Code.Should().Be("Department 6000 is charged.");
     }
 
     [Fact]

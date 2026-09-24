@@ -10,8 +10,7 @@
 
 <PageTitle>Evaluations</PageTitle>
 <Breadcrumbs Items="@([new Crumb("Audit"), new Crumb("Evaluations")])" />
-<h1>Evaluations</h1>
-<p class="note">The latest 200 engine evaluations across all documents, most recent first.</p>
+<h1>Evaluations <HelpNote Title="Evaluations">The latest 200 engine evaluations across all documents, most recent first.</HelpNote></h1>
 
 <FilterBar OnClear="Clear" Active="@(Document is not null || Trigger is not null || Overall is not null || Fingerprint is not null)">
     <label>Document <input value="@Document" @onchange="e => Filter(document: Value(e))" placeholder="AP-2026-…" /></label>

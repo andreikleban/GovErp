@@ -12,6 +12,9 @@ public sealed class TenancyOptions
     public Dictionary<string, TenantCredential> Credentials { get; set; } = [];
 }
 
+/// <summary>
+/// SQL login of a tenant, read from configuration.
+/// </summary>
 public sealed class TenantCredential
 {
     public string User { get; set; } = "";

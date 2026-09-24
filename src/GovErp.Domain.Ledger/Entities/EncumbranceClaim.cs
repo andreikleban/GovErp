@@ -1,5 +1,8 @@
 namespace GovErp.Domain.Ledger.Entities;
 
+/// <summary>
+/// A claim that holds encumbrance for liquidation by an invoice.
+/// </summary>
 public sealed class EncumbranceClaim
 {
     public Guid Id { get; private set; } = Guid.NewGuid();

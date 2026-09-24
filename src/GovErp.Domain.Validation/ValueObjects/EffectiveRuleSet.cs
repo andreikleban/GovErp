@@ -4,6 +4,9 @@ using GovErp.Domain.Validation.Exceptions;
 
 namespace GovErp.Domain.Validation.ValueObjects;
 
+/// <summary>
+/// The rules in force on a date, after the layers have been resolved.
+/// </summary>
 public sealed class EffectiveRuleSet
 {
     private readonly IReadOnlyDictionary<(string? Fund, string? Grant), EffectiveRuleSet>? _scopes;
@@ -26,7 +29,7 @@ public sealed class EffectiveRuleSet
 
     public EffectiveRuleSet ForScope(string? fund, string? grant) => _scopes is null ? this
         : _scopes.TryGetValue((fund, grant), out var set) ? set
-        : throw new ValidationException($"No resolved rule set for fund '{fund}' and grant '{grant}'.");
+        : throw new ValidationException(ValidationErrors.NoSetForScope, ("fund", fund), ("grant", grant));
 
     public RuleDefinition? Find(string ruleId, string? fund, string? grant) => ForScope(fund, grant).Find(ruleId);
 
@@ -34,7 +37,7 @@ public sealed class EffectiveRuleSet
     {
         var matches = Rules.Where(rule => rule.RuleId == ruleId).Take(2).ToArray();
         return matches.Length > 1
-            ? throw new ValidationException($"Rule {ruleId} has multiple effective scopes; specify fund and grant.")
+            ? throw new ValidationException(ValidationErrors.MultipleScopes, ("rule", ruleId))
             : matches.SingleOrDefault();
     }
 }

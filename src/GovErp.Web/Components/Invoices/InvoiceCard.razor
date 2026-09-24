@@ -18,7 +18,13 @@
 @* The invoice card follows the common template: action bar → header → status line → lines → tabs.
    A new document opens the same form empty; a saved one is edited in place only by its author in Draft. *@
 <Breadcrumbs Items="@([new Crumb("Payables"), new Crumb("Invoices", "/invoices"), new Crumb(Invoice?.Reference ?? "New")])" />
-<h1>@(Invoice is null ? "New invoice" : $"Invoice {Invoice.Reference}")</h1>
+<h1>@(Invoice is null ? "New invoice" : $"Invoice {Invoice.Reference}")
+    @if (Invoice is null)
+    {
+        <HelpNote Title="New invoice">Nothing is stored until you press Save. The document number (AP-year-sequence) is assigned on save.
+            The vendor invoice number is suggested from the same sequence; keep it or enter the number printed on the vendor's invoice.</HelpNote>
+    }
+</h1>
 
 <div class="doc-toolbar" role="toolbar" aria-label="Invoice actions">
     @Button("Save", Policy.Save, SaveAsync, primary: true)
@@ -30,6 +36,7 @@
     @Button("Release Hold", Policy.ReleaseHold, () => OpenDialog(DialogKind.Release))
     <span class="sep" aria-hidden="true"></span>
     @Button("Post", Policy.Post, PostAsync, primary: true)
+    @Button("Pay", Policy.Pay, PayAsync)
     <span class="sep" aria-hidden="true"></span>
     @Button("Withdraw", Policy.Withdraw, () => OpenDialog(DialogKind.Withdraw))
     @Button("Return to Draft", Policy.ReturnToDraft, ReturnAsync)
@@ -40,11 +47,6 @@
 </div>
 
 @if (Message is not null) { <p class="error">@Message</p> }
-@if (Invoice is null)
-{
-    <p class="note">Nothing is stored until you press Save. The document number (AP-year-sequence) is assigned on save.
-        The vendor invoice number is suggested from the same sequence; keep it or enter the number printed on the vendor's invoice.</p>
-}
 
 <InvoiceHeader Edit="_edit" Invoice="Invoice" Editable="Policy.CanEdit" Vendors="Vendors" PurchaseOrders="PurchaseOrders" OnChange="Changed" />
 <InvoiceStatusLine Invoice="Invoice" VendorStatus="@VendorStatus" />
@@ -81,7 +83,7 @@
             case CardTab.Accounting:
                 <PostingPanel Lines="PostingLines" IsPosted="@(Invoice.Status == "Posted")" Check="Shown?.PostingCheck" />
                 <PaymentHandoffPanel Status="@Invoice.Status" VendorStatus="@VendorStatus" PaymentHold="Invoice.PaymentHold" DueDate="Invoice.DueDate"
-                                     Ready="Invoice.ReadyForPaymentHandoff" />
+                                     Ready="Invoice.ReadyForPaymentHandoff" PaidAt="Invoice.PaidAt" />
                 break;
         }
     </div>
@@ -105,15 +107,15 @@
                     </select>
                 </label>
             }
-            <p class="note">The release is recorded with your role and reason; the invoice is re-evaluated.</p>
+            <HelpNote Title="Release hold">The release is recorded with your role and reason; the invoice is re-evaluated.</HelpNote>
         }
         else if (_dialog == DialogKind.Reject)
         {
-            <p class="note">Rejection releases the budget reservations and PO claims of this invoice. The author can return it to draft.</p>
+            <HelpNote Title="Reject">Rejection releases the budget reservations and PO claims of this invoice. The author can return it to draft.</HelpNote>
         }
         else if (_dialog == DialogKind.Withdraw)
         {
-            <p class="note">Withdrawal releases the budget reservations and PO claims and returns the invoice to draft.</p>
+            <HelpNote Title="Withdraw">Withdrawal releases the budget reservations and PO claims and returns the invoice to draft.</HelpNote>
         }
     </ReasonDialog>
     <ExplanationDialog Open="_explanationOpen" EvaluationId="Shown?.Id" OnClose="CloseExplanation"
@@ -142,6 +144,7 @@
     [Parameter] public EventCallback<InvoiceActionCommand> OnValidate { get; set; }
     [Parameter] public EventCallback<InvoiceActionCommand> OnSubmit { get; set; }
     [Parameter] public EventCallback<InvoiceActionCommand> OnPost { get; set; }
+    [Parameter] public EventCallback<InvoiceActionCommand> OnPay { get; set; }
     [Parameter] public EventCallback<ReasonedActionCommand> OnWithdraw { get; set; }
     [Parameter] public EventCallback<InvoiceActionCommand> OnReturnToDraft { get; set; }
     [Parameter] public EventCallback<PaymentHoldCommand> OnPaymentHold { get; set; }
@@ -336,6 +339,7 @@
     private Task ValidateAsync() => OnValidate.InvokeAsync(new InvoiceActionCommand(Envelope, Invoice!.Id));
     private Task SubmitAsync() => OnSubmit.InvokeAsync(new InvoiceActionCommand(Envelope, Invoice!.Id));
     private Task PostAsync() => OnPost.InvokeAsync(new InvoiceActionCommand(Envelope, Invoice!.Id));
+    private Task PayAsync() => OnPay.InvokeAsync(new InvoiceActionCommand(Envelope, Invoice!.Id));
     private Task ReturnAsync() => OnReturnToDraft.InvokeAsync(new InvoiceActionCommand(Envelope, Invoice!.Id));
     private Task ApproveAsync() => OnApprove.InvokeAsync(new InvoiceActionCommand(Envelope, Invoice!.Id));
     private Task HoldAsync() => OnPaymentHold.InvokeAsync(new PaymentHoldCommand(Envelope, Invoice!.Id, !Invoice.PaymentHold));

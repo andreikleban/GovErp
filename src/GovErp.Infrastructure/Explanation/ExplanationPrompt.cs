@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using GovErp.Application.Web.Common;
 using GovErp.Application.Web.Explanation;
 using GovErp.Domain.Validation.Entities;
 using Microsoft.Extensions.AI;
@@ -52,7 +53,7 @@ public static class ExplanationPrompt
                 version = o.RuleVersion,
                 severity = o.Severity.ToString(),
                 line = o.DistributionLine,
-                message = o.Message,
+                message = Messages.Render(o),
                 resolution = o.Resolution,
                 calculation = includeCalculation ? o.Computed : null,
                 inputs = includeInputs ? o.Inputs : null,

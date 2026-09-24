@@ -1,0 +1,51 @@
+@* A form comment. Every screen opens it the same way: a "?" button, then this window. *@
+<button type="button" class="help" aria-expanded="@_open" aria-label="@($"About {Title}")" @onclick="Open">?</button>
+@if (_open)
+{
+    <div class="modal-backdrop help-layer" @onclick="Close"></div>
+    <div class="modal small help-layer" role="dialog" aria-modal="true" aria-labelledby="@_titleId" tabindex="-1"
+         @ref="_dialog" @onkeydown="OnKeyDown" @onkeydown:stopPropagation="true">
+        <header class="modal-header">
+            <h2 id="@_titleId">@Title</h2>
+            <button type="button" @onclick="Close">Close</button>
+        </header>
+        <div class="modal-body">
+            @ChildContent
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private readonly string _titleId = $"help-{Guid.NewGuid():N}";
+    private ElementReference _dialog;
+    private bool _open;
+    private bool _focused;
+
+    private void Open() => _open = true;
+
+    private void Close()
+    {
+        _open = false;
+        _focused = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_open && !_focused)
+        {
+            _focused = true;
+            await _dialog.FocusAsync();
+        }
+    }
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            Close();
+        }
+    }
+}

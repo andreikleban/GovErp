@@ -9,11 +9,10 @@
 
 <PageTitle>Budget Lines</PageTitle>
 <Breadcrumbs Items="@([new Crumb("Budget"), new Crumb("Budget Lines")])" />
-<h1>Budget Lines</h1>
-<p class="note">
+<h1>Budget Lines <HelpNote Title="Budget lines">
     Open a line for its amendments, held reservations and encumbrances. <a href="/budget/amendments">Amendments</a> and
     <a href="/budget/encumbrances">Encumbrances</a> also list them across every line.
-</p>
+</HelpNote></h1>
 @if (_error is not null) { <p class="error">@_error</p> }
 <label>Fiscal year <input type="number" @bind="_year" /></label>
 <p class="toolbar"><button type="button" disabled="@_busy" @onclick="LoadAsync">Show</button></p>

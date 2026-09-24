@@ -1,5 +1,8 @@
 namespace GovErp.Application.Web.Explanation;
 
+/// <summary>
+/// Builds an explanation view from a stored record.
+/// </summary>
 public static class ExplanationMapping
 {
     public static ExplanationVm ToVm(ExplanationRecord r) =>

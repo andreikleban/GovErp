@@ -9,7 +9,7 @@ public class OutcomeAggregationTests
     private static RuleOutcome Outcome(Severity severity = Severity.SoftStop, string value = "100", int? line = 1) =>
         RuleOutcome.From(DemoRules.Rule("B", ValidationStep.BudgetAvailability, RuleLayer.Core, severity,
             overridableBy: [ApproverRole.BudgetOfficer]), severity, line,
-            new Dictionary<string, string> { ["amount"] = value }, new Dictionary<string, string>());
+            new Dictionary<string, string> { ["amount"] = value }, new Dictionary<string, string>(), "TEST.STOP");
 
     private static (ValidationSubject Subject, RuleOutcome Current) Bound()
     {

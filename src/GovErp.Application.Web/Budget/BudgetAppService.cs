@@ -9,6 +9,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace GovErp.Application.Web.Budget;
 
+/// <summary>
+/// Budget-line use cases: the card, the list and an amendment.
+/// </summary>
 public sealed class BudgetAppService(ITenantOperationRunner runner) : IBudgetAppService
 {
     public Task<IReadOnlyList<BudgetLineVm>> ListAsync(int fiscalYear, ActorContext actor, CancellationToken ct = default) =>
@@ -26,7 +29,7 @@ public sealed class BudgetAppService(ITenantOperationRunner runner) : IBudgetApp
             var fy = new FiscalYear(fiscalYear);
             var accountCode = AccountCode.Parse(account);
             var line = await sp.GetRequiredService<IBudgetLineRepository>().FindAsync(accountCode, fy, token)
-                ?? throw new NotFoundException($"Budget line {account} FY{fiscalYear} not found.");
+                ?? throw new NotFoundException(AppErrors.BudgetLineNotFound, ("account", account), ("fiscalYear", fiscalYear));
             var openings = await sp.GetRequiredService<IOpeningBalanceRepository>().ListAsync(fy, token);
             var invoices = sp.GetRequiredService<IVendorInvoiceRepository>();
             var reservations = await BudgetMapping.ReservationsAsync(line, invoices, token);
@@ -69,12 +72,12 @@ public sealed class BudgetAppService(ITenantOperationRunner runner) : IBudgetApp
         {
             if (!actor.IsInAnyRole(Roles.Overriders))
             {
-                return CommandResult<BudgetLineVm>.Forbidden("Only the budget officer or finance director amends budgets.");
+                return CommandResult<BudgetLineVm>.Forbidden(AppErrors.OnlyOverridersAmend);
             }
 
             var lines = sp.GetRequiredService<IBudgetLineRepository>();
             var line = await lines.FindAsync(AccountCode.Parse(cmd.Account), new FiscalYear(cmd.FiscalYear), token)
-                ?? throw new NotFoundException($"Budget line {cmd.Account} FY{cmd.FiscalYear} not found.");
+                ?? throw new NotFoundException(AppErrors.BudgetLineNotFound, ("account", cmd.Account), ("fiscalYear", cmd.FiscalYear));
             line.Amend(Money.Of(cmd.Amount), cmd.Reference, cmd.EffectiveDate);   // date outside the FY → LedgerException → Refused
             sp.GetRequiredService<IAuditTrail>().Record(actor, "BudgetAmended", cmd.Account, cmd.Envelope.CommandId.ToString(),
                 new { cmd.FiscalYear, cmd.Amount, cmd.Reference, cmd.EffectiveDate, Amended = line.Amended.Amount });

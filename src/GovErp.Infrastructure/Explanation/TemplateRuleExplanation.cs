@@ -4,7 +4,9 @@ using GovErp.Application.Web.Reference.Contracts;
 
 namespace GovErp.Infrastructure.Explanation;
 
-/// <summary>A deterministic retelling of the written description: the Template mode and the fallback when the model is unavailable.</summary>
+/// <summary>
+/// A deterministic retelling of the written description: the Template mode and the fallback when the model is unavailable.
+/// </summary>
 public static class TemplateRuleExplanation
 {
     public const string Provider = "Template";

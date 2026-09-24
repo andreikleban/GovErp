@@ -1,5 +1,8 @@
 namespace GovErp.Application.Web.Explanation;
 
+/// <summary>
+/// Storage of explanation texts.
+/// </summary>
 public interface IExplanationRepository
 {
     void Add(ExplanationRecord record);

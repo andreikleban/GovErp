@@ -2,6 +2,9 @@ using GovErp.Application.Web.Common;
 
 namespace GovErp.Application.Web.Commands;
 
+/// <summary>
+/// Runs one command atomically in the actor's tenant scope and transaction.
+/// </summary>
 public interface ITenantOperationRunner
 {
     /// <summary>
@@ -13,6 +16,8 @@ public interface ITenantOperationRunner
         Func<IServiceProvider, CancellationToken, Task<CommandResult<T>>> body,
         System.Data.IsolationLevel isolation = System.Data.IsolationLevel.ReadCommitted, CancellationToken ct = default);
 
-    /// <summary>Read: a new scope of the actor's tenant, no transaction and no save.</summary>
+    /// <summary>
+    /// Read: a new scope of the actor's tenant, no transaction and no save.
+    /// </summary>
     Task<T> QueryAsync<T>(ActorContext actor, Func<IServiceProvider, CancellationToken, Task<T>> body, CancellationToken ct = default);
 }

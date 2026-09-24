@@ -3,9 +3,13 @@ using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.DomainServices.Rules;
 
-/// <summary>Step 4. Another invoice from the same vendor with the same normalized number already exists.</summary>
+/// <summary>
+/// Step 4. Another invoice from the same vendor with the same normalized number already exists.
+/// </summary>
 public sealed class InvoiceDuplicateRule : ValidationRule
 {
+    private const string PossibleDuplicate = "INVOICE_DUPLICATE.POSSIBLE_DUPLICATE";
+
     public override string RuleId => "INVOICE_DUPLICATE";
 
     protected override IEnumerable<Finding> Check(ValidationSubject subject, RuleParameters parameters)
@@ -16,7 +20,7 @@ public sealed class InvoiceDuplicateRule : ValidationRule
         // Decide: a possible duplicate payment.
         Verdict verdict;
         if (invoice.IsDuplicate)
-            verdict = Fail($"An invoice with the same number from {invoice.Vendor.Name} already exists.");
+            verdict = Fail(PossibleDuplicate);
         else
             yield break;
 

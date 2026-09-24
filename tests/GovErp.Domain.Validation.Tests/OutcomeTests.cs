@@ -12,7 +12,7 @@ public class OutcomeTests
         var definition = new RuleDefinition("TEST", 1, ValidationStep.TransactionPurpose,
             RuleLayer.Core, Severity.SoftStop, new Dictionary<string, string>(),
             [ApproverRole.FinanceDirector], new DateOnly(2026, 1, 1), null, "Test", "Resolve");
-        var outcome = RuleOutcome.From(definition, Severity.SoftStop, 1, inputs, inputs);
+        var outcome = RuleOutcome.From(definition, Severity.SoftStop, 1, inputs, inputs, "TEST.STOP");
         inputs["amount"] = "20";
         outcome.Inputs["amount"].Should().Be("10");
         outcome.Computed["amount"].Should().Be("10");
@@ -35,9 +35,9 @@ public class OutcomeTests
     {
         var o = RuleOutcome.From(DemoRules.Rule("P", ValidationStep.TransactionPurpose, RuleLayer.State, Severity.SoftStop,
             overridableBy: [ApproverRole.FinanceDirector]), Severity.SoftStop, 1,
-            new Dictionary<string, string> { ["amount"] = "1" }, new Dictionary<string, string> { ["x"] = "2" });
+            new Dictionary<string, string> { ["amount"] = "1" }, new Dictionary<string, string> { ["x"] = "2" }, "TEST.STOP");
         var back = RuleOutcome.Restore(o.OutcomeRef, o.RuleId, o.RuleVersion, o.Step, o.Layer, o.DistributionLine, o.Severity,
-            o.Inputs, o.Computed, o.Message, o.Resolution, o.OverridableBy, null);
+            o.Inputs, o.Computed, o.ReasonCode, o.Resolution, o.OverridableBy, null);
         back.Should().BeEquivalentTo(o);
     }
 }

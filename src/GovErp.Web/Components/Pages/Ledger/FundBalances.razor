@@ -1,0 +1,58 @@
+@page "/ledger/funds"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using GovErp.Application.Web.Ledger
+@using GovErp.Application.Web.Ledger.Contracts
+@using GovErp.Web.Authentication
+@inject ILedgerAppService Ledger
+@inject CurrentActor CurrentActor
+
+<PageTitle>Fund balances</PageTitle>
+<Breadcrumbs Items="@([new Crumb("General Ledger"), new Crumb("Fund balances")])" />
+<h1>Fund balances</h1>
+<p class="note">Budget availability and the financial journal for the business-date fiscal year. Each fund is its own books.</p>
+
+@if (_rows is null)
+{
+    <p class="note">Loading the fund balances.</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>Fund</th><th>Basis</th>
+                <th class="money">Amended</th><th class="money">Actuals</th><th class="money">Encumbered</th>
+                <th class="money">Held</th><th class="money">Available</th>
+                <th class="money">Financial Dr</th><th class="money">Financial Cr</th><th>Balanced</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in _rows)
+        {
+            <tr>
+                <td><a href="/funds/@row.Code">@row.Code</a> @row.Name</td>
+                <td>@row.Basis</td>
+                <td class="money"><Money Value="row.Amended" /></td>
+                <td class="money"><Money Value="row.Actuals" /></td>
+                <td class="money"><Money Value="row.Encumbered" /></td>
+                <td class="money"><Money Value="row.Held" /></td>
+                <td class="money"><Money Value="row.Available" /></td>
+                <td class="money"><Money Value="row.FinancialDebit" /></td>
+                <td class="money"><Money Value="row.FinancialCredit" /></td>
+                <td><span class="chip @(row.FinancialBalanced ? "ok" : "bad")">@(row.FinancialBalanced ? "Yes" : "No")</span></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+@code {
+    private IReadOnlyList<FundReportVm>? _rows;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var actor = await CurrentActor.GetAsync();
+        _rows = await Ledger.ListFundReportsAsync(actor);
+    }
+}

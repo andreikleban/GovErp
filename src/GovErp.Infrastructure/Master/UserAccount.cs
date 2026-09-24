@@ -1,6 +1,8 @@
 namespace GovErp.Infrastructure.Master;
 
-/// <summary>A user account in the master database. An anemic infrastructure model, not domain (DDD-7).</summary>
+/// <summary>
+/// A user account in the master database. An anemic infrastructure model, not domain (DDD-7).
+/// </summary>
 public sealed class UserAccount
 {
     public Guid Id { get; set; }

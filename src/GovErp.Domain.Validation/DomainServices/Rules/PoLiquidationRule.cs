@@ -9,6 +9,10 @@ namespace GovErp.Domain.Validation.DomainServices.Rules;
 /// </summary>
 public sealed class PoLiquidationRule : ValidationRule
 {
+    private const string ExceedsTolerance = "PO_LIQUIDATION.EXCEEDS_TOLERANCE";
+    private const string NeedsNewBudget = "PO_LIQUIDATION.NEEDS_NEW_BUDGET";
+    private const string FullyLiquidated = "PO_LIQUIDATION.FULLY_LIQUIDATED";
+
     private static readonly ParameterSpec Tolerance = ParameterSpec.Share("tolerance_pct", Stricter.WhenLower);
 
     public override string RuleId => "PO_LIQUIDATION";
@@ -22,18 +26,17 @@ public sealed class PoLiquidationRule : ValidationRule
         foreach (var billing in BudgetAllocation.ByPoLine(subject))
         {
             var po = billing.Po;
-            var liquidates = $"Invoice liquidates {billing.Liquidation} of {billing.Ref}; {billing.NeedsNewBudget} requires new budget.";
 
             // Decide: strictest case first. Every billed PO line is recorded, even when fully covered.
             Verdict verdict;
             if (billing.Error is { } error)
                 verdict = HardStop(error);
             else if (billing.ExceedsTolerance(tolerance))
-                verdict = HardStop($"Cumulative billing for {billing.Ref} exceeds its authorized tolerance; a change order is required.");
+                verdict = HardStop(ExceedsTolerance);
             else if (billing.NeedsNewBudget > Money.Zero || billing.CumulativeExcess > Money.Zero)
-                verdict = Warning(liquidates);
+                verdict = Warning(NeedsNewBudget);
             else
-                verdict = Allowed(liquidates);
+                verdict = Allowed(FullyLiquidated);
 
             // Evidence
             yield return verdict.OnGroup(billing.FirstLine)

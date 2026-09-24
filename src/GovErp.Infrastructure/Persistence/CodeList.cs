@@ -3,7 +3,9 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace GovErp.Infrastructure.Persistence;
 
-/// <summary>List of segment codes ↔ the string "a,b,c".</summary>
+/// <summary>
+/// List of segment codes ↔ the string "a,b,c".
+/// </summary>
 internal static class CodeList
 {
     public static ValueConverter<IReadOnlyList<T>, string> Converter<T>(Func<string, T> parse) where T : SegmentCode =>

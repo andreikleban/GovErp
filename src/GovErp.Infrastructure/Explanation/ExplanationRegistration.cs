@@ -6,6 +6,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace GovErp.Infrastructure.Explanation;
 
+/// <summary>
+/// Registers the explanation generators in DI.
+/// </summary>
 public static class ExplanationRegistration
 {
     public static IServiceCollection AddExplanation(this IServiceCollection services, IConfiguration configuration)

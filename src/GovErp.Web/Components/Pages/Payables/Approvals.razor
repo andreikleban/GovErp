@@ -50,12 +50,13 @@ else
 @if (_picked is not null)
 {
     <section class="panel">
-        <h2>@_picked.Kind · @_picked.Reference</h2>
+        <h2>@_picked.Kind · @_picked.Reference
+            @if (_picked.Kind == "Override")
+            {
+                <HelpNote Title="Override">Rule @_picked.RuleId, line @(_picked.Line?.ToString() ?? "header"). The server checks that you may waive this outcome.</HelpNote>
+            }
+        </h2>
         <p>@_picked.Reason</p>
-        @if (_picked.Kind == "Override")
-        {
-            <p class="note">Rule @_picked.RuleId, line @(_picked.Line?.ToString() ?? "header"). The server checks that you may waive this outcome.</p>
-        }
         <label>@(_picked.Kind == "Approve" ? "Reason (required to reject)" : "Reason") <input @bind="_reason" @bind:event="oninput" /></label>
         <p class="toolbar">
             @if (_picked.Kind == "Approve")

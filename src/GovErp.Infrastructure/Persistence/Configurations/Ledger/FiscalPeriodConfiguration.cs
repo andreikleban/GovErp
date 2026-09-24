@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace GovErp.Infrastructure.Persistence.Configurations.Ledger;
 
+/// <summary>
+/// EF Core mapping for a fiscal period.
+/// </summary>
 public sealed class FiscalPeriodConfiguration : IEntityTypeConfiguration<FiscalPeriod>
 {
     public void Configure(EntityTypeBuilder<FiscalPeriod> b)

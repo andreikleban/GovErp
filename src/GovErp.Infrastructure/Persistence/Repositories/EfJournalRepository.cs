@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GovErp.Infrastructure.Persistence.Repositories;
 
+/// <summary>
+/// SQL repository of journal entries for the current tenant.
+/// </summary>
 public sealed class EfJournalRepository(GovErpDbContext db) : IJournalRepository
 {
     public async Task AddAsync(JournalEntry entry, CancellationToken ct = default) =>

@@ -37,13 +37,13 @@ public class FiscalYearTests
     [InlineData(10000)]
     [InlineData(int.MaxValue)]
     public void Rejects_years_without_representable_start_and_end(int year) =>
-        Assert.Throws<ArgumentOutOfRangeException>(() => new FiscalYear(year));
+        Assert.Throws<InvalidValueException>(() => new FiscalYear(year));
 
     [Fact]
     public void Rejects_dates_outside_complete_fiscal_year_range()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => FiscalYear.FromDate(DateOnly.MinValue));
-        Assert.Throws<ArgumentOutOfRangeException>(() => FiscalYear.FromDate(DateOnly.MaxValue));
+        Assert.Throws<InvalidValueException>(() => FiscalYear.FromDate(DateOnly.MinValue));
+        Assert.Throws<InvalidValueException>(() => FiscalYear.FromDate(DateOnly.MaxValue));
         Assert.Equal(new DateOnly(1, 7, 1), new FiscalYear(2).Start);
         Assert.Equal(new DateOnly(9999, 6, 30), new FiscalYear(9999).End);
     }

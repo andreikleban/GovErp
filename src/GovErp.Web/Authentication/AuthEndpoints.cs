@@ -5,6 +5,9 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 
 namespace GovErp.Web.Authentication;
 
+/// <summary>
+/// HTTP routes for login and logout.
+/// </summary>
 public static class AuthEndpoints
 {
     public static IEndpointRouteBuilder MapAuth(this IEndpointRouteBuilder app)

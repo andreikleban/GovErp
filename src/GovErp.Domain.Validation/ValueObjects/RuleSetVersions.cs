@@ -1,7 +1,13 @@
 namespace GovErp.Domain.Validation.ValueObjects;
 
+/// <summary>
+/// Which version of which layer went into the rule-set fingerprint.
+/// </summary>
 public sealed record AppliedRuleVersion(string RuleId, RuleLayer Layer, int Version, string? ScopeFund, string? ScopeGrant);
 
+/// <summary>
+/// Layer versions and the fingerprint of the rule set that was applied.
+/// </summary>
 public sealed record RuleSetVersions(string Engine, int Core, int Federal, int State, int Tenant)
 {
     public string Fingerprint { get; init; } = string.Empty;

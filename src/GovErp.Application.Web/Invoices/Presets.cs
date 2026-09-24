@@ -1,4 +1,5 @@
 using GovErp.Application.Web.Commands;
+using GovErp.Application.Web.Common;
 using GovErp.Application.Web.Invoices.Commands;
 
 namespace GovErp.Application.Web.Invoices;
@@ -24,7 +25,7 @@ public static class Presets
             new DistributionCommand("101-6000-53100", 12_000m, null),
             new DistributionCommand("202-4000-53100", 8_000m, null),
             new DistributionCommand("501-5000-53100", 10_000m, null)),
-        _ => throw new ArgumentOutOfRangeException(nameof(preset), preset, "Unknown invoice preset."),
+        _ => throw new InvalidValueException(nameof(preset), AppErrors.UnknownInvoicePreset, ("preset", preset)),
     };
 
     private static CreateInvoiceCommand Command(CommandEnvelope envelope, Guid vendorId, string prefix, decimal total, string? poRef,

@@ -1,5 +1,8 @@
 namespace GovErp.Domain.Shared.ValueObjects;
 
+/// <summary>
+/// Identifier of a tenant.
+/// </summary>
 public sealed record TenantId
 {
     public string Value { get; }

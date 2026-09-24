@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GovErp.Infrastructure.Persistence.Repositories;
 
+/// <summary>
+/// SQL repository of account combinations for the current tenant.
+/// </summary>
 public sealed class EfAccountCombinationRepository(GovErpDbContext db) : IAccountCombinationRepository
 {
     public Task<AccountCombination?> FindAsync(AccountCode code, CancellationToken ct = default) =>

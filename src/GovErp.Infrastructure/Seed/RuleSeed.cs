@@ -3,7 +3,9 @@ using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Infrastructure.Seed;
 
-/// <summary>The 12 definitions of spec §4.2. Thresholds and layers are demo assumptions, not legal norms.</summary>
+/// <summary>
+/// The 12 definitions of spec §4.2. Thresholds and layers are demo assumptions, not legal norms.
+/// </summary>
 public static class RuleSeed
 {
     public static IReadOnlyList<RuleDefinition> All(DateOnly from)

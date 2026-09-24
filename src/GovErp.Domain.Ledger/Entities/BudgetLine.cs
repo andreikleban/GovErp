@@ -1,6 +1,9 @@
 using GovErp.Domain.Ledger.Exceptions;
 namespace GovErp.Domain.Ledger.Entities;
 
+/// <summary>
+/// Budget of one account and fiscal year: adopted, actuals, encumbered and reservations.
+/// </summary>
 public sealed class BudgetLine
 {
     private readonly List<BudgetAmendment> _amendments = [];
@@ -25,7 +28,7 @@ public sealed class BudgetLine
     public BudgetLine(AccountCode account, FiscalYear fiscalYear, BudgetControlMode controlMode, Money adopted)
     {
         ArgumentNullException.ThrowIfNull(account);
-        if (adopted.IsNegative || !Enum.IsDefined(controlMode) || fiscalYear.Year is < 2 or > 9999) throw new LedgerException("Invalid budget configuration.");
+        if (adopted.IsNegative || !Enum.IsDefined(controlMode) || fiscalYear.Year is < 2 or > 9999) throw new LedgerException(LedgerErrors.InvalidBudgetConfiguration);
         Account = account; FiscalYear = fiscalYear; ControlMode = controlMode; Adopted = adopted;
     }
 
@@ -36,8 +39,8 @@ public sealed class BudgetLine
 
     public void Amend(Money amount, string reference, DateOnly effectiveDate)
     {
-        if (amount.IsZero) throw new LedgerException("Amendment cannot be zero.");
-        if (!FiscalYear.Contains(effectiveDate)) throw new LedgerException("Amendment must belong to the budget year.");
+        if (amount.IsZero) throw new LedgerException(LedgerErrors.ZeroAmendment);
+        if (!FiscalYear.Contains(effectiveDate)) throw new LedgerException(LedgerErrors.AmendmentOutsideYear, ("date", effectiveDate), ("fiscalYear", FiscalYear.Year));
         ArgumentException.ThrowIfNullOrWhiteSpace(reference);
         _ = Amended + amount;
         _amendments.Add(new(amount, reference, effectiveDate)); ChangeStamp++;
@@ -68,21 +71,21 @@ public sealed class BudgetLine
     {
         ArgumentNullException.ThrowIfNull(opening);
         if (ChangeStamp != 0 || OpeningBalanceId.HasValue || opening.Account != Account || opening.FiscalYear != FiscalYear)
-            throw new LedgerException("Opening balance requires a pristine matching budget line.");
+            throw new LedgerException(LedgerErrors.OpeningBalanceNeedsPristineLine);
         Actuals = opening.InitialActuals; Encumbered = opening.InitialEncumbered; OpeningBalanceId = opening.Id; ChangeStamp++;
     }
     public void RecordLiquidation(Money amount)
     {
         LedgerGuard.Positive(amount);
-        if (amount > Encumbered) throw new LedgerException("Liquidation exceeds encumbered balance.");
+        if (amount > Encumbered) throw new LedgerException(LedgerErrors.LiquidationExceedsEncumbered, ("amount", amount), ("encumbered", Encumbered));
         var actuals = Actuals + amount;
         Encumbered -= amount; Actuals = actuals; ChangeStamp++;
     }
     private BudgetReservation FindHeld(Guid id, Guid? invoiceId = null, int? version = null)
     {
-        var r = _reservations.SingleOrDefault(r => r.Id == id) ?? throw new LedgerException("Unknown reservation.");
+        var r = _reservations.SingleOrDefault(r => r.Id == id) ?? throw new LedgerException(LedgerErrors.UnknownReservation);
         if (r.Status != ReservationStatus.Held || (invoiceId.HasValue && (r.InvoiceId != invoiceId || r.ContentVersion != version)))
-            throw new LedgerException("Reservation is not held by this invoice version.");
+            throw new LedgerException(LedgerErrors.ReservationNotHeld);
         return r;
     }
 }

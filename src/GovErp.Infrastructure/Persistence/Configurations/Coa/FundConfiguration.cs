@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace GovErp.Infrastructure.Persistence.Configurations.Coa;
 
+/// <summary>
+/// EF Core mapping for a fund.
+/// </summary>
 public sealed class FundConfiguration : IEntityTypeConfiguration<Fund>
 {
     public void Configure(EntityTypeBuilder<Fund> b)

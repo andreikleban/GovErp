@@ -1,6 +1,8 @@
 namespace GovErp.Application.Web.Common;
 
-/// <summary>Who runs the use case. Built by Web from the authenticated principal; use cases receive it as a parameter (NM-16).</summary>
+/// <summary>
+/// Who runs the use case. Built by Web from the authenticated principal; use cases receive it as a parameter (NM-16).
+/// </summary>
 public sealed record ActorContext(TenantId TenantId, UserId UserId, string UserName, IReadOnlySet<string> Roles, string? DepartmentCode)
 {
     public bool IsInRole(string role) => Roles.Contains(role);

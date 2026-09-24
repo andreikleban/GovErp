@@ -9,9 +9,14 @@ using Microsoft.Extensions.Options;
 
 namespace GovErp.Infrastructure.Startup;
 
+/// <summary>
+/// Resets a demo database back to its seed.
+/// </summary>
 public static class DemoReset
 {
-    /// <summary>demo-reset --tenant springfield --confirm springfield. Only with Environment=Demo, IsDemo and a database name on the allowlist.</summary>
+    /// <summary>
+    /// demo-reset --tenant springfield --confirm springfield. Only with Environment=Demo, IsDemo and a database name on the allowlist.
+    /// </summary>
     public static async Task<int> RunAsync(string[] args, IServiceProvider services, IHostEnvironment env, CancellationToken ct)
     {
         string? Arg(string name) => args.SkipWhile(a => a != name).Skip(1).FirstOrDefault();

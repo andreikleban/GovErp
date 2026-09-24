@@ -5,6 +5,9 @@ using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.Entities;
 
+/// <summary>
+/// One version of a rule: layer, parameters, severity and effective dates.
+/// </summary>
 public sealed class RuleDefinition
 {
     public Guid Id { get; private set; }
@@ -43,10 +46,10 @@ public sealed class RuleDefinition
         ArgumentNullException.ThrowIfNull(parameters);
         ArgumentNullException.ThrowIfNull(overridableBy);
         if (version < 1 || effectiveTo < effectiveFrom)
-            throw new ValidationException($"Rule {ruleId}: invalid version or effective interval.");
+            throw new ValidationException(ValidationErrors.DefinitionInvalid, ("rule", ruleId));
         if (!Enum.IsDefined(step) || !Enum.IsDefined(layer) || (severity.HasValue && !Enum.IsDefined(severity.Value))
             || overridableBy.Any(role => !Enum.IsDefined(role)))
-            throw new ValidationException($"Rule {ruleId}: invalid enum value.");
+            throw new ValidationException(ValidationErrors.DefinitionEnumInvalid, ("rule", ruleId));
         Id = Guid.NewGuid();
         RuleId = ruleId;
         Version = version;
@@ -66,16 +69,19 @@ public sealed class RuleDefinition
 
     public bool IsEffectiveOn(DateOnly date) => IsEnabled && IsDatedFor(date);
 
-    /// <summary>The date is within the effective period, whether or not the definition is enabled.</summary>
+    /// <summary>
+    /// The date is within the effective period, whether or not the definition is enabled.
+    /// </summary>
     public bool IsDatedFor(DateOnly date) => date >= EffectiveFrom && (EffectiveTo is null || date <= EffectiveTo);
 
-    /// <summary>A definition without a scope covers every fund and grant; a scoped one only its own.</summary>
+    /// <summary>
+    /// A definition without a scope covers every fund and grant; a scoped one only its own.
+    /// </summary>
     public bool Covers(string? fund, string? grant) =>
         (ScopeFund is null || ScopeFund == fund) && (ScopeGrant is null || ScopeGrant == grant);
 
     /// <summary>
-    /// Softer than the definition it would replace. A fixed severity may only rise; a dynamic one (null, decided by the rule
-    /// per outcome) must stay dynamic.
+    /// Softer than the definition it would replace. A fixed severity may only rise; a dynamic one (null, decided by the rule per outcome) must stay dynamic.
     /// </summary>
     public bool IsMilderThan(RuleDefinition upper) => (upper.Severity, Severity) switch
     {
@@ -84,14 +90,16 @@ public sealed class RuleDefinition
         var (fixedUpper, fixedOwn) => fixedOwn < fixedUpper,
     };
 
-    /// <summary>Roles that may release this definition's soft stop but not the one it would replace.</summary>
+    /// <summary>
+    /// Roles that may release this definition's soft stop but not the one it would replace.
+    /// </summary>
     public bool AllowsMoreOverridersThan(RuleDefinition upper) => OverridableBy.Except(upper.OverridableBy).Any();
 
     public string Parameter(string name) => Parameters.TryGetValue(name, out var value)
-        ? value : throw new ValidationException($"Rule {RuleId} v{Version} has no parameter '{name}'.");
+        ? value : throw new ValidationException(ValidationErrors.ParameterMissing, ("rule", RuleId), ("version", Version), ("parameter", name));
 
     public decimal DecimalParameter(string name) =>
         decimal.TryParse(Parameter(name), NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint,
             CultureInfo.InvariantCulture, out var value)
-            ? value : throw new ValidationException($"Rule {RuleId} v{Version}: parameter '{name}' must be a decimal.");
+            ? value : throw new ValidationException(ValidationErrors.ParameterNotDecimal, ("rule", RuleId), ("version", Version), ("parameter", name));
 }

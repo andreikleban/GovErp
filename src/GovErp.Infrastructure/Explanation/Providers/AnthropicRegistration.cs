@@ -5,6 +5,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace GovErp.Infrastructure.Explanation.Providers;
 
+/// <summary>
+/// Registers Anthropic as an explanation provider.
+/// </summary>
 public static class AnthropicRegistration
 {
     public static void Add(IServiceCollection services, ExplanationOptions options, IConfiguration configuration)

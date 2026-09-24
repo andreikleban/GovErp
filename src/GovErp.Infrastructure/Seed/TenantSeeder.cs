@@ -3,16 +3,23 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GovErp.Infrastructure.Seed;
 
-/// <summary>What to seed when provisioning a tenant: the full demo dataset or reference data only (no money movement).</summary>
+/// <summary>
+/// What to seed when provisioning a tenant: the full demo dataset or reference data only (no money movement).
+/// </summary>
 public enum TenantSeed
 {
     Springfield,
     ReferenceOnly
 }
 
+/// <summary>
+/// Loads the Springfield seed into a tenant database.
+/// </summary>
 public static class TenantSeeder
 {
-    /// <summary>Seeds only an empty tenant database. Balances are OpeningBalance, not journal entries (spec §5, rule 7).</summary>
+    /// <summary>
+    /// Seeds only an empty tenant database. Balances are OpeningBalance, not journal entries (spec §5, rule 7).
+    /// </summary>
     public static async Task SeedAsync(GovErpDbContext db, TenantSeed seed, CancellationToken ct)
     {
         if (await db.Funds.AnyAsync(ct))

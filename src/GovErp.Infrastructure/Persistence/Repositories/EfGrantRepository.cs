@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GovErp.Infrastructure.Persistence.Repositories;
 
+/// <summary>
+/// SQL repository of grants for the current tenant.
+/// </summary>
 public sealed class EfGrantRepository(GovErpDbContext db) : IGrantRepository
 {
     public Task<Grant?> FindAsync(GrantCode code, CancellationToken ct = default) =>

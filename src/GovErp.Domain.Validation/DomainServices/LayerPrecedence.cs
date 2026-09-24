@@ -9,7 +9,9 @@ namespace GovErp.Domain.Validation.DomainServices;
 /// </summary>
 internal static class LayerPrecedence
 {
-    /// <summary>The winning definition; null when the winner is disabled (the rule is switched off).</summary>
+    /// <summary>
+    /// The winning definition; null when the winner is disabled (the rule is switched off).
+    /// </summary>
     public static RuleDefinition? Winner(IEnumerable<RuleDefinition> versions, OverrideGuard guard)
     {
         var layers = LatestPerLayer(versions.ToList());
@@ -25,12 +27,14 @@ internal static class LayerPrecedence
         return winner.IsEnabled ? winner : null;
     }
 
-    /// <summary>One definition per layer, ordered from Core to Tenant. Two definitions with the same layer and version are ambiguous.</summary>
+    /// <summary>
+    /// One definition per layer, ordered from Core to Tenant. Two definitions with the same layer and version are ambiguous.
+    /// </summary>
     private static IReadOnlyList<RuleDefinition> LatestPerLayer(IReadOnlyList<RuleDefinition> versions)
     {
         if (versions.GroupBy(definition => (definition.Layer, definition.Version)).Any(same => same.Count() > 1))
         {
-            throw new ValidationException($"Rule {versions[0].RuleId}: ambiguous definitions for the same layer and version.");
+            throw new ValidationException(ValidationErrors.AmbiguousDefinitions, ("rule", versions[0].RuleId));
         }
 
         return versions

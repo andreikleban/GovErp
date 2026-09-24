@@ -1,4 +1,5 @@
 using GovErp.Domain.Validation.DomainServices;
+using GovErp.Domain.Validation.Codes;
 using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.Tests;
@@ -176,7 +177,7 @@ public class ApprovalAndPostingTests
         var preview = PostingPreviewBuilder.Build(s);
         PostingEligibility.Check(s, Severity.Allowed, [], preview, Rules).Passed.Should().BeFalse();
         PostingEligibility.Check(s, Severity.Allowed,
-            [new(ApproverRole.DepartmentHead, "6000", "forged", true)], preview, Rules).Passed.Should().BeFalse();
+            [new(ApproverRole.DepartmentHead, "6000", Problem.Of("TEST.FORGED"), true)], preview, Rules).Passed.Should().BeFalse();
     }
 
     [Fact]
@@ -193,7 +194,7 @@ public class ApprovalAndPostingTests
     {
         var s = Approved() with { Distributions = [Distribution(1, 50), Distribution(2, 50, "101-3000-53100")] };
         PostingEligibility.Check(s, Severity.Allowed,
-            [new(ApproverRole.DepartmentHead, "6000", "partial", true)], PostingPreviewBuilder.Build(s), Rules)
+            [new(ApproverRole.DepartmentHead, "6000", Problem.Of("TEST.PARTIAL"), true)], PostingPreviewBuilder.Build(s), Rules)
             .Passed.Should().BeFalse();
     }
     [Fact]
@@ -215,9 +216,9 @@ public class ApprovalAndPostingTests
         var definition = new Entities.RuleDefinition("PROCUREMENT_THRESHOLD", 1, ValidationStep.TransactionPurpose,
             RuleLayer.Core, Severity.SoftStop, new Dictionary<string, string>(), [ApproverRole.FinanceDirector], BusinessDate, null,
             "Approval required", "Override");
-        var outcome = RuleOutcome.From(definition, Severity.SoftStop, null, new Dictionary<string, string>(), new Dictionary<string, string>());
+        var outcome = RuleOutcome.From(definition, Severity.SoftStop, null, new Dictionary<string, string>(), new Dictionary<string, string>(), "TEST.STOP");
         var route = ApprovalRouteResolver.Build(s, [outcome], Rules);
-        route.Should().Contain(r => r.Role == ApproverRole.FinanceDirector && r.Reason.Contains("PROCUREMENT_THRESHOLD"));
+        route.Should().Contain(r => r.Role == ApproverRole.FinanceDirector && r.Reason.Code == RouteReasons.OverrideRequired && r.Reason.Args["rule"] == "PROCUREMENT_THRESHOLD");
         PostingEligibility.Check(s, Severity.SoftStop, route, PostingPreviewBuilder.Build(s), Rules).Passed.Should().BeFalse();
     }
     private static PostingCheck Check(ValidationSubject s, Severity severity = Severity.Allowed) =>

@@ -62,7 +62,7 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
         {
             if (!actor.IsInRole(Roles.ApClerk))
             {
-                return CommandResult<InvoiceVm>.Forbidden("Only AP clerks create invoices.");
+                return CommandResult<InvoiceVm>.Forbidden(AppErrors.OnlyApClerkCreates);
             }
 
             // Everything that can be refused is checked while nothing has changed; the registration number is issued last.
@@ -94,7 +94,7 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
             var invoice = await ws.LoadAsync(cmd.InvoiceId, token);
             if (invoice.CreatedBy != actor.UserId)
             {
-                return CommandResult<InvoiceVm>.Forbidden("Only the author edits a draft.");
+                return CommandResult<InvoiceVm>.Forbidden(AppErrors.OnlyAuthorEdits);
             }
 
             ws.Concurrency.Expect(invoice, cmd.Envelope.ExpectedRowVersion);
@@ -110,7 +110,7 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
             if (await ws.Invoices.ExistsDuplicateAsync(invoice.VendorId, invoice.NormalizedInvoiceNumber, invoice.Id, token))
             {
                 // The aggregate has already changed: refuse only with an exception so the runner rolls the changes back.
-                throw new PayablesException(InvoiceRegistration.DuplicateNumber);
+                throw new PayablesException(PayablesErrors.DuplicateNumber);
             }
 
             ws.Audit.Record(actor, "InvoiceUpdated", invoice.Reference, cmd.Envelope.CommandId.ToString(), new { invoice.ContentVersion });
@@ -139,12 +139,12 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
             var invoice = await ws.LoadAsync(cmd.InvoiceId, token);
             if (invoice.CreatedBy != actor.UserId || !actor.IsInRole(Roles.ApClerk))
             {
-                return CommandResult<InvoiceVm>.Forbidden("Only the author submits the invoice.");
+                return CommandResult<InvoiceVm>.Forbidden(AppErrors.OnlyAuthorSubmits);
             }
 
             if (invoice.Status != InvoiceStatus.Draft)
             {
-                return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), $"Invoice is {invoice.Status}.");
+                return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), AppErrors.InvoiceStatus, ("status", invoice.Status));
             }
 
             ws.Concurrency.Expect(invoice, cmd.Envelope.ExpectedRowVersion);
@@ -186,7 +186,7 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
             var invoice = await ws.LoadAsync(cmd.InvoiceId, token);
             if (invoice.CreatedBy != actor.UserId)
             {
-                return CommandResult<InvoiceVm>.Forbidden("Only the author reopens a rejected invoice.");
+                return CommandResult<InvoiceVm>.Forbidden(AppErrors.OnlyAuthorReopens);
             }
 
             ws.Concurrency.Expect(invoice, cmd.Envelope.ExpectedRowVersion);
@@ -200,7 +200,7 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
         {
             if (!actor.IsInAnyRole(Roles.Posters))
             {
-                return CommandResult<InvoiceVm>.Forbidden("Only the budget officer or finance director sets a payment hold.");
+                return CommandResult<InvoiceVm>.Forbidden(AppErrors.OnlyPostersHoldPayment);
             }
 
             var ws = sp.GetRequiredService<InvoiceWorkspace>();
@@ -215,22 +215,21 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
     /// Refusals a new draft can get before anything changes. A duplicate of a hand-entered vendor number is caught here;
     /// a race of two identical numbers is closed by the unique index (runner → Refused).
     /// </summary>
-    private static async Task<string?> NewDraftProblemAsync(InvoiceWorkspace ws, CreateInvoiceCommand cmd, CancellationToken ct)
+    private static async Task<Problem?> NewDraftProblemAsync(InvoiceWorkspace ws, CreateInvoiceCommand cmd, CancellationToken ct)
     {
         if (DemoDateMismatch(cmd.InvoiceDate, cmd.ServiceDate, cmd.PostingDate) is { } dates) return dates;
-        _ = await ws.Vendors.FindAsync(cmd.VendorId, ct) ?? throw new NotFoundException($"Vendor {cmd.VendorId} not found.");
-        if (cmd.PoRef is not null && await ws.PurchaseOrders.FindByNumberAsync(cmd.PoRef, ct) is null) return $"Purchase order {cmd.PoRef} not found.";
+        _ = await ws.Vendors.FindAsync(cmd.VendorId, ct) ?? throw new NotFoundException(AppErrors.VendorNotFound, ("id", cmd.VendorId));
+        if (cmd.PoRef is not null && await ws.PurchaseOrders.FindByNumberAsync(cmd.PoRef, ct) is null)
+            return Problem.Of(AppErrors.PurchaseOrderUnknown, ("po", cmd.PoRef));
         if (cmd.GeneratedNumberPrefix is null
             && await ws.Invoices.ExistsDuplicateAsync(cmd.VendorId, VendorInvoice.NormalizeNumber(cmd.Number), null, ct))
         {
-            return InvoiceRegistration.DuplicateNumber;
+            return Problem.Of(PayablesErrors.DuplicateNumber);
         }
 
         return null;
     }
 
-    private static string? DemoDateMismatch(DateOnly invoiceDate, DateOnly serviceDate, DateOnly postingDate) =>
-        invoiceDate == serviceDate && serviceDate == postingDate
-            ? null
-            : "Demo limitation: InvoiceDate, ServiceDate and PostingDate must be the same date.";
+    private static Problem? DemoDateMismatch(DateOnly invoiceDate, DateOnly serviceDate, DateOnly postingDate) =>
+        invoiceDate == serviceDate && serviceDate == postingDate ? null : Problem.Of(AppErrors.DemoDatesMustMatch);
 }

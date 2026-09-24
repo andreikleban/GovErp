@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GovErp.Infrastructure.Persistence.Repositories;
 
+/// <summary>
+/// SQL repository of evaluation records for the current tenant.
+/// </summary>
 public sealed class EfEvaluationRecordRepository(GovErpDbContext db) : IEvaluationRecordRepository
 {
     public async Task AddAsync(EvaluationRecord record, CancellationToken ct = default) =>

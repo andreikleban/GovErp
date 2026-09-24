@@ -3,9 +3,13 @@ using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.DomainServices.Rules;
 
-/// <summary>Step 5. An early warning: after the invoice, less than the configured share of the amended budget remains.</summary>
+/// <summary>
+/// Step 5. An early warning: after the invoice, less than the configured share of the amended budget remains.
+/// </summary>
 public sealed class BudgetLowRemainingRule : ValidationRule
 {
+    private const string LittleRemains = "BUDGET_LOW_REMAINING.LITTLE_REMAINS";
+
     private static readonly ParameterSpec RemainingShare = ParameterSpec.Share("pct", Stricter.WhenHigher);
 
     public override string RuleId => "BUDGET_LOW_REMAINING";
@@ -27,7 +31,7 @@ public sealed class BudgetLowRemainingRule : ValidationRule
             if (demand.Error is { } error)
                 verdict = HardStop(error);
             else if (budget.Exists && budget.Amended > Money.Zero && !demand.AvailableAfter.IsNegative && demand.RemainingShare < threshold)
-                verdict = Fail($"After this invoice, {demand.AvailableAfter} ({Percent(demand.RemainingShare)}%) remains for {demand.Account}.");
+                verdict = Fail(LittleRemains);
             else
                 continue;
 

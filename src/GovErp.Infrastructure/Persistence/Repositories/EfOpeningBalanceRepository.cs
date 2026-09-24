@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GovErp.Infrastructure.Persistence.Repositories;
 
+/// <summary>
+/// SQL repository of opening balances for the current tenant.
+/// </summary>
 public sealed class EfOpeningBalanceRepository(GovErpDbContext db) : IOpeningBalanceRepository
 {
     public async Task<IReadOnlyList<OpeningBalance>> ListAsync(FiscalYear fiscalYear, CancellationToken ct = default) =>

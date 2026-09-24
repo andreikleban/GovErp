@@ -1,3 +1,4 @@
+using GovErp.Domain.Validation.Exceptions;
 using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.DomainServices;
@@ -12,19 +13,21 @@ internal sealed class ConfigurationCheck
 
     public ConfigurationCheck(RuleCatalog catalog) => _catalog = catalog;
 
-    /// <summary>The first problem, or null; refused as RULE_CONFIGURATION.</summary>
-    public string? Problem(ValidationSubject subject, EffectiveRuleSet rules) =>
+    /// <summary>
+    /// The first problem, or null; refused as RULE_CONFIGURATION.
+    /// </summary>
+    public Problem? FirstProblem(ValidationSubject subject, EffectiveRuleSet rules) =>
         RulesWithoutCode(rules) ?? MissingMandatoryRules(subject, rules);
 
-    private string? RulesWithoutCode(EffectiveRuleSet rules)
+    private Problem? RulesWithoutCode(EffectiveRuleSet rules)
     {
         var unknown = rules.Rules
             .Where(rule => rule.Step <= ValidationStep.EncumbranceImpact && _catalog.Find(rule.RuleId) is null)
             .Select(rule => rule.RuleId).Distinct().ToArray();
-        return unknown.Length > 0 ? $"Configured rules have no implementation: {string.Join(", ", unknown)}." : null;
+        return unknown.Length > 0 ? Problem.Of(ValidationErrors.RulesWithoutCode, ("rules", string.Join(", ", unknown))) : null;
     }
 
-    private string? MissingMandatoryRules(ValidationSubject subject, EffectiveRuleSet rules)
+    private Problem? MissingMandatoryRules(ValidationSubject subject, EffectiveRuleSet rules)
     {
         foreach (var (fund, grant) in subject.Distributions.Select(d => ((string?)d.Account.Fund.Value, d.Account.Grant?.Value)).Distinct())
         {
@@ -32,7 +35,7 @@ internal sealed class ConfigurationCheck
             var missing = _catalog.MandatoryRuleIds.Where(id => !inForce.Contains(id)).ToArray();
             if (missing.Length > 0)
             {
-                return $"Mandatory rules are missing or disabled for fund {fund}: {string.Join(", ", missing)}.";
+                return Problem.Of(ValidationErrors.MandatoryRulesMissing, ("fund", fund), ("grant", grant), ("rules", string.Join(", ", missing)));
             }
         }
 

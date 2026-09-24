@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace GovErp.Infrastructure.Persistence.Configurations.Ledger;
 
+/// <summary>
+/// EF Core mapping for a budget line.
+/// </summary>
 public sealed class BudgetLineConfiguration : IEntityTypeConfiguration<BudgetLine>
 {
     public void Configure(EntityTypeBuilder<BudgetLine> b)

@@ -1,5 +1,8 @@
 namespace GovErp.Domain.Ledger.Entities;
 
+/// <summary>
+/// A claim on the cumulative billing of a purchase-order line.
+/// </summary>
 public sealed class PoBillingClaim
 {
     public Guid Id { get; private set; } = Guid.NewGuid();

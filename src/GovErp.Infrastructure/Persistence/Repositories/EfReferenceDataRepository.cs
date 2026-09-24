@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GovErp.Infrastructure.Persistence.Repositories;
 
+/// <summary>
+/// SQL repository of departments and object codes for the current tenant.
+/// </summary>
 public sealed class EfReferenceDataRepository(GovErpDbContext db) : IReferenceDataRepository
 {
     public Task<Department?> FindDepartmentAsync(DepartmentCode code, CancellationToken ct = default) =>

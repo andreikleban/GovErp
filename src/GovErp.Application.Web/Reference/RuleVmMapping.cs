@@ -4,9 +4,14 @@ using GovErp.Domain.Validation.Entities;
 
 namespace GovErp.Application.Web.Reference;
 
+/// <summary>
+/// Builds a rule card from its definition and the catalog.
+/// </summary>
 internal static class RuleVmMapping
 {
-    /// <summary>Versions that apply on the date: the general set plus scoped versions within their fund and grant.</summary>
+    /// <summary>
+    /// Versions that apply on the date: the general set plus scoped versions within their fund and grant.
+    /// </summary>
     public static HashSet<Guid> CurrentIds(IReadOnlyList<RuleDefinition> all, DateOnly onDate)
     {
         var current = RuleResolver.Default.Resolve(all, onDate).Rules.Select(r => r.Id).ToHashSet();

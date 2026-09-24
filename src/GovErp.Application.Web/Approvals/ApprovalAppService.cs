@@ -11,6 +11,9 @@ using ApproverRole = GovErp.Domain.Validation.ValueObjects.ApproverRole;
 
 namespace GovErp.Application.Web.Approvals;
 
+/// <summary>
+/// Approval use cases: the queue, approve, reject and releasing a soft stop.
+/// </summary>
 public sealed class ApprovalAppService(ITenantOperationRunner runner) : IApprovalAppService
 {
     public Task<IReadOnlyList<ApprovalQueueItemVm>> GetQueueAsync(ActorContext actor, CancellationToken ct = default) =>
@@ -34,14 +37,14 @@ public sealed class ApprovalAppService(ITenantOperationRunner runner) : IApprova
                         .Select(r => (Role: r.Role.ToString(), Department: r.Department?.Value))
                         .Where(r => !satisfied.Contains(r) && Mine(r.Role, r.Department))
                         .Select(r => new ApprovalQueueItemVm(inv.Id, inv.Reference, inv.Number, vendor, inv.Total.Amount, last.Overall.ToString(),
-                            "Approve", r.Role, r.Department, "Approval required.", last.Id, null, null)));
+                            "Approve", r.Role, r.Department, Messages.Render(Problem.Of(AppErrors.ApprovalRequired)), last.Id, null, null)));
                 }
 
                 items.AddRange(last.Outcomes
                     .Where(o => o.Severity == Severity.SoftStop && !o.IsOverridden && inv.CreatedBy != actor.UserId)
                     .SelectMany(o => o.OverridableBy.Where(r => Mine(r.ToString(), null)).Take(1).Select(r => (o, r)))
                     .Select(x => new ApprovalQueueItemVm(inv.Id, inv.Reference, inv.Number, vendor, inv.Total.Amount, last.Overall.ToString(),
-                        "Override", x.r.ToString(), null, x.o.Message, last.Id, x.o.RuleId, x.o.DistributionLine)));
+                        "Override", x.r.ToString(), null, Messages.Render(x.o), last.Id, x.o.RuleId, x.o.DistributionLine)));
             }
 
             return items;
@@ -56,19 +59,19 @@ public sealed class ApprovalAppService(ITenantOperationRunner runner) : IApprova
         {
             if (!actor.IsInAnyRole(Roles.Approvers))
             {
-                return CommandResult<InvoiceVm>.Forbidden("Only approvers approve.");
+                return CommandResult<InvoiceVm>.Forbidden(AppErrors.OnlyApproversApprove);
             }
 
             var ws = sp.GetRequiredService<InvoiceWorkspace>();
             var invoice = await ws.LoadAsync(cmd.InvoiceId, token);
             if (invoice.CreatedBy == actor.UserId)
             {
-                return CommandResult<InvoiceVm>.Forbidden("The author cannot approve their own invoice (separation of duties).");
+                return CommandResult<InvoiceVm>.Forbidden(AppErrors.AuthorCannotApprove);
             }
 
             if (invoice.Status != InvoiceStatus.Submitted)
             {
-                return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), $"Invoice is {invoice.Status}.");
+                return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), AppErrors.InvoiceStatus, ("status", invoice.Status));
             }
 
             ws.Concurrency.Expect(invoice, cmd.Envelope.ExpectedRowVersion);
@@ -90,7 +93,7 @@ public sealed class ApprovalAppService(ITenantOperationRunner runner) : IApprova
             var step = pending.FirstOrDefault(r => actor.IsInRole(r.Role.ToString()) && (r.Department is null || r.Department.Value == actor.DepartmentCode));
             if (step is null)
             {
-                return CommandResult<InvoiceVm>.Forbidden($"{actor.UserName} is not a pending approver for {invoice.Reference}.");
+                return CommandResult<InvoiceVm>.Forbidden(AppErrors.NotPendingApprover, ("user", actor.UserName), ("invoice", invoice.Reference));
             }
 
             invoice.RecordApproval(step.Role, step.Department, actor.UserId, record.Id, ws.Clock.Now);
@@ -115,14 +118,14 @@ public sealed class ApprovalAppService(ITenantOperationRunner runner) : IApprova
             var invoice = await ws.LoadAsync(cmd.InvoiceId, token);
             if (await ws.LastEvaluationAsync(invoice, token) is not { } last || invoice.LastEvaluationRef is null)
             {
-                return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), $"Invoice is {invoice.Status}.");
+                return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), AppErrors.InvoiceStatus, ("status", invoice.Status));
             }
 
             var step = (await ws.RouteForAsync(last, token))
                 .FirstOrDefault(r => actor.IsInRole(r.Role.ToString()) && (r.Department is null || r.Department.Value == actor.DepartmentCode));
             if (step is null)
             {
-                return CommandResult<InvoiceVm>.Forbidden("Only an approver on this invoice's route rejects it.");
+                return CommandResult<InvoiceVm>.Forbidden(AppErrors.OnlyRouteApproverRejects);
             }
 
             ws.Concurrency.Expect(invoice, cmd.Envelope.ExpectedRowVersion);
@@ -142,27 +145,27 @@ public sealed class ApprovalAppService(ITenantOperationRunner runner) : IApprova
         {
             if (!actor.IsInAnyRole(Roles.Overriders))
             {
-                return CommandResult<InvoiceVm>.Forbidden("Only the budget officer or finance director overrides.");
+                return CommandResult<InvoiceVm>.Forbidden(AppErrors.OnlyOverridersOverride);
             }
 
             var ws = sp.GetRequiredService<InvoiceWorkspace>();
             var invoice = await ws.LoadAsync(cmd.InvoiceId, token);
             if (invoice.LastEvaluationRef != cmd.EvaluationId || await ws.Evaluations.FindAsync(cmd.EvaluationId, token) is not { } basis)
             {
-                return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), "The evaluation is not current for this invoice; reload and retry.");
+                return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), AppErrors.EvaluationNotCurrent);
             }
 
             var outcome = basis.Outcomes.FirstOrDefault(o => o.RuleId == cmd.RuleId && o.DistributionLine == cmd.DistributionLine
                 && o.Severity == Severity.SoftStop && !o.IsOverridden);
             if (outcome is null)
             {
-                return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), $"No open soft stop {cmd.RuleId} on that line.");
+                return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), AppErrors.NoOpenSoftStop, ("rule", cmd.RuleId));
             }
 
             // Cast to nullable: FirstOrDefault over the enum would return DepartmentHead instead of "no match".
             if (outcome.OverridableBy.Cast<ApproverRole?>().FirstOrDefault(r => actor.IsInRole(r!.Value.ToString())) is not { } role)
             {
-                return CommandResult<InvoiceVm>.Forbidden($"{cmd.RuleId} cannot be overridden by {actor.UserName}.");
+                return CommandResult<InvoiceVm>.Forbidden(AppErrors.CannotOverride, ("user", actor.UserName), ("rule", cmd.RuleId));
             }
 
             ws.Concurrency.Expect(invoice, cmd.Envelope.ExpectedRowVersion);

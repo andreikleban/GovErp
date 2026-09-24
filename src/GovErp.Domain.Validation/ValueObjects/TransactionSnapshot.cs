@@ -1,5 +1,8 @@
 namespace GovErp.Domain.Validation.ValueObjects;
 
+/// <summary>
+/// The document header as captured on a validation snapshot.
+/// </summary>
 public sealed record TransactionSnapshot(
     string TransactionRef, int TransactionVersion, string TransactionType, DateOnly Date, Money Total,
     VendorSnapshot Vendor, bool IsPoBacked, bool IsDuplicate, UserId CreatedBy,

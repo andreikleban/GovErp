@@ -1,12 +1,17 @@
+using GovErp.Domain.Validation.Codes;
+
 namespace GovErp.Domain.Validation.ValueObjects;
 
+/// <summary>
+/// Budget-line balances as a validation rule sees them.
+/// </summary>
 public sealed record BudgetSnapshot
 {
     public BudgetSnapshot(bool Exists, Money Amended, Money Actuals, Money Encumbered,
         Money Held, Money Available, Money OwnHeld = default, int FiscalYear = 2026)
     {
         if (Available != Amended - Actuals - Encumbered - Held)
-            throw new ArgumentException("Available must equal amended less actuals, encumbered and held.", nameof(Available));
+            throw new InvalidValueException(nameof(Available), AllocationErrors.InconsistentBudget);
         this.Exists = Exists;
         this.Amended = Amended;
         this.Actuals = Actuals;

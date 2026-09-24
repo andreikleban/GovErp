@@ -9,6 +9,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GovErp.Infrastructure.Persistence;
 
+/// <summary>
+/// EF context for one tenant's data.
+/// </summary>
 public sealed class GovErpDbContext(DbContextOptions<GovErpDbContext> options) : DbContext(options)
 {
     public DbSet<Fund> Funds => Set<Fund>();

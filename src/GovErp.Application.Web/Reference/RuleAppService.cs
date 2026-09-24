@@ -37,7 +37,7 @@ public sealed class RuleAppService(ITenantOperationRunner runner, IRuleExplanati
     public Task<RuleDetailVm> GetRuleDetailAsync(string ruleId, ActorContext actor, CancellationToken ct = default) =>
         runner.QueryAsync(actor, async (sp, token) =>
         {
-            var description = RuleDescriptions.Find(ruleId) ?? throw new NotFoundException($"Rule {ruleId} is not in the engine's catalog.");
+            var description = RuleDescriptions.Find(ruleId) ?? throw new NotFoundException(AppErrors.RuleNotInCatalog, ("rule", ruleId));
             var all = await sp.GetRequiredService<IRuleDefinitionRepository>().ListAsync(token);
             var current = RuleVmMapping.CurrentIds(all, sp.GetRequiredService<IClock>().BusinessDate);
             var versions = all.Where(r => r.RuleId == ruleId)
@@ -51,7 +51,9 @@ public sealed class RuleAppService(ITenantOperationRunner runner, IRuleExplanati
             return new RuleDetailVm(description, applied, versions);
         }, ct);
 
-    /// <summary>The LLM is called outside a transaction and nothing is stored: a rule explanation is help text, not a record of a decision.</summary>
+    /// <summary>
+    /// The LLM is called outside a transaction and nothing is stored: a rule explanation is help text, not a record of a decision.
+    /// </summary>
     public async Task<ExplanationResult> ExplainRuleAsync(string ruleId, ExplanationAudience audience, ActorContext actor, CancellationToken ct = default)
     {
         var detail = await GetRuleDetailAsync(ruleId, actor, ct);
@@ -63,17 +65,17 @@ public sealed class RuleAppService(ITenantOperationRunner runner, IRuleExplanati
         {
             if (!actor.IsInRole(Roles.FinanceDirector))
             {
-                return CommandResult<RuleVm>.Forbidden("Only the finance director changes rule configuration.");
+                return CommandResult<RuleVm>.Forbidden(AppErrors.OnlyFinanceDirectorConfiguresRules);
             }
 
             if (string.IsNullOrWhiteSpace(cmd.Reason))
             {
-                return CommandResult<RuleVm>.Refused(null, "A reason is required for a rule change.");
+                return CommandResult<RuleVm>.Refused(null, AppErrors.RuleChangeReasonRequired);
             }
 
             var repository = sp.GetRequiredService<IRuleDefinitionRepository>();
             var all = await repository.ListAsync(token);
-            var source = all.SingleOrDefault(r => r.Id == cmd.SourceId) ?? throw new NotFoundException($"Rule definition {cmd.SourceId} not found.");
+            var source = all.SingleOrDefault(r => r.Id == cmd.SourceId) ?? throw new NotFoundException(AppErrors.RuleDefinitionNotFound, ("id", cmd.SourceId));
             if (ParameterProblem(source, cmd.Parameters) is { } problem)
             {
                 return CommandResult<RuleVm>.Refused(null, problem);
@@ -81,7 +83,7 @@ public sealed class RuleAppService(ITenantOperationRunner runner, IRuleExplanati
 
             if (cmd.EffectiveFrom < source.EffectiveFrom)
             {
-                return CommandResult<RuleVm>.Refused(null, $"A new version cannot start before {source.EffectiveFrom:yyyy-MM-dd}, when version {source.Version} started.");
+                return CommandResult<RuleVm>.Refused(null, AppErrors.VersionStartsTooEarly, ("from", source.EffectiveFrom), ("version", source.Version));
             }
 
             Severity? severity = source.Severity;
@@ -89,12 +91,12 @@ public sealed class RuleAppService(ITenantOperationRunner runner, IRuleExplanati
             {
                 if (source.Severity is null)
                 {
-                    return CommandResult<RuleVm>.Refused(null, $"{source.RuleId} computes its severity from the facts; it cannot be configured.");
+                    return CommandResult<RuleVm>.Refused(null, AppErrors.SeverityNotConfigurable, ("rule", source.RuleId));
                 }
 
                 if (!Enum.TryParse<Severity>(requested, out var parsed) || !Enum.IsDefined(parsed) || parsed == Severity.Allowed)
                 {
-                    return CommandResult<RuleVm>.Refused(null, $"'{requested}' is not a configurable severity (Warning, SoftStop, HardStop).");
+                    return CommandResult<RuleVm>.Refused(null, AppErrors.SeverityInvalid, ("severity", requested));
                 }
 
                 severity = parsed;
@@ -122,28 +124,34 @@ public sealed class RuleAppService(ITenantOperationRunner runner, IRuleExplanati
             return CommandResult<RuleVm>.Accepted(RuleVmMapping.ToVm(created, RuleVmMapping.CurrentIds(candidate, clock.BusinessDate).Contains(created.Id)));
         }, ct: ct);
 
-    /// <summary>The parameter set is fixed by the rule's code: the same keys, each value valid for the rule's ParameterSpec.</summary>
-    private static string? ParameterProblem(RuleDefinition source, IReadOnlyDictionary<string, string> parameters)
+    /// <summary>
+    /// The parameter set is fixed by the rule's code: the same keys, each value valid for the rule's ParameterSpec.
+    /// </summary>
+    private static Problem? ParameterProblem(RuleDefinition source, IReadOnlyDictionary<string, string> parameters)
     {
         if (!source.Parameters.Keys.Order(StringComparer.Ordinal).SequenceEqual(parameters.Keys.Order(StringComparer.Ordinal), StringComparer.Ordinal))
         {
             return source.Parameters.Count == 0
-                ? $"{source.RuleId} has no parameters."
-                : $"{source.RuleId} parameters are fixed by the rule: {string.Join(", ", source.Parameters.Keys)}.";
+                ? Problem.Of(AppErrors.RuleHasNoParameters, ("rule", source.RuleId))
+                : Problem.Of(AppErrors.RuleParametersFixed, ("rule", source.RuleId), ("parameters", string.Join(", ", source.Parameters.Keys)));
         }
 
         foreach (var (key, value) in parameters)
         {
             if (RuleCatalog.Default.ParameterOf(source.RuleId, key) is not { } spec)
             {
-                if (value != source.Parameters[key]) return $"{key} has no meaning declared by the rule's code and cannot be changed.";
+                if (value != source.Parameters[key]) return Problem.Of(AppErrors.ParameterUndeclared, ("parameter", key));
                 continue;
             }
 
-            var parsed = decimal.TryParse(value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var number);
-            if (!parsed || !spec.Accepts(number))
+            if (!decimal.TryParse(value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var number))
             {
-                return $"{key} must be {spec.Requirement} (digits and a dot for decimals).";
+                return Problem.Of(AppErrors.ParameterNotNumber, ("parameter", key));
+            }
+
+            if (!spec.Accepts(number))
+            {
+                return Problem.Of(spec.InvalidValueCode, ("rule", source.RuleId), ("parameter", key), ("value", value));
             }
         }
 

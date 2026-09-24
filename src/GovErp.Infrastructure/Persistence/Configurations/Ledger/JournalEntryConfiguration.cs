@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace GovErp.Infrastructure.Persistence.Configurations.Ledger;
 
+/// <summary>
+/// EF Core mapping for a journal entry.
+/// </summary>
 public sealed class JournalEntryConfiguration : IEntityTypeConfiguration<JournalEntry>
 {
     public void Configure(EntityTypeBuilder<JournalEntry> b)

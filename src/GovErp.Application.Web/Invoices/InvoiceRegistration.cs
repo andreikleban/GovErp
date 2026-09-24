@@ -12,8 +12,6 @@ namespace GovErp.Application.Web.Invoices;
 /// </summary>
 public sealed class InvoiceRegistration(IInvoiceNumbering numbering, IVendorInvoiceRepository invoices, IClock clock)
 {
-    public const string DuplicateNumber = "An invoice with this number already exists for this vendor.";
-
     public async Task<VendorInvoice> RegisterAsync(CreateInvoiceCommand cmd, UserId author, CancellationToken ct)
     {
         var fiscalYear = FiscalYear.FromDate(cmd.PostingDate);
@@ -32,7 +30,7 @@ public sealed class InvoiceRegistration(IInvoiceNumbering numbering, IVendorInvo
         if (cmd.GeneratedNumberPrefix is not null
             && await invoices.ExistsDuplicateAsync(invoice.VendorId, invoice.NormalizedInvoiceNumber, null, ct))
         {
-            throw new PayablesException(DuplicateNumber);
+            throw new PayablesException(PayablesErrors.DuplicateNumber);
         }
 
         return invoice;

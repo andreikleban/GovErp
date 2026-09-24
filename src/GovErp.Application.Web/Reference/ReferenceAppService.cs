@@ -16,7 +16,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace GovErp.Application.Web.Reference;
 
-/// <summary>Read-only reference data: segments, combinations, funds and grants, vendors, POs with encumbrance balances, users and roles.</summary>
+/// <summary>
+/// Read-only reference data: segments, combinations, funds and grants, vendors, POs with encumbrance balances, users and roles.
+/// </summary>
 public sealed class ReferenceAppService(ITenantOperationRunner runner) : IReferenceAppService
 {
     private static readonly IReadOnlyDictionary<string, string> NoAttributes = new Dictionary<string, string>();
@@ -68,7 +70,9 @@ public sealed class ReferenceAppService(ITenantOperationRunner runner) : IRefere
                 .Select(v => new VendorVm(v.Id, v.Code, v.Name, v.Status.ToString(), v.SamRegistered))
                 .ToList(), ct);
 
-    /// <summary>PO lines are enriched with the Encumbrance balances of the same line; without an encumbrance: authorized per line, remaining 0.</summary>
+    /// <summary>
+    /// PO lines are enriched with the Encumbrance balances of the same line; without an encumbrance: authorized per line, remaining 0.
+    /// </summary>
     public Task<IReadOnlyList<PurchaseOrderVm>> GetPurchaseOrdersAsync(ActorContext actor, CancellationToken ct = default) =>
         runner.QueryAsync<IReadOnlyList<PurchaseOrderVm>>(actor, async (sp, token) =>
         {
@@ -90,13 +94,15 @@ public sealed class ReferenceAppService(ITenantOperationRunner runner) : IRefere
             return result;
         }, ct);
 
-    /// <summary>Fund card: attributes, combinations by Code.Fund and budget lines of all tracked accounts of this fund.</summary>
+    /// <summary>
+    /// Fund card: attributes, combinations by Code.Fund and budget lines of all tracked accounts of this fund.
+    /// </summary>
     public Task<FundDetailVm> GetFundAsync(string code, ActorContext actor, CancellationToken ct = default) =>
         runner.QueryAsync(actor, async (sp, token) =>
         {
             var fundCode = new FundCode(code);
             var fund = await sp.GetRequiredService<IFundRepository>().FindAsync(fundCode, token)
-                ?? throw new NotFoundException($"Fund {code} not found.");
+                ?? throw new NotFoundException(AppErrors.FundNotFound, ("fund", code));
             var combinations = await CombinationsAsync(sp, c => c.Code.Fund == fundCode, token);
             var lines = await BudgetLinesAsync(sp, l => l.Account.Fund == fundCode, token);
             return new FundDetailVm(fund.Code.Value, fund.Name, fund.Type.ToString(), fund.Basis.ToString(), fund.ControlMode.ToString(),
@@ -104,13 +110,15 @@ public sealed class ReferenceAppService(ITenantOperationRunner runner) : IRefere
                 fund.IsActive, combinations, lines);
         }, ct);
 
-    /// <summary>Grant card: attributes, combinations by Code.Grant and budget lines of all tracked accounts of this grant.</summary>
+    /// <summary>
+    /// Grant card: attributes, combinations by Code.Grant and budget lines of all tracked accounts of this grant.
+    /// </summary>
     public Task<GrantDetailVm> GetGrantAsync(string code, ActorContext actor, CancellationToken ct = default) =>
         runner.QueryAsync(actor, async (sp, token) =>
         {
             var grantCode = new GrantCode(code);
             var grant = await sp.GetRequiredService<IGrantRepository>().FindAsync(grantCode, token)
-                ?? throw new NotFoundException($"Grant {code} not found.");
+                ?? throw new NotFoundException(AppErrors.GrantNotFound, ("grant", code));
             var combinations = await CombinationsAsync(sp, c => c.Code.Grant == grantCode, token);
             var lines = await BudgetLinesAsync(sp, l => l.Account.Grant == grantCode, token);
             return new GrantDetailVm(grant.Code.Value, grant.Name, grant.Sponsor, grant.IsFederal, grant.Period.From, grant.Period.To,
@@ -125,7 +133,9 @@ public sealed class ReferenceAppService(ITenantOperationRunner runner) : IRefere
                 .Select(u => new UserVm(u.Id, u.UserName, u.DisplayName, u.Roles, u.DepartmentCode))
                 .ToList(), ct);
 
-    /// <summary>Which role may do what, from the rules in force on the business date (see RoleMatrix).</summary>
+    /// <summary>
+    /// Which role may do what, from the rules in force on the business date (see RoleMatrix).
+    /// </summary>
     public Task<RoleMatrixVm> GetRoleMatrixAsync(ActorContext actor, CancellationToken ct = default) =>
         runner.QueryAsync(actor, async (sp, token) =>
         {
@@ -140,7 +150,9 @@ public sealed class ReferenceAppService(ITenantOperationRunner runner) : IRefere
             .Select(c => new CombinationVm(c.Code.ToString(), c.Status.ToString(), c.EffectiveFrom, c.EffectiveTo, c.Source.ToString()))
             .ToList();
 
-    /// <summary>Budget lines for all years that have fiscal periods: a BudgetLine has a year, a PO/fund/grant does not.</summary>
+    /// <summary>
+    /// Budget lines for all years that have fiscal periods: a BudgetLine has a year, a PO/fund/grant does not.
+    /// </summary>
     private static async Task<IReadOnlyList<BudgetLineVm>> BudgetLinesAsync(IServiceProvider sp, Func<BudgetLine, bool> matches, CancellationToken ct)
     {
         var budgetLines = sp.GetRequiredService<IBudgetLineRepository>();

@@ -17,7 +17,9 @@ using PayablesRequirement = GovErp.Domain.Payables.Entities.ApprovalRequirement;
 
 namespace GovErp.Application.Web.Invoices;
 
-/// <summary>Shared steps of the invoice use cases. Scoped: lives in the runner's operation scope, all repositories share one DbContext.</summary>
+/// <summary>
+/// Shared steps of the invoice use cases. Scoped: lives in the runner's operation scope, all repositories share one DbContext.
+/// </summary>
 public sealed class InvoiceWorkspace(
     IVendorInvoiceRepository invoices, IVendorRepository vendors, IPurchaseOrderRepository purchaseOrders,
     IBudgetLineRepository budgetLines, IEncumbranceRepository encumbrances, IFiscalPeriodRepository periods,
@@ -41,9 +43,11 @@ public sealed class InvoiceWorkspace(
     public IClock Clock => clock;
 
     public async Task<VendorInvoice> LoadAsync(Guid id, CancellationToken ct) =>
-        await invoices.FindAsync(id, ct) ?? throw new NotFoundException($"Invoice {id} not found.");
+        await invoices.FindAsync(id, ct) ?? throw new NotFoundException(AppErrors.InvoiceNotFound, ("id", id));
 
-    /// <summary>Definitions are read once per operation: the whole command evaluates against one rule set.</summary>
+    /// <summary>
+    /// Definitions are read once per operation: the whole command evaluates against one rule set.
+    /// </summary>
     public async Task<IReadOnlyList<RuleDefinition>> DefinitionsAsync(CancellationToken ct) => _definitions ??= await rules.ListAsync(ct);
 
     /// <summary>
@@ -71,7 +75,9 @@ public sealed class InvoiceWorkspace(
         return (record, true);
     }
 
-    /// <summary>The base route (without override requirements, D-6): what VendorInvoice stores and checks.</summary>
+    /// <summary>
+    /// The base route (without override requirements, D-6): what VendorInvoice stores and checks.
+    /// </summary>
     public async Task<IReadOnlyList<PayablesRequirement>> RouteForAsync(EvaluationRecord record, CancellationToken ct)
     {
         var subject = record.InputSnapshot;
@@ -102,11 +108,11 @@ public sealed class InvoiceWorkspace(
                 continue;
             }
 
-            var line = await budgetLines.FindAsync(key.Key, fy, ct) ?? throw new LedgerException($"Budget line {key.Key} {fy} not found.");
+            var line = await budgetLines.FindAsync(key.Key, fy, ct) ?? throw new LedgerException(LedgerErrors.BudgetLineNotFound, ("account", key.Key), ("fiscalYear", fy.Year));
             var result = line.Reserve(invoice.Id, cv, amount, invoice.Reference);
             if (!result.IsReserved)
             {
-                throw new LedgerException($"Budget on {key.Key} is no longer available: short by {result.Shortfall}.");
+                throw new LedgerException(LedgerErrors.BudgetNoLongerAvailable, ("account", key.Key), ("shortfall", result.Shortfall));
             }
 
             reservations.Add(result.ReservationId!.Value);
@@ -117,7 +123,7 @@ public sealed class InvoiceWorkspace(
         foreach (var po in allocation.Where(l => l.Distribution.Encumbrance is not null)
                      .GroupBy(l => l.Distribution.Encumbrance!.PoLineRef).OrderBy(g => g.Key, StringComparer.Ordinal))
         {
-            var encumbrance = await encumbrances.FindByPoLineAsync(po.Key, ct) ?? throw new LedgerException($"Encumbrance {po.Key} not found.");
+            var encumbrance = await encumbrances.FindByPoLineAsync(po.Key, ct) ?? throw new LedgerException(LedgerErrors.EncumbranceNotFound, ("poLine", po.Key));
             var liquidation = Sum(po.Select(l => l.LiquidationAmount));
             if (!liquidation.IsZero)
             {
@@ -132,31 +138,32 @@ public sealed class InvoiceWorkspace(
         return new InvoiceHolds(reservations, claims, billing);
     }
 
-    /// <summary>Reject / Withdraw: releases exactly what the invoice held in its content version (GE-14).</summary>
+    /// <summary>
+    /// Reject / Withdraw: releases exactly what the invoice held in its content version (GE-14).
+    /// </summary>
     public async Task ReleaseAsync(InvoiceRelease release, CancellationToken ct)
     {
         foreach (var id in release.ReservationRefs)
         {
-            (await budgetLines.FindByReservationAsync(id, ct) ?? throw new LedgerException($"Reservation {id} not found."))
+            (await budgetLines.FindByReservationAsync(id, ct) ?? throw new LedgerException(LedgerErrors.UnknownReservation))
                 .Release(id, release.InvoiceId, release.ContentVersion);
         }
 
         foreach (var id in release.EncumbranceClaimRefs)
         {
-            (await encumbrances.FindByClaimAsync(id, ct) ?? throw new LedgerException($"Claim {id} not found."))
+            (await encumbrances.FindByClaimAsync(id, ct) ?? throw new LedgerException(LedgerErrors.UnknownClaim))
                 .ReleaseClaim(id, release.InvoiceId, release.ContentVersion);
         }
 
         foreach (var id in release.PoBillingClaimRefs)
         {
-            (await encumbrances.FindByClaimAsync(id, ct) ?? throw new LedgerException($"Billing claim {id} not found."))
+            (await encumbrances.FindByClaimAsync(id, ct) ?? throw new LedgerException(LedgerErrors.UnknownBillingClaim))
                 .ReleaseBillingClaim(id, release.InvoiceId, release.ContentVersion);
         }
     }
 
     /// <summary>
-    /// This operation's evaluation (not saved yet, so a DB query would not see it), otherwise LastEvaluationRef, otherwise for Draft
-    /// the latest saved check.
+    /// This operation's evaluation (not saved yet, so a DB query would not see it), otherwise LastEvaluationRef, otherwise for Draft the latest saved check.
     /// </summary>
     public async Task<EvaluationRecord?> LastEvaluationAsync(VendorInvoice invoice, CancellationToken ct) =>
         _evaluated.GetValueOrDefault(invoice.Id)
@@ -170,7 +177,7 @@ public sealed class InvoiceWorkspace(
     /// </summary>
     public async Task<InvoiceVm> ToVmAsync(VendorInvoice invoice, CancellationToken ct, bool withRowVersion = false)
     {
-        var vendor = await vendors.FindAsync(invoice.VendorId, ct) ?? throw new NotFoundException($"Vendor {invoice.VendorId} not found.");
+        var vendor = await vendors.FindAsync(invoice.VendorId, ct) ?? throw new NotFoundException(AppErrors.VendorNotFound, ("id", invoice.VendorId));
         return InvoiceMapping.ToVm(invoice, vendor, await LastEvaluationAsync(invoice, ct),
             withRowVersion ? concurrency.VersionOf(invoice) : null, clock.BusinessDate,
             withRowVersion ? await FundsAsync(invoice, ct) : null);
@@ -210,8 +217,9 @@ public sealed class InvoiceWorkspace(
     /// The refusal reason lists only outcomes that block this particular action: Submit is blocked only by a Hard Stop
     /// (a Soft Stop does not prevent submission); approval and Post are also blocked by an open Soft Stop.
     /// </summary>
-    public static string ReasonOf(EvaluationRecord record, Severity blocking) =>
-        string.Join(" ", record.Outcomes.Where(o => o.Severity >= blocking && !o.IsOverridden).Select(o => o.Message));
+    public static Problem ReasonOf(EvaluationRecord record, Severity blocking) =>
+        Problem.Of(AppErrors.BlockedBy,
+            ("reasons", string.Join(" ", record.Outcomes.Where(o => o.Severity >= blocking && !o.IsOverridden).Select(Messages.Render))));
 
     private async Task<EvaluationRecord> EvaluateOnceAsync(VendorInvoice invoice, EvaluationTrigger trigger, ActorContext actor, CancellationToken ct)
     {
@@ -223,4 +231,7 @@ public sealed class InvoiceWorkspace(
     }
 }
 
+/// <summary>
+/// Ids of the reservations and claims an invoice is holding.
+/// </summary>
 public sealed record InvoiceHolds(IReadOnlyList<Guid> Reservations, IReadOnlyList<Guid> Claims, IReadOnlyList<Guid> BillingClaims);

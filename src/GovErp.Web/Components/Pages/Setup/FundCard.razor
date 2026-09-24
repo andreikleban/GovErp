@@ -30,6 +30,15 @@ else if (_fund is { } fund)
     </div>
 
     <section class="panel">
+        <h2>What this fund is</h2>
+        <p>A fund is its own set of books. A department is who spends. Money recorded in this fund cannot be spent as another fund's money.</p>
+        <p>@(fund.Basis == "ModifiedAccrual"
+            ? "Modified accrual recognizes revenue when it is measurable and available, and recognizes expenditure when the liability is incurred."
+            : "Full accrual recognizes revenue when it is earned and expense when it is incurred, including long-term items such as depreciation.")</p>
+        <p><a href="/ledger/funds">Fund balances</a> shows the budget and the financial totals for every fund.</p>
+    </section>
+
+    <section class="panel">
         <h2>Account combinations</h2>
         @if (fund.Combinations.Count == 0)
         {

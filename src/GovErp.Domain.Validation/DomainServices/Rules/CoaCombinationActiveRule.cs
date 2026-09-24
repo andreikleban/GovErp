@@ -3,9 +3,14 @@ using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.DomainServices.Rules;
 
-/// <summary>Step 2. The full account combination exists in the chart of accounts and is active on the invoice date.</summary>
+/// <summary>
+/// Step 2. The full account combination exists in the chart of accounts and is active on the invoice date.
+/// </summary>
 public sealed class CoaCombinationActiveRule : ValidationRule
 {
+    private const string CombinationUnknown = "COA_COMBINATION_ACTIVE.COMBINATION_UNKNOWN";
+    private const string CombinationInactive = "COA_COMBINATION_ACTIVE.COMBINATION_INACTIVE";
+
     public override string RuleId => "COA_COMBINATION_ACTIVE";
 
     protected override IEnumerable<Finding> Check(ValidationSubject subject, RuleParameters parameters)
@@ -19,9 +24,9 @@ public sealed class CoaCombinationActiveRule : ValidationRule
             // Decide: the combination is unknown, or known but not active on that date.
             Verdict verdict;
             if (!combination.Exists)
-                verdict = Fail($"Account combination {line.Account} does not exist in the chart of accounts (line {line.LineNo}).");
+                verdict = Fail(CombinationUnknown);
             else if (!combination.IsActiveOnDate)
-                verdict = Fail($"Account combination {line.Account} is {combination.Status} on {date:yyyy-MM-dd} (line {line.LineNo}).");
+                verdict = Fail(CombinationInactive);
             else
                 continue;
 

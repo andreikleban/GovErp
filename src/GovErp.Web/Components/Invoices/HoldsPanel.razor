@@ -3,7 +3,7 @@
 
 @* Evaluation holds: Hard Stops and Soft Stops, open and released by override, with the rule, reason, figures and who can release. *@
 <section class="panel">
-    <h2>Holds</h2>
+    <h2>Holds <HelpNote Title="Holds">A Hard Stop is removed only by fixing the data or the budget. A Soft Stop is released (overridden) by a permitted role with a reason.</HelpNote></h2>
     @if (Evaluation is null)
     {
         <p class="note">No saved evaluation. Check Funds runs the rules.</p>
@@ -14,7 +14,6 @@
     }
     else
     {
-        <p class="note">A Hard Stop is removed only by fixing the data or the budget. A Soft Stop is released (overridden) by a permitted role with a reason.</p>
         <table>
             <thead>
                 <tr><th>Rule</th><th>Line</th><th>Severity</th><th>Reason</th><th>Figures</th><th>Who can release</th><th>State</th></tr>

@@ -9,5 +9,5 @@ namespace GovErp.Application.Web.Invoices.Contracts;
 public sealed record InvoiceVm(Guid Id, string Number, string Reference, Guid VendorId, string VendorName,
     DateOnly InvoiceDate, DateOnly ServiceDate, DateOnly PostingDate, DateOnly DueDate, int FiscalYear, decimal Total, string? PoRef,
     string Status, int ContentVersion, Guid? ApprovalCycleId, Guid? LastEvaluationRef, string? RowVersion, Guid CreatedBy, bool PaymentHold,
-    bool ReadyForPaymentHandoff, DateTimeOffset? PostedAt, InvoiceFundsVm? Funds, IReadOnlyList<DistributionVm> Distributions,
+    bool ReadyForPaymentHandoff, DateTimeOffset? PostedAt, DateTimeOffset? PaidAt, InvoiceFundsVm? Funds, IReadOnlyList<DistributionVm> Distributions,
     IReadOnlyList<ApprovalVm> Approvals, IReadOnlyList<OverrideVm> Overrides, EvaluationVm? LastEvaluation);

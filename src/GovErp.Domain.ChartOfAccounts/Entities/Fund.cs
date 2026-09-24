@@ -1,6 +1,10 @@
+using GovErp.Domain.ChartOfAccounts.Exceptions;
+
 namespace GovErp.Domain.ChartOfAccounts.Entities;
 
-/// <summary>A fund is a self-balancing accounting entity with restrictions on its use. Reference data (anemic), except Check.</summary>
+/// <summary>
+/// A fund is a self-balancing accounting entity with restrictions on its use. Reference data (anemic), except Check.
+/// </summary>
 public sealed class Fund
 {
     public FundCode Code { get; private set; }
@@ -9,9 +13,13 @@ public sealed class Fund
     public AccountingBasis Basis { get; private set; }
     public BudgetControlMode ControlMode { get; private set; }
     public GrantPolicy GrantPolicy { get; private set; }
-    /// <summary>Empty means no restriction.</summary>
+    /// <summary>
+    /// Empty means no restriction.
+    /// </summary>
     public IReadOnlyList<DepartmentCode> AllowedDepartments { get; private set; }
-    /// <summary>Empty means no restriction.</summary>
+    /// <summary>
+    /// Empty means no restriction.
+    /// </summary>
     public IReadOnlyList<ObjectCode> AllowedObjects { get; private set; }
     public bool IsActive { get; private set; }
 
@@ -24,7 +32,7 @@ public sealed class Fund
         ArgumentNullException.ThrowIfNull(allowedDepartments);
         if (allowedDepartments.Any(item => item is null))
         {
-            throw new ArgumentException("Departments cannot contain null.", nameof(allowedDepartments));
+            throw new InvalidValueException(nameof(allowedDepartments), ChartOfAccountsErrors.NullDepartment);
         }
         Code = code;
         Name = name;
@@ -36,13 +44,15 @@ public sealed class Fund
         ArgumentNullException.ThrowIfNull(allowedObjects);
         if (allowedObjects.Any(item => item is null))
         {
-            throw new ArgumentException("Objects cannot contain null.", nameof(allowedObjects));
+            throw new InvalidValueException(nameof(allowedObjects), ChartOfAccountsErrors.NullObject);
         }
         AllowedObjects = Array.AsReadOnly(allowedObjects.ToArray());
         IsActive = isActive;
     }
 
-    /// <summary>For rehydration from storage (DDD-9).</summary>
+    /// <summary>
+    /// For rehydration from storage (DDD-9).
+    /// </summary>
     private Fund()
     {
         Code = null!;

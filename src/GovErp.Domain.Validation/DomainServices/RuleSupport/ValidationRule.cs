@@ -20,7 +20,9 @@ public abstract class ValidationRule : IValidationRule
 
     public virtual IReadOnlyList<ParameterSpec> Parameters => [];
 
-    /// <summary>The severity of Fail when the rule definition does not configure one.</summary>
+    /// <summary>
+    /// The severity of Fail when the rule definition does not configure one.
+    /// </summary>
     protected virtual Severity DefaultSeverity => Severity.HardStop;
 
     public IReadOnlyList<RuleOutcome> Evaluate(ValidationSubject subject, RuleDefinition definition)
@@ -35,18 +37,24 @@ public abstract class ValidationRule : IValidationRule
 
     protected abstract IEnumerable<Finding> Check(ValidationSubject subject, RuleParameters parameters);
 
-    /// <summary>The rule is broken with the configured severity (or DefaultSeverity).</summary>
-    protected static Verdict Fail(string reason) => new(null, reason);
+    /// <summary>
+    /// The rule is broken with the configured severity (or DefaultSeverity). The reason is a code: RULE_ID.REASON.
+    /// </summary>
+    protected static Verdict Fail(string reasonCode) => new(null, reasonCode);
 
-    protected static Verdict HardStop(string reason) => new(Severity.HardStop, reason);
+    protected static Verdict HardStop(string reasonCode) => new(Severity.HardStop, reasonCode);
 
-    protected static Verdict SoftStop(string reason) => new(Severity.SoftStop, reason);
+    protected static Verdict SoftStop(string reasonCode) => new(Severity.SoftStop, reasonCode);
 
-    protected static Verdict Warning(string reason) => new(Severity.Warning, reason);
+    protected static Verdict Warning(string reasonCode) => new(Severity.Warning, reasonCode);
 
-    /// <summary>Recorded for transparency; nothing is blocked.</summary>
-    protected static Verdict Allowed(string reason) => new(Severity.Allowed, reason);
+    /// <summary>
+    /// Recorded for transparency; nothing is blocked.
+    /// </summary>
+    protected static Verdict Allowed(string reasonCode) => new(Severity.Allowed, reasonCode);
 
-    /// <summary>A share (0.0325) as a percentage with two decimals ("3.25").</summary>
+    /// <summary>
+    /// A share (0.0325) as a percentage with two decimals ("3.25").
+    /// </summary>
     protected static string Percent(decimal share) => (share * 100).ToString("0.00", CultureInfo.InvariantCulture);
 }

@@ -118,8 +118,7 @@ else if (_detail is { } detail)
     @if (_canAmend)
     {
         <section class="panel">
-            <h2>Amendment</h2>
-            <p class="note">An amendment here simulates a change that has already been approved. It is not a request waiting for a vote.</p>
+            <h2>Amendment <HelpNote Title="Amendment">An amendment here simulates a change that has already been approved. It is not a request waiting for a vote.</HelpNote></h2>
             <div>
                 <label>Amount <input type="number" step="0.01" @bind="_amount" /></label>
                 <label>Effective date <input type="date" @bind="_effective" /></label>

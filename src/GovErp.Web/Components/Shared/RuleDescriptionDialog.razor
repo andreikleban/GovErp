@@ -61,8 +61,7 @@
                 </section>
 
                 <section class="panel">
-                    <h3>Explain with AI</h3>
-                    <p class="note">A generated retelling of the description above for the chosen audience. The written description stays authoritative.</p>
+                    <h3>Explain with AI <HelpNote Title="Explain with AI">A generated retelling of the description above for the chosen audience. The written description stays authoritative.</HelpNote></h3>
                     <p class="toolbar">
                         <select @bind="_audience">
                             @foreach (var audience in Enum.GetValues<ExplanationAudience>()) { <option value="@audience">@audience</option> }

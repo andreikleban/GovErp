@@ -3,8 +3,7 @@ using Microsoft.Extensions.Configuration;
 namespace GovErp.Infrastructure.Explanation;
 
 /// <summary>
-/// Provider names and settings. The key comes from the host configuration (including environment variables)
-/// and never reaches the log or the prompt text.
+/// Provider names and settings. The key comes from the host configuration (including environment variables) and never reaches the log or the prompt text.
 /// </summary>
 internal static class ExplanationConfiguration
 {
@@ -13,10 +12,14 @@ internal static class ExplanationConfiguration
     public const string Anthropic = "Anthropic";
     public const string Ollama = "Ollama";
 
-    /// <summary>Model from the official OpenAI .NET 2.13 sample (overridden by Explanation:Model).</summary>
+    /// <summary>
+    /// Model from the official OpenAI .NET 2.13 sample (overridden by Explanation:Model).
+    /// </summary>
     public const string OpenAiModel = "gpt-5.1";
 
-    /// <summary>Model from the official Anthropic SDK 12.50 sample (overridden by Explanation:Model).</summary>
+    /// <summary>
+    /// Model from the official Anthropic SDK 12.50 sample (overridden by Explanation:Model).
+    /// </summary>
     public const string AnthropicModel = "claude-sonnet-4-5";
 
     public const int DefaultMaxOutputTokens = 2048;
@@ -47,7 +50,9 @@ internal static class ExplanationConfiguration
         _ => options.Model,
     };
 
-    /// <summary>Explanation:ApiKey first, then the provider's standard variable. An empty string means no key.</summary>
+    /// <summary>
+    /// Explanation:ApiKey first, then the provider's standard variable. An empty string means no key.
+    /// </summary>
     public static string? ApiKey(IConfiguration configuration, string environmentName)
     {
         var dedicated = configuration["Explanation:ApiKey"];

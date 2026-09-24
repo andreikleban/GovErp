@@ -2,7 +2,9 @@ using GovErp.Domain.Ledger.Exceptions;
 
 namespace GovErp.Domain.Ledger.Entities;
 
-/// <summary>A posted journal entry. Immutable after creation. Balanced per fund and account family.</summary>
+/// <summary>
+/// A posted journal entry. Immutable after creation. Balanced per fund and account family.
+/// </summary>
 public sealed class JournalEntry
 {
     private readonly List<JournalLine> _lines = [];
@@ -35,15 +37,15 @@ public sealed class JournalEntry
         ArgumentNullException.ThrowIfNull(lines);
         ArgumentNullException.ThrowIfNull(period);
         if (postedBy.Value == Guid.Empty || lines.Any(l => l is null))
-            throw new LedgerException("Journal requires an actor and nonnull lines.");
+            throw new LedgerException(LedgerErrors.JournalIncomplete);
         if (!period.IsOpen)
         {
-            throw new LedgerException($"Period {period.Year}-{period.Month:00} is closed.");
+            throw new LedgerException(LedgerErrors.PeriodClosed, ("period", $"{period.Year}-{period.Month:00}"));
         }
 
         if (lines.Count < 2)
         {
-            throw new LedgerException("A journal entry needs at least two lines.");
+            throw new LedgerException(LedgerErrors.JournalTooShort);
         }
 
         foreach (var group in lines.GroupBy(l => (l.Account.Fund, l.Family)))
@@ -52,8 +54,8 @@ public sealed class JournalEntry
             var credit = group.Aggregate(Money.Zero, (s, l) => s + l.Credit);
             if (debit != credit)
             {
-                throw new LedgerException(
-                    $"Entry {sourceRef} is unbalanced for fund {group.Key.Fund} ({group.Key.Family}): Dr {debit} / Cr {credit}.");
+                throw new LedgerException(LedgerErrors.JournalUnbalanced, ("source", sourceRef), ("fund", group.Key.Fund),
+                    ("family", group.Key.Family), ("debit", debit), ("credit", credit));
             }
         }
 

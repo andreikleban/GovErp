@@ -1,3 +1,4 @@
+using GovErp.Application.Web.Common;
 using GovErp.Application.Web.Validation.Contracts;
 using GovErp.Domain.Validation.DomainServices;
 using GovErp.Domain.Validation.Entities;
@@ -5,6 +6,9 @@ using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Application.Web.Validation;
 
+/// <summary>
+/// Builds an evaluation view: rule codes become catalog text.
+/// </summary>
 public static class EvaluationMapping
 {
     /// <summary>
@@ -19,15 +23,15 @@ public static class EvaluationMapping
         r.RuleSetVersions.AppliedRules.Select(a => new AppliedRuleVm(a.RuleId, a.Layer.ToString(), a.Version, a.ScopeFund, a.ScopeGrant)).ToList(),
         r.Steps.Select(s => new StepVm((int)s.Step, s.Step.ToString(), s.Status == StepExecutionStatus.Executed)).ToList(),
         r.Outcomes.Select(ToVm).ToList(),
-        r.ApprovalRoute.Select(a => new RouteStepVm(a.Role.ToString(), a.Department, a.Reason, a.IsSatisfied)).ToList(),
+        r.ApprovalRoute.Select(a => new RouteStepVm(a.Role.ToString(), a.Department, Messages.Render(a.Reason), a.IsSatisfied)).ToList(),
         r.PostingPreview.Select(ToVm).ToList(),
-        r.PostingCheck is { } check ? new PostingCheckVm(check.Passed, check.Failures.ToList()) : null,
+        r.PostingCheck is { } check ? new PostingCheckVm(check.Passed, check.Failures.Select(Messages.Render).ToList()) : null,
         r.ReadyForPaymentHandoff,
         LineBudgets(r.InputSnapshot));
 
     public static OutcomeVm ToVm(RuleOutcome o) => new(
         o.OutcomeRef, o.RuleId, o.RuleVersion, (int)o.Step, o.Step.ToString(), o.Layer.ToString(), o.DistributionLine,
-        o.Severity.ToString(), o.Inputs, o.Computed, o.Message, o.Resolution,
+        o.Severity.ToString(), o.Inputs, o.Computed, o.ReasonCode, Messages.Render(o), o.Resolution,
         o.OverridableBy.Select(r => r.ToString()).ToList(),
         o.OverriddenBy is { } by ? new OverrideInfoVm(by.UserId.Value, by.Role?.ToString(), by.Reason, by.EvaluationId) : null);
 

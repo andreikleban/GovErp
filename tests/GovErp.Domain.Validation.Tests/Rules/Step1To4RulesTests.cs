@@ -28,7 +28,7 @@ public class Step1To4RulesTests
         { Date = new DateOnly(2026, 6, 15), ServiceDate = serviceDate ? new DateOnly(2026, 5, 1) : null } };
         var outcome = new GrantEligibleRule().Evaluate(s, Def("GRANT_ELIGIBLE")).Single();
         outcome.Inputs["date"].Should().Be(expected);
-        outcome.Message.Should().Contain(expected);
+        outcome.ReasonCode.Should().Be("GRANT_ELIGIBLE.OUTSIDE_PERIOD");
     }
 
     [Theory]
@@ -155,8 +155,8 @@ public class Step1To4RulesTests
             combination: new CombinationSnapshot(false, false, "Missing"))).Build();
         var inactive = new SubjectBuilder().With(SubjectBuilder.Distribution(1, "701-6000-53100-G-FEMA-24", 1m,
             combination: new CombinationSnapshot(true, false, "Inactive"))).Build();
-        new CoaCombinationActiveRule().Evaluate(missing, Def("COA_COMBINATION_ACTIVE")).Should().ContainSingle(x => x.Message.Contains("does not exist"));
-        new CoaCombinationActiveRule().Evaluate(inactive, Def("COA_COMBINATION_ACTIVE")).Should().ContainSingle(x => x.Message.Contains("Inactive"));
+        new CoaCombinationActiveRule().Evaluate(missing, Def("COA_COMBINATION_ACTIVE")).Should().ContainSingle(x => x.ReasonCode == "COA_COMBINATION_ACTIVE.COMBINATION_UNKNOWN");
+        new CoaCombinationActiveRule().Evaluate(inactive, Def("COA_COMBINATION_ACTIVE")).Should().ContainSingle(x => x.ReasonCode == "COA_COMBINATION_ACTIVE.COMBINATION_INACTIVE" && x.Inputs["status"] == "Inactive");
     }
 
     [Fact]
@@ -197,7 +197,7 @@ public class Step1To4RulesTests
     public void VendorEligible_federal_grant_requires_sam()
     {
         var s = new SubjectBuilder().Vendor(sam: false).Build();   // 701 + G-COPS-26 (federal)
-        new VendorEligibleRule().Evaluate(s, Def("VENDOR_ELIGIBLE")).Should().ContainSingle(x => x.Message.Contains("SAM"));
+        new VendorEligibleRule().Evaluate(s, Def("VENDOR_ELIGIBLE")).Should().ContainSingle(x => x.ReasonCode == "VENDOR_ELIGIBLE.SAM_REGISTRATION_REQUIRED");
         var nonFederal = new SubjectBuilder().Vendor(sam: false).With(SubjectBuilder.Distribution(1, "101-6000-53100", 1m)).Build();
         new VendorEligibleRule().Evaluate(nonFederal, Def("VENDOR_ELIGIBLE")).Should().BeEmpty();
     }

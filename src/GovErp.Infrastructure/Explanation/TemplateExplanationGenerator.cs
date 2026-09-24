@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using GovErp.Application.Web.Common;
 using GovErp.Application.Web.Explanation;
 using GovErp.Domain.Validation.Entities;
 using GovErp.Domain.Validation.ValueObjects;
@@ -105,7 +106,7 @@ public sealed class TemplateExplanationGenerator : IExplanationGenerator
             text.Append(CultureInfo.InvariantCulture, $" (line {line})");
         }
 
-        text.Append(" — ").Append(Sentence(outcome.Message)).Append(" Required action: ").Append(Sentence(outcome.Resolution));
+        text.Append(" — ").Append(Sentence(Messages.Render(outcome))).Append(" Required action: ").Append(Sentence(outcome.Resolution));
         if (outcome.OverriddenBy is { } overridden)
         {
             text.Append(" Overridden by ").Append(overridden.Role?.ToString() ?? "an authorized approver").Append('.');

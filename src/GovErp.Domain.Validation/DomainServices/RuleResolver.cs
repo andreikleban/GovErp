@@ -32,7 +32,9 @@ public sealed class RuleResolver
         return Assemble(inForce);
     }
 
-    /// <summary>One set per scope the subject's lines charge, and their union; the fingerprint covers every scope.</summary>
+    /// <summary>
+    /// One set per scope the subject's lines charge, and their union; the fingerprint covers every scope.
+    /// </summary>
     public EffectiveRuleSet ResolveForSubject(IReadOnlyList<RuleDefinition> candidates, ValidationSubject subject)
     {
         ArgumentNullException.ThrowIfNull(candidates);
@@ -47,7 +49,9 @@ public sealed class RuleResolver
             : Assemble(scopes.Values.SelectMany(set => set.Rules).Distinct(), scopes);
     }
 
-    /// <summary>Stable order, the highest version per layer, and the fingerprint.</summary>
+    /// <summary>
+    /// Stable order, the highest version per layer, and the fingerprint.
+    /// </summary>
     private static EffectiveRuleSet Assemble(IEnumerable<RuleDefinition> rules,
         IReadOnlyDictionary<(string? Fund, string? Grant), EffectiveRuleSet>? scopes = null)
     {

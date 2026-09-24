@@ -7,7 +7,9 @@ using LedgerControl = GovErp.Domain.Ledger.Entities.BudgetControlMode;
 
 namespace GovErp.Infrastructure.Seed;
 
-/// <summary>Springfield seed (spec §2.2–2.5). Every Create() call returns new objects: tests do not share mutable state.</summary>
+/// <summary>
+/// Springfield seed (spec §2.2–2.5). Every Create() call returns new objects: tests do not share mutable state.
+/// </summary>
 public sealed class SpringfieldData
 {
     public static readonly UserId ClerkId = new(Guid.Parse("10000000-0000-0000-0000-000000000001"));

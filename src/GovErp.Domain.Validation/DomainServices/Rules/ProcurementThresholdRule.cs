@@ -3,9 +3,13 @@ using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.DomainServices.Rules;
 
-/// <summary>Step 4. A non-PO invoice at or above the threshold needs a purchase order or a documented procurement exception.</summary>
+/// <summary>
+/// Step 4. A non-PO invoice at or above the threshold needs a purchase order or a documented procurement exception.
+/// </summary>
 public sealed class ProcurementThresholdRule : ValidationRule
 {
+    private const string PurchaseOrderRequired = "PROCUREMENT_THRESHOLD.PURCHASE_ORDER_REQUIRED";
+
     private static readonly ParameterSpec Threshold = ParameterSpec.Amount("threshold", Stricter.WhenLower);
 
     public override string RuleId => "PROCUREMENT_THRESHOLD";
@@ -23,8 +27,7 @@ public sealed class ProcurementThresholdRule : ValidationRule
         // Decide: a large purchase without a purchase order.
         Verdict verdict;
         if (!invoice.IsPoBacked && invoice.Total >= threshold)
-            verdict = Fail($"Non-PO invoice of {invoice.Total} meets the {threshold} procurement threshold; "
-                           + "a purchase order or documented procurement exception is required.");
+            verdict = Fail(PurchaseOrderRequired);
         else
             yield break;
 

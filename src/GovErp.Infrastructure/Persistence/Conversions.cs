@@ -2,6 +2,9 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace GovErp.Infrastructure.Persistence;
 
+/// <summary>
+/// Converts value objects to and from database columns.
+/// </summary>
 internal static class Conversions
 {
     public static readonly ValueConverter<Money, decimal> Money = new(m => m.Amount, d => new Money(d));

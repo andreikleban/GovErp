@@ -13,9 +13,8 @@
 
 <PageTitle>Rules</PageTitle>
 <Breadcrumbs Items="@([new Crumb("Setup"), new Crumb("Rules")])" />
-<h1>Rules</h1>
-<p class="note">Federal and State layers are demonstration data. They are not a claim of legal compliance.
-    Rules are versioned: a change adds a new version with its own effective date; earlier evaluations keep referring to the version they used.</p>
+<h1>Rules <HelpNote Title="Rules">Federal and State layers are demonstration data. They are not a claim of legal compliance.
+    Rules are versioned: a change adds a new version with its own effective date; earlier evaluations keep referring to the version they used.</HelpNote></h1>
 @if (_message is not null) { <p class="note">@_message</p> }
 @if (_set is null)
 {
@@ -62,11 +61,16 @@ else
     <div class="modal-backdrop" @onclick="Close"></div>
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="rule-version-title">
         <header class="modal-header">
-            <h2 id="rule-version-title">New version · @source.RuleId v@(source.Version + 1)</h2>
+            <h2 id="rule-version-title">New version · @source.RuleId v@(source.Version + 1)
+                <HelpNote Title="New version">
+                    <p>@source.Message Layer @source.Layer, scope @Scope(source). The rule's logic stays the same; only its configuration changes.</p>
+                    <p>Evaluations dated on or after the effective date use the new version. Invoices already approved under the
+                        previous rule set return to approval when posted (REVALIDATION_REQUIRED).</p>
+                </HelpNote>
+            </h2>
             <button type="button" @onclick="Close">Close</button>
         </header>
         <div class="modal-body">
-            <p class="note">@source.Message Layer @source.Layer, scope @Scope(source). The rule's logic stays the same; only its configuration changes.</p>
             @if (_error is not null) { <p class="error">@_error</p> }
             <div class="panel">
                 <div>
@@ -87,8 +91,6 @@ else
                     <label>Effective from <input type="date" @bind="_effectiveFrom" /></label>
                     <label>Reason <input @bind="_reason" @bind:event="oninput" /></label>
                 </div>
-                <p class="note">Evaluations dated on or after the effective date use the new version. Invoices already approved under the
-                    previous rule set return to approval when posted (REVALIDATION_REQUIRED).</p>
                 <p class="toolbar">
                     <button class="primary" type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_reason))" @onclick="SaveAsync">Create version</button>
                 </p>

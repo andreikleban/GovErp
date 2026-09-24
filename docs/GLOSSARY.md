@@ -57,7 +57,8 @@
 | **Content version** | `VendorInvoice.ContentVersion` | Номер версии содержания инвойса; растёт только при изменении сумм, поставщика, дат, PO или distributions. Не путать с SQL `RowVersion` |
 | **Approval cycle** | `VendorInvoice.ApprovalCycleId` | Цикл согласования; закрывается при Reject/Withdraw или смене содержания/fingerprint; решения прошлых циклов остаются историей |
 | **Withdraw** | `VendorInvoice.Withdraw` | Отзыв автором до Post: освобождает резервы и claims, возвращает в Draft |
-| **Payment handoff readiness** | `VendorInvoice.ReadyForPaymentHandoff` | Posted ∧ vendor Active ∧ нет PaymentHold ∧ DueDate ≤ BusinessDate; вычисляется, статуса Payable нет |
+| **Payment handoff readiness** | `VendorInvoice.ReadyForPaymentHandoff` | Posted ∧ `PaidAt` пусто ∧ vendor Active ∧ нет PaymentHold ∧ DueDate ≤ BusinessDate; вычисляется, статуса Payable нет |
+| **Payment journal** | `PaymentSource` | Проводка оплаты: Dr AP 2100 / Cr Cash 1010 по каждому фонду, период — бизнес-дата; `SourceRef` = ссылка инвойса + `/payment`. Статус инвойса остаётся Posted |
 | **Command receipt** | `ap.ProcessedCommands` | Запись о выполненной команде по `CommandId`; повтор возвращает её, а не выполняет заново |
 | **Debarred vendor** | `VendorStatus.Debarred` | Поставщик, которому запрещены государственные контракты |
 | **SAM registration** | `Vendor.SamRegistered` | Регистрация в федеральной системе SAM.gov; обязательна для федеральных грантов |

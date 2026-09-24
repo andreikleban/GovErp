@@ -13,6 +13,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace GovErp.Application.Web.Extensions;
 
+/// <summary>
+/// Registers the application's use-case services.
+/// </summary>
 public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddApplication(this IServiceCollection s, IConfiguration cfg)

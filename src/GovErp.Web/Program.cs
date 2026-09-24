@@ -1,10 +1,14 @@
 using System.Globalization;
 using GovErp.Application.Web.Extensions;
 using GovErp.Infrastructure.Extensions;
+using GovErp.Infrastructure.Operations;
 using GovErp.Infrastructure.Startup;
+using GovErp.Web.Api;
 using GovErp.Web.Authentication;
 using GovErp.Web.Components;
 using GovErp.Web.Extensions;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
 
 var unitedStates = CultureInfo.GetCultureInfo("en-US");
 CultureInfo.DefaultThreadCurrentCulture = unitedStates;
@@ -21,6 +25,25 @@ if (builder.Environment.IsEnvironment("Demo"))
 AspireSqlConfiguration.Apply(builder.Configuration);
 builder.Services.AddApplication(builder.Configuration).AddInfrastructure(builder.Configuration).AddStartup(builder.Configuration);
 builder.Services.AddWebHost(builder.Configuration);
+builder.Services.AddOpenApi();
+var exportTraces = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT"));
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing =>
+    {
+        tracing.AddAspNetCoreInstrumentation(options => options.Filter = context => context.Request.Path != "/health");
+        if (exportTraces)
+        {
+            tracing.AddOtlpExporter();
+        }
+    })
+    .WithMetrics(metrics =>
+    {
+        metrics.AddMeter(CommandMetrics.MeterName);
+        if (exportTraces)
+        {
+            metrics.AddOtlpExporter();
+        }
+    });
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
 var app = builder.Build();
@@ -40,8 +63,17 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
 app.MapAuth();
+app.MapDemoApi();
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi().AllowAnonymous();
+}
+
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 await app.RunAsync();
 return 0;
 
+/// <summary>
+/// Entry point of the web application.
+/// </summary>
 public partial class Program;

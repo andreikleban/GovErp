@@ -10,9 +10,14 @@ using Microsoft.Extensions.Options;
 
 namespace GovErp.Infrastructure.Startup;
 
+/// <summary>
+/// Creates a tenant database and applies its migrations.
+/// </summary>
 public sealed class TenantProvisioner(IOptions<StartupOptions> startup, IOptions<TenancyOptions> tenancy, IClock clock)
 {
-    /// <summary>The tenant registry is written by the migration user: the Master runtime user only reads.</summary>
+    /// <summary>
+    /// The tenant registry is written by the migration user: the Master runtime user only reads.
+    /// </summary>
     private MasterDbContext MasterForWrite() => new(new DbContextOptionsBuilder<MasterDbContext>()
         .UseSqlServer(string.Format(CultureInfo.InvariantCulture, startup.Value.MigrationConnectionTemplate, startup.Value.MasterDatabase)).Options);
 

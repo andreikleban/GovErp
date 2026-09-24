@@ -3,6 +3,9 @@ using GovErp.Domain.Ledger.Entities;
 
 namespace GovErp.Application.Web.Ledger;
 
+/// <summary>
+/// Builds journal lines and fiscal periods for the screen.
+/// </summary>
 public static class LedgerMapping
 {
     /// <summary>Balance per (fund, family): JournalEntry.Create already guarantees equal debits and credits in each group (a GE invariant);

@@ -9,7 +9,9 @@ using Microsoft.Extensions.Options;
 
 namespace GovErp.Infrastructure.Startup;
 
-/// <summary>Startup order: wait for SQL, migrate Master, create the read-only master user, seed Master, provision tenants.</summary>
+/// <summary>
+/// Startup order: wait for SQL, migrate Master, create the read-only master user, seed Master, provision tenants.
+/// </summary>
 public static class DatabaseInitializer
 {
     private const int MaxAttempts = 20;

@@ -1,6 +1,8 @@
 namespace GovErp.Application.Web.Common;
 
-/// <summary>Each context has its own role enum with the same names (EnumMappingTests compares the sets).</summary>
+/// <summary>
+/// Each context has its own role enum with the same names (EnumMappingTests compares the sets).
+/// </summary>
 public static class RoleMapping
 {
     public static Domain.Validation.ValueObjects.ApproverRole ToValidation(Domain.Payables.Entities.ApproverRole r) =>

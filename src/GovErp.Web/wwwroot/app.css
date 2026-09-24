@@ -176,6 +176,34 @@ button.primary, a.button.primary {
 button.primary:hover:not(:disabled), a.button.primary:hover { background: #16375c; }
 button:disabled { opacity: 0.45; cursor: default; }
 
+button.help {
+    width: 1.35rem;
+    height: 1.35rem;
+    margin-left: 6px;
+    padding: 0;
+    border-radius: 50%;
+    border-color: var(--navy);
+    color: var(--navy);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0;
+    text-transform: none;
+    vertical-align: 1px;
+}
+
+.modal-backdrop.help-layer { z-index: 120; }
+
+/* The window is rendered next to the "?" so it can sit inside a heading. Reset the heading's
+   uppercase and tracking; the title keeps the ordinary dialog heading style. */
+.modal.help-layer {
+    z-index: 121;
+    font: 13.5px/1.4 "Segoe UI", system-ui, sans-serif;
+    font-weight: 400;
+    letter-spacing: normal;
+    text-transform: none;
+}
+
 input:focus, select:focus, button:focus-visible {
     outline: 2px solid #8eafd4;
     outline-offset: 1px;
@@ -252,8 +280,9 @@ main > form, .signin {
 .modal {
     position: fixed;
     top: 5vh;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 0;
+    right: 0;
+    margin-inline: auto;
     width: min(1100px, calc(100vw - 32px));
     max-height: 90vh;
     display: flex;

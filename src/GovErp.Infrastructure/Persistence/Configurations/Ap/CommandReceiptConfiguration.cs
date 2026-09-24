@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace GovErp.Infrastructure.Persistence.Configurations.Ap;
 
+/// <summary>
+/// EF Core mapping for a command receipt.
+/// </summary>
 public sealed class CommandReceiptConfiguration : IEntityTypeConfiguration<CommandReceipt>
 {
     public void Configure(EntityTypeBuilder<CommandReceipt> b)
