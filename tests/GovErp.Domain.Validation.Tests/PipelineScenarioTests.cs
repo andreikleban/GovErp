@@ -7,7 +7,7 @@ namespace GovErp.Domain.Validation.Tests;
 public class PipelineScenarioTests
 {
     private static readonly DateTimeOffset At = new(2026, 9, 22, 10, 0, 0, TimeSpan.Zero);
-    private static readonly EffectiveRuleSet Rules = RuleResolution.Resolve(DemoRules.All(), SubjectBuilder.June15);
+    private static readonly EffectiveRuleSet Rules = RuleResolver.Default.Resolve(DemoRules.All(), SubjectBuilder.June15);
     private static readonly ValidationPipeline Pipeline = new(RuleCatalog.Default);
     private static EvaluationRecord Run(ValidationSubject s, EvaluationTrigger trigger = EvaluationTrigger.Manual) =>
         Pipeline.Evaluate(s, Rules, trigger, SubjectBuilder.Approver, At);

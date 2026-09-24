@@ -18,6 +18,8 @@ public abstract class ValidationRule : IValidationRule
 {
     public abstract string RuleId { get; }
 
+    public virtual IReadOnlyList<ParameterSpec> Parameters => [];
+
     /// <summary>The severity of Fail when the rule definition does not configure one.</summary>
     protected virtual Severity DefaultSeverity => Severity.HardStop;
 

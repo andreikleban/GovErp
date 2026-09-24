@@ -74,7 +74,7 @@ public sealed class ReferenceAppService(ITenantOperationRunner runner, IRuleExpl
                 .ThenBy(r => r.ScopeFund, StringComparer.Ordinal).ThenBy(r => r.ScopeGrant, StringComparer.Ordinal)
                 .Select(r => RuleVmMapping.ToVm(r, current.Contains(r.Id)))
                 .ToList();
-            return new RuleSetVm(rules, RuleResolution.Resolve(all, clock.BusinessDate).Fingerprint, RuleResolution.EngineVersion);
+            return new RuleSetVm(rules, RuleResolver.Default.Resolve(all, clock.BusinessDate).Fingerprint, RuleResolver.EngineVersion);
         }, ct);
 
     public Task<RuleDetailVm> GetRuleDetailAsync(string ruleId, ActorContext actor, CancellationToken ct = default) =>
@@ -180,7 +180,7 @@ public sealed class ReferenceAppService(ITenantOperationRunner runner, IRuleExpl
         {
             var clock = sp.GetRequiredService<IClock>();
             var rules = await sp.GetRequiredService<IRuleDefinitionRepository>().ListAsync(token);
-            var effective = RuleResolution.Resolve(rules, clock.BusinessDate);
+            var effective = RuleResolver.Default.Resolve(rules, clock.BusinessDate);
             var releasers = Roles.Overriders
                 .Where(role => effective.Rules.Any(r => r.OverridableBy.Count > 0
                     && r.OverridableBy.Select(RoleMapping.ToRoleName).Contains(role, StringComparer.Ordinal)))

@@ -64,7 +64,28 @@ public sealed class RuleDefinition
         IsEnabled = enabled;
     }
 
-    public bool IsEffectiveOn(DateOnly date) => IsEnabled && date >= EffectiveFrom && (EffectiveTo is null || date <= EffectiveTo);
+    public bool IsEffectiveOn(DateOnly date) => IsEnabled && IsDatedFor(date);
+
+    /// <summary>The date is within the effective period, whether or not the definition is enabled.</summary>
+    public bool IsDatedFor(DateOnly date) => date >= EffectiveFrom && (EffectiveTo is null || date <= EffectiveTo);
+
+    /// <summary>A definition without a scope covers every fund and grant; a scoped one only its own.</summary>
+    public bool Covers(string? fund, string? grant) =>
+        (ScopeFund is null || ScopeFund == fund) && (ScopeGrant is null || ScopeGrant == grant);
+
+    /// <summary>
+    /// Softer than the definition it would replace. A fixed severity may only rise; a dynamic one (null, decided by the rule
+    /// per outcome) must stay dynamic.
+    /// </summary>
+    public bool IsMilderThan(RuleDefinition upper) => (upper.Severity, Severity) switch
+    {
+        (null, null) => false,
+        (null, _) or (_, null) => true,
+        var (fixedUpper, fixedOwn) => fixedOwn < fixedUpper,
+    };
+
+    /// <summary>Roles that may release this definition's soft stop but not the one it would replace.</summary>
+    public bool AllowsMoreOverridersThan(RuleDefinition upper) => OverridableBy.Except(upper.OverridableBy).Any();
 
     public string Parameter(string name) => Parameters.TryGetValue(name, out var value)
         ? value : throw new ValidationException($"Rule {RuleId} v{Version} has no parameter '{name}'.");

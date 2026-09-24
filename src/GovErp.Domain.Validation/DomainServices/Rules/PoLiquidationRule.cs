@@ -8,12 +8,16 @@ namespace GovErp.Domain.Validation.DomainServices.Rules;
 /// </summary>
 public sealed class PoLiquidationRule : ValidationRule
 {
+    private static readonly ParameterSpec Tolerance = ParameterSpec.Share("tolerance_pct", Stricter.WhenLower);
+
     public override string RuleId => "PO_LIQUIDATION";
+
+    public override IReadOnlyList<ParameterSpec> Parameters => [Tolerance];
 
     protected override IEnumerable<Finding> Check(ValidationSubject subject, RuleParameters parameters)
     {
         // Scope: every PO line the invoice bills.
-        var tolerance = parameters.Share("tolerance_pct");
+        var tolerance = parameters.Read(Tolerance);
         foreach (var billing in BudgetAllocation.ByPoLine(subject))
         {
             var po = billing.Po;

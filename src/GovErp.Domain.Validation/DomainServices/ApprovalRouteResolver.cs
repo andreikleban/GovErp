@@ -6,6 +6,12 @@ public static class ApprovalRouteResolver
 {
     public const decimal DefaultFinanceDirectorThreshold = 50_000m;
 
+    private static readonly ParameterSpec FinanceDirectorThreshold =
+        ParameterSpec.Amount("finance_director_threshold", Stricter.WhenLower);
+
+    /// <summary>Parameters of the APPROVAL_ROUTE definition.</summary>
+    public static IReadOnlyList<ParameterSpec> Parameters { get; } = [FinanceDirectorThreshold];
+
     public static IReadOnlyList<ApprovalRequirement> Build(ValidationSubject subject,
         IReadOnlyList<RuleOutcome> outcomes, EffectiveRuleSet effectiveRules)
     {
@@ -23,7 +29,7 @@ public static class ApprovalRouteResolver
         // With scoped rules, the strictest (lowest) threshold among the invoice's funds and grants applies.
         var threshold = subject.Distributions
             .Select(d => effectiveRules.ForScope(d.Account.Fund.Value, d.Account.Grant?.Value).Find(RuleCatalog.ApprovalRouteRuleId))
-            .Select(rule => rule?.DecimalParameter("finance_director_threshold") ?? DefaultFinanceDirectorThreshold)
+            .Select(rule => rule?.DecimalParameter(FinanceDirectorThreshold.Name) ?? DefaultFinanceDirectorThreshold)
             .DefaultIfEmpty(DefaultFinanceDirectorThreshold)
             .Min();
         if (subject.Transaction.Total >= Money.Of(threshold))

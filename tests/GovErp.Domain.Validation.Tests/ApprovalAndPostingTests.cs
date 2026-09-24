@@ -6,7 +6,7 @@ namespace GovErp.Domain.Validation.Tests;
 public class ApprovalAndPostingTests
 {
     private static readonly DateOnly BusinessDate = new(2026, 6, 15);
-    private static readonly EffectiveRuleSet Rules = RuleResolution.Resolve([], BusinessDate);
+    private static readonly EffectiveRuleSet Rules = RuleResolver.Default.Resolve([], BusinessDate);
     private static readonly UserId Author = new(Guid.NewGuid());
     private static readonly UserId Approver = new(Guid.NewGuid());
 
@@ -204,7 +204,7 @@ public class ApprovalAndPostingTests
             ValidationStep.ApprovalRequirements, RuleLayer.Core, null,
             new Dictionary<string, string> { ["finance_director_threshold"] = threshold }, [], BusinessDate, null,
             "Approval", "Approve", scopeFund: fund);
-        var rules = RuleResolution.ResolveForSubject([Route("101", "50000"), Route("202", "30000")], s);
+        var rules = RuleResolver.Default.ResolveForSubject([Route("101", "50000"), Route("202", "30000")], s);
         ApprovalRouteResolver.Build(s, [], rules).Should().Contain(r => r.Role == ApproverRole.FinanceDirector);
     }
 

@@ -24,7 +24,7 @@ public sealed class TenantProvisioner(IOptions<StartupOptions> startup, IOptions
             await db.Database.MigrateAsync(ct);
             await TenantSeeder.SeedAsync(db, seed, ct);
             // An unresolvable set (layer conflict, weakening) throws ValidationException from Resolve; a missing mandatory rule is checked below.
-            var effective = RuleResolution.Resolve(await db.RuleDefinitions.ToListAsync(ct), clock.BusinessDate);
+            var effective = RuleResolver.Default.Resolve(await db.RuleDefinitions.ToListAsync(ct), clock.BusinessDate);
             var missing = RuleCatalog.Default.MandatoryRuleIds.Where(id => effective.Find(id) is null).ToList();
             if (missing.Count > 0)
             {

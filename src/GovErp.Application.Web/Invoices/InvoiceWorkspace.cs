@@ -75,7 +75,7 @@ public sealed class InvoiceWorkspace(
     public async Task<IReadOnlyList<PayablesRequirement>> RouteForAsync(EvaluationRecord record, CancellationToken ct)
     {
         var subject = record.InputSnapshot;
-        var effective = RuleResolution.ResolveForSubject(await DefinitionsAsync(ct), subject);
+        var effective = RuleResolver.Default.ResolveForSubject(await DefinitionsAsync(ct), subject);
         return ApprovalRouteResolver.Build(subject, [], effective)
             .Select(r => new PayablesRequirement(RoleMapping.ToPayables(r.Role), r.Department is null ? null : new DepartmentCode(r.Department)))
             .ToList();
@@ -87,7 +87,7 @@ public sealed class InvoiceWorkspace(
     /// </summary>
     public async Task<InvoiceHolds> HoldAsync(VendorInvoice invoice, ValidationSubject subject, CancellationToken ct)
     {
-        var effective = RuleResolution.ResolveForSubject(await DefinitionsAsync(ct), subject);
+        var effective = RuleResolver.Default.ResolveForSubject(await DefinitionsAsync(ct), subject);
         var allocation = BudgetAllocation.Allocate(subject);
         var fy = FiscalYear.FromDate(invoice.PostingDate);
         var cv = invoice.ContentVersion;

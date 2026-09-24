@@ -68,11 +68,11 @@ public sealed class RuleAppService(ITenantOperationRunner runner) : IRuleAppServ
             // The engine must resolve the set with the new version, otherwise evaluations on that date would fail with RULE_CONFIGURATION.
             // A ValidationException here becomes a runner refusal; nothing has been saved yet.
             var candidate = all.Append(created).ToList();
-            RuleResolution.Resolve(candidate, cmd.EffectiveFrom, source.ScopeFund, source.ScopeGrant);
+            RuleResolver.Default.Resolve(candidate, cmd.EffectiveFrom, source.ScopeFund, source.ScopeGrant);
 
             await repository.AddAsync(created, token);
             var clock = sp.GetRequiredService<IClock>();
-            var fingerprint = RuleResolution.Resolve(candidate, clock.BusinessDate).Fingerprint;
+            var fingerprint = RuleResolver.Default.Resolve(candidate, clock.BusinessDate).Fingerprint;
             sp.GetRequiredService<IAuditTrail>().Record(actor, "RuleVersionCreated", $"RULE:{source.RuleId}", cmd.Envelope.CommandId.ToString(),
                 new
                 {
@@ -82,7 +82,7 @@ public sealed class RuleAppService(ITenantOperationRunner runner) : IRuleAppServ
             return CommandResult<RuleVm>.Accepted(RuleVmMapping.ToVm(created, RuleVmMapping.CurrentIds(candidate, clock.BusinessDate).Contains(created.Id)));
         }, ct: ct);
 
-    /// <summary>The parameter set is fixed by the rule's code: the same keys, and numeric values stay numeric.</summary>
+    /// <summary>The parameter set is fixed by the rule's code: the same keys, each value valid for the rule's ParameterSpec.</summary>
     private static string? ParameterProblem(RuleDefinition source, IReadOnlyDictionary<string, string> parameters)
     {
         if (!source.Parameters.Keys.Order(StringComparer.Ordinal).SequenceEqual(parameters.Keys.Order(StringComparer.Ordinal), StringComparer.Ordinal))
@@ -94,10 +94,16 @@ public sealed class RuleAppService(ITenantOperationRunner runner) : IRuleAppServ
 
         foreach (var (key, value) in parameters)
         {
-            var wasNumber = decimal.TryParse(source.Parameters[key], NumberStyles.Number, CultureInfo.InvariantCulture, out _);
-            if (wasNumber && (!decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var number) || number < 0))
+            if (RuleCatalog.Default.ParameterOf(source.RuleId, key) is not { } spec)
             {
-                return $"{key} must be a non-negative number (use a dot for decimals).";
+                if (value != source.Parameters[key]) return $"{key} has no meaning declared by the rule's code and cannot be changed.";
+                continue;
+            }
+
+            var parsed = decimal.TryParse(value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var number);
+            if (!parsed || !spec.Accepts(number))
+            {
+                return $"{key} must be {spec.Requirement} (digits and a dot for decimals).";
             }
         }
 

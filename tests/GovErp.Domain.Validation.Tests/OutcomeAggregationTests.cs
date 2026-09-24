@@ -5,7 +5,7 @@ namespace GovErp.Domain.Validation.Tests;
 
 public class OutcomeAggregationTests
 {
-    private static readonly RuleSetVersions Versions = RuleResolution.Resolve(DemoRules.All(), SubjectBuilder.June15).Versions;
+    private static readonly RuleSetVersions Versions = RuleResolver.Default.Resolve(DemoRules.All(), SubjectBuilder.June15).Versions;
     private static RuleOutcome Outcome(Severity severity = Severity.SoftStop, string value = "100", int? line = 1) =>
         RuleOutcome.From(DemoRules.Rule("B", ValidationStep.BudgetAvailability, RuleLayer.Core, severity,
             overridableBy: [ApproverRole.BudgetOfficer]), severity, line,

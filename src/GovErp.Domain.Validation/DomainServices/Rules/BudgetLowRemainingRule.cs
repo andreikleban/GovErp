@@ -5,14 +5,18 @@ namespace GovErp.Domain.Validation.DomainServices.Rules;
 /// <summary>Step 5. An early warning: after the invoice, less than the configured share of the amended budget remains.</summary>
 public sealed class BudgetLowRemainingRule : ValidationRule
 {
+    private static readonly ParameterSpec RemainingShare = ParameterSpec.Share("pct", Stricter.WhenHigher);
+
     public override string RuleId => "BUDGET_LOW_REMAINING";
+
+    public override IReadOnlyList<ParameterSpec> Parameters => [RemainingShare];
 
     protected override Severity DefaultSeverity => Severity.Warning;
 
     protected override IEnumerable<Finding> Check(ValidationSubject subject, RuleParameters parameters)
     {
         // Scope: every budget line (account and fiscal year) the invoice charges.
-        var threshold = parameters.Share("pct");
+        var threshold = parameters.Read(RemainingShare);
         foreach (var demand in BudgetAllocation.ByBudgetLine(subject))
         {
             var budget = demand.Budget;

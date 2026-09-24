@@ -5,7 +5,11 @@ namespace GovErp.Domain.Validation.DomainServices.Rules;
 /// <summary>Step 4. A non-PO invoice at or above the threshold needs a purchase order or a documented procurement exception.</summary>
 public sealed class ProcurementThresholdRule : ValidationRule
 {
+    private static readonly ParameterSpec Threshold = ParameterSpec.Amount("threshold", Stricter.WhenLower);
+
     public override string RuleId => "PROCUREMENT_THRESHOLD";
+
+    public override IReadOnlyList<ParameterSpec> Parameters => [Threshold];
 
     protected override Severity DefaultSeverity => Severity.SoftStop;
 
@@ -13,7 +17,7 @@ public sealed class ProcurementThresholdRule : ValidationRule
     {
         // Scope: the invoice as a whole.
         var invoice = subject.Transaction;
-        var threshold = parameters.PositiveAmount("threshold");
+        var threshold = Money.Of(parameters.Read(Threshold));
 
         // Decide: a large purchase without a purchase order.
         Verdict verdict;
