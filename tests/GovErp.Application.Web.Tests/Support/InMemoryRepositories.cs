@@ -183,4 +183,5 @@ public sealed class InMemoryRuleDefinitionRepository(IEnumerable<RuleDefinition>
     private readonly List<RuleDefinition> Items = [.. items];
     public Task<IReadOnlyList<RuleDefinition>> ListAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<RuleDefinition>>(Items.AsReadOnly());
+    public Task AddAsync(RuleDefinition rule, CancellationToken ct = default) { Items.Add(rule); return Task.CompletedTask; }
 }

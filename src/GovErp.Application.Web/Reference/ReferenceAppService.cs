@@ -67,11 +67,11 @@ public sealed class ReferenceAppService(ITenantOperationRunner runner) : IRefere
         {
             var all = await sp.GetRequiredService<IRuleDefinitionRepository>().ListAsync(token);
             var clock = sp.GetRequiredService<IClock>();
+            var current = RuleVmMapping.CurrentIds(all, clock.BusinessDate);
             var rules = all
                 .OrderBy(r => r.Step).ThenBy(r => r.RuleId, StringComparer.Ordinal).ThenBy(r => r.Layer).ThenBy(r => r.Version)
                 .ThenBy(r => r.ScopeFund, StringComparer.Ordinal).ThenBy(r => r.ScopeGrant, StringComparer.Ordinal)
-                .Select(r => new RuleVm(r.RuleId, r.Version, (int)r.Step, r.Layer.ToString(), r.ScopeFund, r.ScopeGrant, r.Severity?.ToString(),
-                    r.Parameters, r.OverridableBy.Select(role => role.ToString()).ToList(), r.EffectiveFrom, r.EffectiveTo, r.IsEnabled, r.Message))
+                .Select(r => RuleVmMapping.ToVm(r, current.Contains(r.Id)))
                 .ToList();
             return new RuleSetVm(rules, RuleResolution.Resolve(all, clock.BusinessDate).Fingerprint, RuleResolution.EngineVersion);
         }, ct);

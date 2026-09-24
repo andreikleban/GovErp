@@ -1,26 +1,33 @@
 @page "/rules"
 @attribute [Authorize]
 @rendermode InteractiveServer
+@using GovErp.Application.Web.Commands
+@using GovErp.Application.Web.Common
 @using GovErp.Application.Web.Reference
+@using GovErp.Application.Web.Reference.Commands
 @using GovErp.Application.Web.Reference.Contracts
 @using GovErp.Web.Authentication
 @inject IReferenceAppService Reference
+@inject IRuleAppService RuleService
 @inject CurrentActor CurrentActor
+@inject IClock Clock
 
 <PageTitle>Rules</PageTitle>
 <Breadcrumbs Items="@([new Crumb("Setup"), new Crumb("Rules")])" />
 <h1>Rules</h1>
-<p class="note">Federal and State layers are demonstration data. They are not a claim of legal compliance.</p>
+<p class="note">Federal and State layers are demonstration data. They are not a claim of legal compliance.
+    Rules are versioned: a change adds a new version with its own effective date; earlier evaluations keep referring to the version they used.</p>
+@if (_message is not null) { <p class="note">@_message</p> }
 @if (_set is null)
 {
     <p class="note">Loading the rule set.</p>
 }
 else
 {
-    <p class="note">Engine @_set.EngineVersion · fingerprint @_set.CurrentFingerprint</p>
+    <p class="note">Engine @_set.EngineVersion · fingerprint <span title="@_set.CurrentFingerprint">@Short(_set.CurrentFingerprint)</span></p>
     <table>
         <thead>
-            <tr><th>Rule</th><th>Version</th><th>Layer</th><th>From</th><th>To</th><th>Enabled</th><th>Parameters</th><th>Overridable by</th></tr>
+            <tr><th>Rule</th><th>Version</th><th>Layer</th><th>Scope</th><th>Severity</th><th>From</th><th>To</th><th>Current</th><th>Parameters</th><th>Overridable by</th><th></th></tr>
         </thead>
         <tbody>
         @foreach (var rule in _set.Rules)
@@ -29,15 +36,63 @@ else
                 <td>@rule.RuleId</td>
                 <td>@rule.Version</td>
                 <td>@rule.Layer</td>
+                <td>@Scope(rule)</td>
+                <td>@(rule.Severity ?? "computed")</td>
                 <td>@rule.EffectiveFrom.ToString("yyyy-MM-dd")</td>
                 <td>@(rule.EffectiveTo?.ToString("yyyy-MM-dd") ?? "—")</td>
-                <td>@(rule.IsEnabled ? "Yes" : "No")</td>
+                <td>@if (rule.IsCurrent) { <span class="chip ok">Current</span> } else { <span class="chip">History</span> }</td>
                 <td>@string.Join("; ", rule.Parameters.Select(p => $"{p.Key}={p.Value}"))</td>
                 <td>@(rule.OverridableBy.Count == 0 ? "—" : string.Join(", ", rule.OverridableBy))</td>
+                <td>
+                    @if (_canConfigure && rule.IsCurrent && (rule.Parameters.Count > 0 || rule.Severity is not null))
+                    {
+                        <button type="button" @onclick="() => Open(rule)">New version</button>
+                    }
+                </td>
             </tr>
         }
         </tbody>
     </table>
+}
+
+@if (_editing is { } source)
+{
+    <div class="modal-backdrop" @onclick="Close"></div>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="rule-version-title">
+        <header class="modal-header">
+            <h2 id="rule-version-title">New version · @source.RuleId v@(source.Version + 1)</h2>
+            <button type="button" @onclick="Close">Close</button>
+        </header>
+        <div class="modal-body">
+            <p class="note">@source.Message Layer @source.Layer, scope @Scope(source). The rule's logic stays the same; only its configuration changes.</p>
+            @if (_error is not null) { <p class="error">@_error</p> }
+            <div class="panel">
+                <div>
+                    @foreach (var key in _parameters.Keys.ToList())
+                    {
+                        <label>@key <input value="@_parameters[key]" @onchange="e => _parameters[key] = e.Value?.ToString() ?? string.Empty" /></label>
+                    }
+                    @if (source.Severity is not null)
+                    {
+                        <label>Severity
+                            <select @bind="_severity">
+                                <option value="Warning">Warning</option>
+                                <option value="SoftStop">SoftStop</option>
+                                <option value="HardStop">HardStop</option>
+                            </select>
+                        </label>
+                    }
+                    <label>Effective from <input type="date" @bind="_effectiveFrom" /></label>
+                    <label>Reason <input @bind="_reason" @bind:event="oninput" /></label>
+                </div>
+                <p class="note">Evaluations dated on or after the effective date use the new version. Invoices already approved under the
+                    previous rule set return to approval when posted (REVALIDATION_REQUIRED).</p>
+                <p class="toolbar">
+                    <button class="primary" type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_reason))" @onclick="SaveAsync">Create version</button>
+                </p>
+            </div>
+        </div>
+    </div>
 }
 
 @code {
@@ -45,10 +100,65 @@ else
     [SupplyParameterFromQuery(Name = "rule")] public string? Rule { get; set; }
 
     private RuleSetVm? _set;
+    private bool _canConfigure;
+    private RuleVm? _editing;
+    private Dictionary<string, string> _parameters = [];
+    private string? _severity;
+    private DateOnly _effectiveFrom;
+    private string _reason = "";
+    private string? _error;
+    private string? _message;
+    private bool _busy;
+    private Guid _commandId = Guid.NewGuid();
 
     protected override async Task OnInitializedAsync()
     {
         var actor = await CurrentActor.GetAsync();
+        _canConfigure = actor.IsInRole(GovErp.Application.Web.Common.Roles.FinanceDirector);
         _set = await Reference.GetRulesAsync(actor);
     }
+
+    private void Open(RuleVm rule)
+    {
+        _editing = rule;
+        _parameters = rule.Parameters.ToDictionary(p => p.Key, p => p.Value);
+        _severity = rule.Severity;
+        _effectiveFrom = Clock.BusinessDate < rule.EffectiveFrom ? rule.EffectiveFrom : Clock.BusinessDate;
+        _reason = "";
+        _error = null;
+        _commandId = Guid.NewGuid();
+    }
+
+    private void Close() => _editing = null;
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        try
+        {
+            var actor = await CurrentActor.GetAsync();
+            var severity = _severity == _editing!.Severity ? null : _severity;
+            var result = await RuleService.CreateVersionAsync(new NewRuleVersionCommand(new CommandEnvelope(_commandId, null), _editing.Id,
+                _parameters, severity, _effectiveFrom, _reason.Trim()), actor);
+            if (!result.IsAccepted)
+            {
+                _error = result.Status == CommandStatus.Forbidden ? $"Not allowed: {result.Reason}" : result.Reason;
+                _commandId = Guid.NewGuid();
+                return;
+            }
+
+            _message = $"{result.Value!.RuleId} version {result.Value.Version} created, effective {result.Value.EffectiveFrom:yyyy-MM-dd}.";
+            _editing = null;
+            _set = await Reference.GetRulesAsync(actor);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string Scope(RuleVm rule) =>
+        rule.ScopeFund is null && rule.ScopeGrant is null ? "all" : string.Join(" · ", new[] { rule.ScopeFund, rule.ScopeGrant }.Where(s => s is not null));
+
+    private static string Short(string fingerprint) => fingerprint.Length > 12 ? fingerprint[..12] + "…" : fingerprint;
 }

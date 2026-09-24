@@ -27,6 +27,7 @@ public static class ServiceCollectionExtensions
         s.AddScoped<IPurchasingAppService, PurchasingAppService>();
         s.AddScoped<ILedgerAppService, LedgerAppService>();
         s.AddScoped<IReferenceAppService, ReferenceAppService>();
+        s.AddScoped<IRuleAppService, RuleAppService>();
         s.AddScoped<IAuditAppService, AuditAppService>();
         s.AddScoped<IExplanationAppService, ExplanationAppService>();
         return s;

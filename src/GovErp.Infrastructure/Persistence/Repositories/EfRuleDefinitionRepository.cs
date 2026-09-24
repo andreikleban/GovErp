@@ -9,4 +9,6 @@ public sealed class EfRuleDefinitionRepository(GovErpDbContext db) : IRuleDefini
     /// <summary>Все версии и слои, включая выключенные: разрешение делает домен.</summary>
     public async Task<IReadOnlyList<RuleDefinition>> ListAsync(CancellationToken ct = default) =>
         await db.RuleDefinitions.OrderBy(r => r.RuleId).ThenBy(r => r.Layer).ThenBy(r => r.Version).ToListAsync(ct);
+
+    public async Task AddAsync(RuleDefinition rule, CancellationToken ct = default) => await db.RuleDefinitions.AddAsync(rule, ct);
 }
