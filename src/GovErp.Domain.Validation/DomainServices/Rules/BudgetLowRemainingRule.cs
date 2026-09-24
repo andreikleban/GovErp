@@ -1,3 +1,4 @@
+using GovErp.Domain.Validation.DomainServices.RuleSupport;
 using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.DomainServices.Rules;

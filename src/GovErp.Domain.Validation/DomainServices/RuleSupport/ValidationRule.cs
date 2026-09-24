@@ -2,7 +2,7 @@ using System.Globalization;
 using GovErp.Domain.Validation.Entities;
 using GovErp.Domain.Validation.ValueObjects;
 
-namespace GovErp.Domain.Validation.DomainServices.Rules;
+namespace GovErp.Domain.Validation.DomainServices.RuleSupport;
 
 /// <summary>
 /// Base of the catalog rules. Check is laid out in three marked sections, in this order:

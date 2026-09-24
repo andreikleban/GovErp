@@ -1,6 +1,6 @@
 using GovErp.Domain.Validation.ValueObjects;
 
-namespace GovErp.Domain.Validation.DomainServices;
+namespace GovErp.Domain.Validation.DomainServices.RuleSupport;
 
 /// <summary>What the invoice asks from one budget line (account and fiscal year), summed over its invoice lines.</summary>
 public sealed record BudgetDemand(DistributionSnapshot FirstLine, Money InvoiceAmount, Money Liquidation, Money RequiredNewBudget,

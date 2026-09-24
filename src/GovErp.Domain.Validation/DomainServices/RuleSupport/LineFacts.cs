@@ -1,6 +1,6 @@
 using GovErp.Domain.Validation.ValueObjects;
 
-namespace GovErp.Domain.Validation.DomainServices.Rules;
+namespace GovErp.Domain.Validation.DomainServices.RuleSupport;
 
 /// <summary>Facts the pipeline's input check guarantees before any rule runs (ValidationPipeline.MissingFacts).</summary>
 internal static class LineFacts
