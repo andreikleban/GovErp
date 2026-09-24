@@ -2,7 +2,7 @@
 @using GovErp.Application.Web.Reference
 @using GovErp.Application.Web.Reference.Contracts
 @using GovErp.Web.Authentication
-@inject IReferenceAppService Reference
+@inject IRuleAppService Rules
 @inject CurrentActor CurrentActor
 
 @if (RuleId is not null)
@@ -133,7 +133,7 @@
         _focus = true;
         try
         {
-            _detail = await Reference.GetRuleDetailAsync(RuleId, await CurrentActor.GetAsync());
+            _detail = await Rules.GetRuleDetailAsync(RuleId, await CurrentActor.GetAsync());
         }
         catch (GovErp.Application.Web.Common.NotFoundException ex)
         {
@@ -155,7 +155,7 @@
         _explaining = true;
         try
         {
-            _explanation = await Reference.ExplainRuleAsync(RuleId!, _audience, await CurrentActor.GetAsync());
+            _explanation = await Rules.ExplainRuleAsync(RuleId!, _audience, await CurrentActor.GetAsync());
         }
         finally
         {

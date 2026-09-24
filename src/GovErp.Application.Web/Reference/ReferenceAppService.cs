@@ -3,7 +3,6 @@ using GovErp.Application.Web.Budget;
 using GovErp.Application.Web.Budget.Contracts;
 using GovErp.Application.Web.Commands;
 using GovErp.Application.Web.Common;
-using GovErp.Application.Web.Explanation;
 using GovErp.Application.Web.Reference.Contracts;
 using GovErp.Application.Web.Tenancy;
 using GovErp.Domain.ChartOfAccounts.Entities;
@@ -17,8 +16,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace GovErp.Application.Web.Reference;
 
-/// <summary>Read-only reference data: segments, combinations, rules, vendors and POs with encumbrance balances.</summary>
-public sealed class ReferenceAppService(ITenantOperationRunner runner, IRuleExplanationGenerator ruleExplanations) : IReferenceAppService
+/// <summary>Read-only reference data: segments, combinations, funds and grants, vendors, POs with encumbrance balances, users and roles.</summary>
+public sealed class ReferenceAppService(ITenantOperationRunner runner) : IReferenceAppService
 {
     private static readonly IReadOnlyDictionary<string, string> NoAttributes = new Dictionary<string, string>();
 
@@ -61,45 +60,6 @@ public sealed class ReferenceAppService(ITenantOperationRunner runner, IRuleExpl
                 .OrderBy(c => c.Code.ToString(), StringComparer.Ordinal)
                 .Select(c => new CombinationVm(c.Code.ToString(), c.Status.ToString(), c.EffectiveFrom, c.EffectiveTo, c.Source.ToString()))
                 .ToList(), ct);
-
-    /// <summary>CurrentFingerprint is the fingerprint of the general set without scope on the business date; scoped rules are shown with ScopeFund and ScopeGrant.</summary>
-    public Task<RuleSetVm> GetRulesAsync(ActorContext actor, CancellationToken ct = default) =>
-        runner.QueryAsync(actor, async (sp, token) =>
-        {
-            var all = await sp.GetRequiredService<IRuleDefinitionRepository>().ListAsync(token);
-            var clock = sp.GetRequiredService<IClock>();
-            var current = RuleVmMapping.CurrentIds(all, clock.BusinessDate);
-            var rules = all
-                .OrderBy(r => r.Step).ThenBy(r => r.RuleId, StringComparer.Ordinal).ThenBy(r => r.Layer).ThenBy(r => r.Version)
-                .ThenBy(r => r.ScopeFund, StringComparer.Ordinal).ThenBy(r => r.ScopeGrant, StringComparer.Ordinal)
-                .Select(r => RuleVmMapping.ToVm(r, current.Contains(r.Id)))
-                .ToList();
-            return new RuleSetVm(rules, RuleResolver.Default.Resolve(all, clock.BusinessDate).Fingerprint, RuleResolver.EngineVersion);
-        }, ct);
-
-    public Task<RuleDetailVm> GetRuleDetailAsync(string ruleId, ActorContext actor, CancellationToken ct = default) =>
-        runner.QueryAsync(actor, async (sp, token) =>
-        {
-            var description = RuleDescriptions.Find(ruleId) ?? throw new NotFoundException($"Rule {ruleId} is not in the engine's catalog.");
-            var all = await sp.GetRequiredService<IRuleDefinitionRepository>().ListAsync(token);
-            var current = RuleVmMapping.CurrentIds(all, sp.GetRequiredService<IClock>().BusinessDate);
-            var versions = all.Where(r => r.RuleId == ruleId)
-                .OrderBy(r => r.Layer).ThenBy(r => r.ScopeFund, StringComparer.Ordinal).ThenBy(r => r.ScopeGrant, StringComparer.Ordinal)
-                .ThenByDescending(r => r.Version)
-                .Select(r => RuleVmMapping.ToVm(r, current.Contains(r.Id)))
-                .ToList();
-            // The current version of the general set; scoped versions are visible in the history.
-            var applied = versions.FirstOrDefault(v => v.IsCurrent && v.ScopeFund is null && v.ScopeGrant is null)
-                ?? versions.FirstOrDefault(v => v.IsCurrent);
-            return new RuleDetailVm(description, applied, versions);
-        }, ct);
-
-    /// <summary>The LLM is called outside a transaction and nothing is stored: a rule explanation is help text, not a record of a decision.</summary>
-    public async Task<ExplanationResult> ExplainRuleAsync(string ruleId, ExplanationAudience audience, ActorContext actor, CancellationToken ct = default)
-    {
-        var detail = await GetRuleDetailAsync(ruleId, actor, ct);
-        return await ruleExplanations.ExplainAsync(detail.Description, detail.Current, audience, ct);
-    }
 
     public Task<IReadOnlyList<VendorVm>> GetVendorsAsync(ActorContext actor, CancellationToken ct = default) =>
         runner.QueryAsync<IReadOnlyList<VendorVm>>(actor, async (sp, token) =>
@@ -165,39 +125,12 @@ public sealed class ReferenceAppService(ITenantOperationRunner runner, IRuleExpl
                 .Select(u => new UserVm(u.Id, u.UserName, u.DisplayName, u.Roles, u.DepartmentCode))
                 .ToList(), ct);
 
-    /// <summary>
-    /// The matrix is built from the same constants and rules the services check (not a separate hand-made table, spec §6):
-    /// create/submit: Roles.ApClerk (InvoiceAppService.SubmitAsync); approve: Roles.Approvers (ApprovalAppService.ApproveAsync);
-    /// release Soft Stop: Roles.Overriders intersected with the roles from OverridableBy of the current rules (the same check as
-    /// in ApprovalAppService.OverrideAsync, where an override is allowed by outcome.OverridableBy rather than by the rule's static Severity:
-    /// BUDGET_AVAILABILITY, for example, has no Severity in its definition, severity is computed per outcome, but
-    /// OverridableBy is non-empty only for rules that can actually be a soft stop); budget amendment:
-    /// Roles.Overriders (BudgetAppService.AmendAsync); posting and payment hold: Roles.Posters (PostingAppService.PostAsync,
-    /// InvoiceAppService.SetPaymentHoldAsync).
-    /// </summary>
+    /// <summary>Which role may do what, from the rules in force on the business date (see RoleMatrix).</summary>
     public Task<RoleMatrixVm> GetRoleMatrixAsync(ActorContext actor, CancellationToken ct = default) =>
         runner.QueryAsync(actor, async (sp, token) =>
         {
-            var clock = sp.GetRequiredService<IClock>();
             var rules = await sp.GetRequiredService<IRuleDefinitionRepository>().ListAsync(token);
-            var effective = RuleResolver.Default.Resolve(rules, clock.BusinessDate);
-            var releasers = Roles.Overriders
-                .Where(role => effective.Rules.Any(r => r.OverridableBy.Count > 0
-                    && r.OverridableBy.Select(RoleMapping.ToRoleName).Contains(role, StringComparer.Ordinal)))
-                .ToList();
-
-            string[] roleOrder = [Roles.ApClerk, Roles.DepartmentHead, Roles.GrantsManager, Roles.BudgetOfficer, Roles.FinanceDirector];
-            var rows = roleOrder.Select(role => new RoleMatrixRowVm(role,
-                CanCreateAndSubmit: role == Roles.ApClerk,
-                CanApprove: Roles.Approvers.Contains(role),
-                CanReleaseSoftStop: releasers.Contains(role),
-                CanAmendBudget: Roles.Overriders.Contains(role),
-                CanPost: Roles.Posters.Contains(role),
-                CanPaymentHold: Roles.Posters.Contains(role))).ToList();
-
-            const string note = "The author of an invoice never approves, rejects, releases a soft stop on, or posts their own invoice, "
-                + "even when their role otherwise allows the action (separation of duties, enforced by the server on every such command).";
-            return new RoleMatrixVm(rows, releasers, note);
+            return RoleMatrix.From(RuleResolver.Default.Resolve(rules, sp.GetRequiredService<IClock>().BusinessDate));
         }, ct);
 
     private static async Task<IReadOnlyList<CombinationVm>> CombinationsAsync(IServiceProvider sp, Func<AccountCombination, bool> matches, CancellationToken ct) =>

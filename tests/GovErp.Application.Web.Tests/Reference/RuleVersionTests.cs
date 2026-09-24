@@ -24,7 +24,7 @@ public sealed class RuleVersionTests(SqlServerFixture fixture)
     public async Task New_version_becomes_current_and_the_engine_applies_it()
     {
         var t = await fixture.CreateTenantAsync();
-        var reference = t.Service<IReferenceAppService>();
+        var reference = t.Service<IRuleAppService>();
         var before = await reference.GetRulesAsync(t.Clerk);
         var source = Current(before, "PROCUREMENT_THRESHOLD");
 
@@ -54,7 +54,7 @@ public sealed class RuleVersionTests(SqlServerFixture fixture)
         (await t.SubmitAsync(invoice.Id)).IsAccepted.Should().BeTrue();
         await t.ApproveThroughAsync(invoice.Id);
 
-        var source = Current(await t.Service<IReferenceAppService>().GetRulesAsync(t.Clerk), "PROCUREMENT_THRESHOLD");
+        var source = Current(await t.Service<IRuleAppService>().GetRulesAsync(t.Clerk), "PROCUREMENT_THRESHOLD");
         (await t.Service<IRuleAppService>().CreateVersionAsync(Raise(source, "30000"), t.FinanceDirector)).IsAccepted.Should().BeTrue();
 
         var refused = await t.PostAsync(invoice.Id);
@@ -67,7 +67,7 @@ public sealed class RuleVersionTests(SqlServerFixture fixture)
     public async Task Rule_detail_shows_the_description_the_current_version_and_its_history()
     {
         var t = await fixture.CreateTenantAsync();
-        var reference = t.Service<IReferenceAppService>();
+        var reference = t.Service<IRuleAppService>();
         var source = Current(await reference.GetRulesAsync(t.Clerk), "PROCUREMENT_THRESHOLD");
         (await t.Service<IRuleAppService>().CreateVersionAsync(Raise(source, "30000"), t.FinanceDirector)).IsAccepted.Should().BeTrue();
 
@@ -86,7 +86,7 @@ public sealed class RuleVersionTests(SqlServerFixture fixture)
     {
         var t = await fixture.CreateTenantAsync();
         var rules = t.Service<IRuleAppService>();
-        var source = Current(await t.Service<IReferenceAppService>().GetRulesAsync(t.Clerk), "PROCUREMENT_THRESHOLD");
+        var source = Current(await t.Service<IRuleAppService>().GetRulesAsync(t.Clerk), "PROCUREMENT_THRESHOLD");
 
         (await rules.CreateVersionAsync(Raise(source, "30000"), t.BudgetOfficer)).Status.Should().Be(CommandStatus.Forbidden);
         (await rules.CreateVersionAsync(Raise(source, "a lot"), t.FinanceDirector)).Status.Should().Be(CommandStatus.Refused);
@@ -94,7 +94,7 @@ public sealed class RuleVersionTests(SqlServerFixture fixture)
         var unknownKey = Raise(source, "30000") with { Parameters = new Dictionary<string, string> { ["limit"] = "30000" } };
         (await rules.CreateVersionAsync(unknownKey, t.FinanceDirector)).Status.Should().Be(CommandStatus.Refused);
 
-        var rulesAfter = await t.Service<IReferenceAppService>().GetRulesAsync(t.Clerk);
+        var rulesAfter = await t.Service<IRuleAppService>().GetRulesAsync(t.Clerk);
         rulesAfter.Rules.Count(r => r.RuleId == "PROCUREMENT_THRESHOLD").Should().Be(1);   // the refusals saved nothing
     }
 }

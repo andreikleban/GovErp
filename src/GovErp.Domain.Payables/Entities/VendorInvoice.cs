@@ -82,6 +82,27 @@ public sealed class VendorInvoice
         ContentVersion++; ChangeStamp++;
     }
 
+    /// <summary>Replaces the draft's lines with the given ones; identical lines change nothing, not even the content version.</summary>
+    public void ReplaceDistributions(IReadOnlyList<(AccountCode Account, Money Amount, int? PoLineNo)> lines)
+    {
+        Require(InvoiceStatus.Draft);
+        ArgumentNullException.ThrowIfNull(lines);
+        if (_distributions.Select(d => (d.Account, d.Amount, d.PoLineNo)).SequenceEqual(lines))
+        {
+            return;
+        }
+
+        for (var lineNo = _distributions.Count; lineNo >= 1; lineNo--)
+        {
+            RemoveDistribution(lineNo);
+        }
+
+        foreach (var (account, amount, poLineNo) in lines)
+        {
+            AddDistribution(account, amount, poLineNo);
+        }
+    }
+
     public void RemoveDistribution(int lineNo)
     {
         Require(InvoiceStatus.Draft);

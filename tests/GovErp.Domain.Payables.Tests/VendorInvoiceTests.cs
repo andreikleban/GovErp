@@ -37,6 +37,27 @@ public class VendorInvoiceTests
         invoice.ContentVersion, invoice.ApprovalCycleId!.Value, "rules-1", At);
 
     [Fact]
+    public void Replacing_lines_with_the_same_lines_changes_nothing_and_other_lines_replace_them()
+    {
+        var invoice = Draft();
+        invoice.AddDistribution(Account, Money.Of(100), null);
+        var version = invoice.ContentVersion;
+
+        invoice.ReplaceDistributions([(Account, Money.Of(100), null)]);
+        invoice.ContentVersion.Should().Be(version);
+
+        var other = AccountCode.Parse("202-4000-53100");
+        invoice.ReplaceDistributions([(Account, Money.Of(60), null), (other, Money.Of(40), null)]);
+        invoice.Distributions.Select(d => (d.LineNo, d.Account, d.Amount))
+            .Should().Equal((1, Account, Money.Of(60)), (2, other, Money.Of(40)));
+        invoice.ContentVersion.Should().BeGreaterThan(version);
+
+        var submitted = Submitted();
+        FluentActions.Invoking(() => submitted.ReplaceDistributions([(Account, Money.Of(100), null)]))
+            .Should().Throw<Exceptions.PayablesException>();
+    }
+
+    [Fact]
     public void Rejection_immediately_deactivates_previous_overrides()
     {
         var invoice = Submitted();

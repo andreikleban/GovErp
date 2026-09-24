@@ -2,6 +2,7 @@ using System.Globalization;
 using GovErp.Application.Web.Audit;
 using GovErp.Application.Web.Commands;
 using GovErp.Application.Web.Common;
+using GovErp.Application.Web.Explanation;
 using GovErp.Application.Web.Reference.Commands;
 using GovErp.Application.Web.Reference.Contracts;
 using GovErp.Domain.Validation.DomainServices;
@@ -13,11 +14,50 @@ using Microsoft.Extensions.DependencyInjection;
 namespace GovErp.Application.Web.Reference;
 
 /// <summary>
-/// Rule configuration: a new version instead of editing an existing one. The rule logic lives in code; only the definition
-/// data changes. The set is checked by the engine's resolution (conflicts, weakening a higher layer) before saving.
+/// Validation rules: versions in force, written descriptions, and configuration. A change is a new version instead of an edit;
+/// the rule logic lives in code, only the definition data changes. The set is checked by the engine's resolution
+/// (conflicts, weakening a higher layer) before saving.
 /// </summary>
-public sealed class RuleAppService(ITenantOperationRunner runner) : IRuleAppService
+public sealed class RuleAppService(ITenantOperationRunner runner, IRuleExplanationGenerator ruleExplanations) : IRuleAppService
 {
+    public Task<RuleSetVm> GetRulesAsync(ActorContext actor, CancellationToken ct = default) =>
+        runner.QueryAsync(actor, async (sp, token) =>
+        {
+            var all = await sp.GetRequiredService<IRuleDefinitionRepository>().ListAsync(token);
+            var businessDate = sp.GetRequiredService<IClock>().BusinessDate;
+            var current = RuleVmMapping.CurrentIds(all, businessDate);
+            var rules = all
+                .OrderBy(r => r.Step).ThenBy(r => r.RuleId, StringComparer.Ordinal).ThenBy(r => r.Layer).ThenBy(r => r.Version)
+                .ThenBy(r => r.ScopeFund, StringComparer.Ordinal).ThenBy(r => r.ScopeGrant, StringComparer.Ordinal)
+                .Select(r => RuleVmMapping.ToVm(r, current.Contains(r.Id)))
+                .ToList();
+            return new RuleSetVm(rules, RuleResolver.Default.Resolve(all, businessDate).Fingerprint, RuleResolver.EngineVersion);
+        }, ct);
+
+    public Task<RuleDetailVm> GetRuleDetailAsync(string ruleId, ActorContext actor, CancellationToken ct = default) =>
+        runner.QueryAsync(actor, async (sp, token) =>
+        {
+            var description = RuleDescriptions.Find(ruleId) ?? throw new NotFoundException($"Rule {ruleId} is not in the engine's catalog.");
+            var all = await sp.GetRequiredService<IRuleDefinitionRepository>().ListAsync(token);
+            var current = RuleVmMapping.CurrentIds(all, sp.GetRequiredService<IClock>().BusinessDate);
+            var versions = all.Where(r => r.RuleId == ruleId)
+                .OrderBy(r => r.Layer).ThenBy(r => r.ScopeFund, StringComparer.Ordinal).ThenBy(r => r.ScopeGrant, StringComparer.Ordinal)
+                .ThenByDescending(r => r.Version)
+                .Select(r => RuleVmMapping.ToVm(r, current.Contains(r.Id)))
+                .ToList();
+            // The current version of the general set; scoped versions are visible in the history.
+            var applied = versions.FirstOrDefault(v => v.IsCurrent && v.ScopeFund is null && v.ScopeGrant is null)
+                ?? versions.FirstOrDefault(v => v.IsCurrent);
+            return new RuleDetailVm(description, applied, versions);
+        }, ct);
+
+    /// <summary>The LLM is called outside a transaction and nothing is stored: a rule explanation is help text, not a record of a decision.</summary>
+    public async Task<ExplanationResult> ExplainRuleAsync(string ruleId, ExplanationAudience audience, ActorContext actor, CancellationToken ct = default)
+    {
+        var detail = await GetRuleDetailAsync(ruleId, actor, ct);
+        return await ruleExplanations.ExplainAsync(detail.Description, detail.Current, audience, ct);
+    }
+
     public Task<CommandResult<RuleVm>> CreateVersionAsync(NewRuleVersionCommand cmd, ActorContext actor, CancellationToken ct = default) =>
         runner.ExecuteAsync(actor, cmd.Envelope, "CreateRuleVersion", cmd, async (sp, token) =>
         {

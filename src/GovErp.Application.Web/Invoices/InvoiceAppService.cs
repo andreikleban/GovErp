@@ -65,49 +65,14 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
                 return CommandResult<InvoiceVm>.Forbidden("Only AP clerks create invoices.");
             }
 
-            if (DemoDateMismatch(cmd.InvoiceDate, cmd.ServiceDate, cmd.PostingDate) is { } createDateReason)
-            {
-                return CommandResult<InvoiceVm>.Refused(null, createDateReason);
-            }
-
+            // Everything that can be refused is checked while nothing has changed; the registration number is issued last.
             var ws = sp.GetRequiredService<InvoiceWorkspace>();
-            _ = await ws.Vendors.FindAsync(cmd.VendorId, token) ?? throw new NotFoundException($"Vendor {cmd.VendorId} not found.");
-            if (cmd.PoRef is not null && await ws.PurchaseOrders.FindByNumberAsync(cmd.PoRef, token) is null)
+            if (await NewDraftProblemAsync(ws, cmd, token) is { } problem)
             {
-                return CommandResult<InvoiceVm>.Refused(null, $"Purchase order {cmd.PoRef} not found.");
+                return CommandResult<InvoiceVm>.Refused(null, problem);
             }
 
-            // The duplicate vendor number is checked before the registration number is issued: nothing has changed yet,
-            // so a refusal can be returned. A race of two identical numbers is closed by the unique index (runner → Refused).
-            if (cmd.GeneratedNumberPrefix is null
-                && await ws.Invoices.ExistsDuplicateAsync(cmd.VendorId, VendorInvoice.NormalizeNumber(cmd.Number), null, token))
-            {
-                return CommandResult<InvoiceVm>.Refused(null, "An invoice with this number already exists for this vendor.");
-            }
-
-            // The registration number is the last step before creation: the counter lock is held until commit,
-            // so its window is short, and any refusal below (an exception) rolls the number back too: numbering without gaps.
-            var fiscalYear = FiscalYear.FromDate(cmd.PostingDate);
-            var sequence = await sp.GetRequiredService<IInvoiceNumbering>().NextAsync(fiscalYear, token);
-            var number = cmd.GeneratedNumberPrefix is { } prefix
-                ? IInvoiceNumbering.GeneratedNumber(prefix, sequence)
-                : cmd.Number;
-
-            // The constructor and AddDistribution check invariants; dates outside rule 6 are rejected by the pipeline (VALIDATION_INPUT).
-            var invoice = new VendorInvoice(number, cmd.VendorId, cmd.InvoiceDate, cmd.ServiceDate, cmd.PostingDate, cmd.DueDate,
-                Money.Of(cmd.Total), cmd.PoRef, actor.UserId, ws.Clock.Now, IInvoiceNumbering.Reference(fiscalYear, sequence));
-            foreach (var d in cmd.Distributions)
-            {
-                invoice.AddDistribution(AccountCode.Parse(d.Account), Money.Of(d.Amount), d.PoLineNo);
-            }
-
-            if (cmd.GeneratedNumberPrefix is not null
-                && await ws.Invoices.ExistsDuplicateAsync(invoice.VendorId, invoice.NormalizedInvoiceNumber, null, token))
-            {
-                // The generated number is already taken by a manually entered one: the counter has moved, so refuse with an exception (rolls the number back).
-                throw new PayablesException("An invoice with this number already exists for this vendor.");
-            }
-
+            var invoice = await sp.GetRequiredService<InvoiceRegistration>().RegisterAsync(cmd, actor.UserId, token);
             await ws.Invoices.AddAsync(invoice, token);
             ws.Audit.Record(actor, "InvoiceCreated", invoice.Reference, cmd.Envelope.CommandId.ToString(),
                 new { invoice.Number, cmd.Total, Lines = cmd.Distributions.Count, cmd.PoRef });
@@ -140,24 +105,12 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
 
             invoice.UpdateHeader(cmd.Number, cmd.VendorId, cmd.InvoiceDate, cmd.ServiceDate, cmd.PostingDate, cmd.DueDate,
                 Money.Of(cmd.Total), cmd.PoRef);   // not Draft → PayablesException → Refused
-            var wanted = cmd.Distributions.Select(d => (AccountCode.Parse(d.Account), Money.Of(d.Amount), d.PoLineNo)).ToList();
-            if (!invoice.Distributions.Select(d => (d.Account, d.Amount, d.PoLineNo)).SequenceEqual(wanted))
-            {
-                for (var n = invoice.Distributions.Count; n >= 1; n--)
-                {
-                    invoice.RemoveDistribution(n);
-                }
-
-                foreach (var (account, amount, poLine) in wanted)
-                {
-                    invoice.AddDistribution(account, amount, poLine);
-                }
-            }
+            invoice.ReplaceDistributions(cmd.Distributions.Select(d => (AccountCode.Parse(d.Account), Money.Of(d.Amount), d.PoLineNo)).ToList());
 
             if (await ws.Invoices.ExistsDuplicateAsync(invoice.VendorId, invoice.NormalizedInvoiceNumber, invoice.Id, token))
             {
                 // The aggregate has already changed: refuse only with an exception so the runner rolls the changes back.
-                throw new PayablesException("An invoice with this number already exists for this vendor.");
+                throw new PayablesException(InvoiceRegistration.DuplicateNumber);
             }
 
             ws.Audit.Record(actor, "InvoiceUpdated", invoice.Reference, cmd.Envelope.CommandId.ToString(), new { invoice.ContentVersion });
@@ -257,6 +210,24 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
             ws.Audit.Record(actor, "PaymentHoldChanged", invoice.Reference, cmd.Envelope.CommandId.ToString(), new { cmd.Hold });
             return CommandResult<InvoiceVm>.Accepted(await ws.ToVmAsync(invoice, token));
         }, ct: ct);
+
+    /// <summary>
+    /// Refusals a new draft can get before anything changes. A duplicate of a hand-entered vendor number is caught here;
+    /// a race of two identical numbers is closed by the unique index (runner → Refused).
+    /// </summary>
+    private static async Task<string?> NewDraftProblemAsync(InvoiceWorkspace ws, CreateInvoiceCommand cmd, CancellationToken ct)
+    {
+        if (DemoDateMismatch(cmd.InvoiceDate, cmd.ServiceDate, cmd.PostingDate) is { } dates) return dates;
+        _ = await ws.Vendors.FindAsync(cmd.VendorId, ct) ?? throw new NotFoundException($"Vendor {cmd.VendorId} not found.");
+        if (cmd.PoRef is not null && await ws.PurchaseOrders.FindByNumberAsync(cmd.PoRef, ct) is null) return $"Purchase order {cmd.PoRef} not found.";
+        if (cmd.GeneratedNumberPrefix is null
+            && await ws.Invoices.ExistsDuplicateAsync(cmd.VendorId, VendorInvoice.NormalizeNumber(cmd.Number), null, ct))
+        {
+            return InvoiceRegistration.DuplicateNumber;
+        }
+
+        return null;
+    }
 
     private static string? DemoDateMismatch(DateOnly invoiceDate, DateOnly serviceDate, DateOnly postingDate) =>
         invoiceDate == serviceDate && serviceDate == postingDate

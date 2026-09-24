@@ -7,7 +7,6 @@
 @using GovErp.Application.Web.Reference.Commands
 @using GovErp.Application.Web.Reference.Contracts
 @using GovErp.Web.Authentication
-@inject IReferenceAppService Reference
 @inject IRuleAppService RuleService
 @inject CurrentActor CurrentActor
 @inject IClock Clock
@@ -119,7 +118,7 @@ else
     {
         var actor = await CurrentActor.GetAsync();
         _canConfigure = actor.IsInRole(GovErp.Application.Web.Common.Roles.FinanceDirector);
-        _set = await Reference.GetRulesAsync(actor);
+        _set = await RuleService.GetRulesAsync(actor);
     }
 
     private void Open(RuleVm rule)
@@ -153,7 +152,7 @@ else
 
             _message = $"{result.Value!.RuleId} version {result.Value.Version} created, effective {result.Value.EffectiveFrom:yyyy-MM-dd}.";
             _editing = null;
-            _set = await Reference.GetRulesAsync(actor);
+            _set = await RuleService.GetRulesAsync(actor);
         }
         finally
         {

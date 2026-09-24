@@ -20,6 +20,7 @@ public static class ServiceCollectionExtensions
         s.Configure<PostingOptions>(cfg.GetSection("Posting"));
         s.AddScoped<ValidationSubjectAssembler>();
         s.AddScoped<InvoiceWorkspace>();
+        s.AddScoped<InvoiceRegistration>();
         s.AddScoped<IInvoiceAppService, InvoiceAppService>();
         s.AddScoped<IApprovalAppService, ApprovalAppService>();
         s.AddScoped<IPostingAppService, PostingAppService>();
