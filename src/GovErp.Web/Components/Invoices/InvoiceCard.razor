@@ -73,7 +73,7 @@
                 <HoldsPanel Evaluation="Shown" Releasable="Policy.ReleaseItems" />
                 break;
             case CardTab.ValidationLog:
-                <EvaluationPanel Evaluation="Shown" />
+                <EvaluationPanel Evaluation="Shown" OnExplain="OpenExplanation" />
                 break;
             case CardTab.Approvals:
                 <ApprovalRoutePanel Evaluation="Shown" DocumentStatus="@Invoice.Status" Approvals="Invoice.Approvals" />
@@ -82,9 +82,6 @@
                 <PostingPanel Lines="PostingLines" IsPosted="@(Invoice.Status == "Posted")" Check="Shown?.PostingCheck" />
                 <PaymentHandoffPanel Status="@Invoice.Status" VendorStatus="@VendorStatus" PaymentHold="Invoice.PaymentHold" DueDate="Invoice.DueDate"
                                      Ready="Invoice.ReadyForPaymentHandoff" />
-                break;
-            case CardTab.Explanation:
-                <ExplanationPanel EvaluationId="Shown?.Id" />
                 break;
         }
     </div>
@@ -119,12 +116,14 @@
             <p class="note">Withdrawal releases the budget reservations and PO claims and returns the invoice to draft.</p>
         }
     </ReasonDialog>
+    <ExplanationDialog Open="_explanationOpen" EvaluationId="Shown?.Id" OnClose="CloseExplanation"
+                       Title="@(Shown is { } e ? $"{e.Trigger} evaluation of {e.EvaluatedAt.LocalDateTime:yyyy-MM-dd HH:mm}" : null)" />
     <AuditDialog Open="_auditOpen" Title="@Invoice.Reference" History="_history" Events="_events" SelectedId="Shown?.Id"
                  OnSelect="Select" OnClose="CloseAudit" />
 }
 
 @code {
-    private enum CardTab { Holds, ValidationLog, Approvals, Accounting, Explanation }
+    private enum CardTab { Holds, ValidationLog, Approvals, Accounting }
     private enum DialogKind { None, Reject, Withdraw, Release }
 
     /// <summary>Сохранённый документ; null — новый, форма берётся из Draft.</summary>
@@ -166,6 +165,7 @@
     private bool _isClerk;
     private bool _isPoster;
     private bool _auditOpen;
+    private bool _explanationOpen;
     private CardTab _tab = CardTab.ValidationLog;
     private DialogKind _dialog;
     private int _releasePick;
@@ -191,7 +191,6 @@
         (CardTab.ValidationLog, "Validation Log"),
         (CardTab.Approvals, "Approvals"),
         (CardTab.Accounting, "Accounting"),
-        (CardTab.Explanation, "Explanation"),
     ];
 
     /// <summary>Первая содержательная вкладка: открытые блокировки; иначе маршрут для Submitted; учёт для Approved/Posted; иначе журнал проверки.</summary>
@@ -231,6 +230,7 @@
             _commandId = Guid.NewGuid();
             _selected = Invoice.LastEvaluationRef;
             _auditOpen = false;
+            _explanationOpen = false;
             _dialog = DialogKind.None;
             _reload = true;
             _firstLoad = otherDocument;
@@ -289,6 +289,8 @@
 
     private void OpenAudit() => _auditOpen = true;
     private void CloseAudit() => _auditOpen = false;
+    private void OpenExplanation() => _explanationOpen = true;
+    private void CloseExplanation() => _explanationOpen = false;
     private void ShowLatest() => _selected = LatestId;
 
     /// <summary>Выбор оценки в журнале закрывает окно: вкладки и строки показывают её вместо последней.</summary>

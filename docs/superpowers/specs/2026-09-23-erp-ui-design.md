@@ -72,7 +72,7 @@
 
 **Строки:** Fund, Dept, Object, Grant, Amount, PO line (колонка только при выбранном PO, выбор из строк заказа), Available after (из расчёта движка), Status (худший итог по строке). Счёт — ссылка на бюджет.
 
-**Вкладки:** Holds (открытые и снятые блокировки: правило, причина, цифры, кто может снять) · Validation Log (8 шагов, входы и расчёт) · Approvals (маршрут и решения по всем циклам) · Accounting (preview до Post, журнал после) · Explanation. Открывается первая содержательная: Holds, если есть; иначе Approvals для Submitted; иначе Accounting для Approved/Posted; иначе Validation Log.
+**Вкладки:** Holds (открытые и снятые блокировки: правило, причина, цифры, кто может снять) · Validation Log (8 шагов, входы и расчёт) · Approvals (маршрут и решения по всем циклам) · Accounting (preview до Post, журнал после). Объяснение оценки — кнопка «Explain…» в Validation Log, открывает отдельное окно. Открывается первая содержательная: Holds, если есть; иначе Approvals для Submitted; иначе Accounting для Approved/Posted; иначе Validation Log.
 
 **Режим правки:** шапка и строки редактируются прямо в форме — только автором в Draft; New открывает ту же форму пустой.
 
@@ -98,7 +98,7 @@
 
 ## Структура UI
 
-`Components/Pages/{Setup,Budget,Purchasing,Payables,Ledger,Audit}/*.razor`; общие компоненты в `Components/Shared`: Breadcrumbs, FilterBar, StatusBadge, AccountLink, DocumentLink, Money. Текущие Budget, Rules, Approvals переезжают в модули; компоненты карточки (EvaluationPanel, PostingPanel, ExplanationPanel, AuditDialog) переиспользуются.
+`Components/Pages/{Setup,Budget,Purchasing,Payables,Ledger,Audit}/*.razor`; общие компоненты в `Components/Shared`: Breadcrumbs, FilterBar, StatusBadge, AccountLink, DocumentLink, Money. Текущие Budget, Rules, Approvals переезжают в модули; компоненты карточки (EvaluationPanel, PostingPanel, ExplanationDialog, AuditDialog) переиспользуются.
 
 ## Тесты
 

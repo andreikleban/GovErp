@@ -9,9 +9,13 @@
     }
     else
     {
-        <p class="note">
-            Overall @Evaluation.Overall · document version @Evaluation.ContentVersion · @Evaluation.Trigger
-            · @Evaluation.EvaluatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")
+        <p class="toolbar">
+            <span class="note">
+                Overall @Evaluation.Overall · document version @Evaluation.ContentVersion · @Evaluation.Trigger
+                · @Evaluation.EvaluatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")
+            </span>
+            <span class="spacer"></span>
+            <button type="button" @onclick="OnExplain">Explain…</button>
         </p>
         <table>
             <thead>
@@ -65,6 +69,8 @@
 
 @code {
     [Parameter] public EvaluationVm? Evaluation { get; set; }
+    /// <summary>Открыть объяснение этой оценки в отдельном окне.</summary>
+    [Parameter] public EventCallback OnExplain { get; set; }
 
     /// <summary>
     /// Результат шага различает, что именно мешает: Hard Stop блокирует, неснятый Soft Stop требует override,

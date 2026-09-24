@@ -127,6 +127,7 @@ h1 {
 p { margin: 0.35rem 0 0.7rem; }
 
 .toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.toolbar .spacer { flex: 1; }
 
 table {
     width: 100%;

@@ -1,0 +1,136 @@
+@using GovErp.Application.Web.Commands
+@using GovErp.Application.Web.Explanation
+@using GovErp.Web.Authentication
+@inject IExplanationAppService Explanations
+@inject CurrentActor CurrentActor
+
+@* Объяснение оценки открывается из журнала проверки: окно показывает последнее сохранённое объяснение
+   этой оценки и генерирует новое для выбранной аудитории. *@
+@if (Open && EvaluationId is not null)
+{
+    <div class="modal-backdrop" @onclick="CloseAsync"></div>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="explanation-title" tabindex="-1"
+         @ref="_dialog" @onkeydown="OnKeyDownAsync">
+        <header class="modal-header">
+            <h2 id="explanation-title">Explanation · @Title</h2>
+            <button type="button" @onclick="CloseAsync">Close</button>
+        </header>
+        <div class="modal-body">
+            <p class="note">The validation log stays authoritative. This text does not change the decision.</p>
+            <p class="toolbar">
+                <label>Audience
+                    <select @bind="_audience" @bind:after="NewCommand">
+                        @foreach (var audience in Enum.GetValues<ExplanationAudience>())
+                        {
+                            <option value="@audience">@audience</option>
+                        }
+                    </select>
+                </label>
+                <button type="button" class="primary" disabled="@_busy" @onclick="GenerateAsync">@(_busy ? "Generating…" : "Generate")</button>
+            </p>
+            @if (_error is not null)
+            {
+                <p class="error">@_error</p>
+            }
+            @if (_shown is not null)
+            {
+                <pre class="payload explanation">@_shown.Text</pre>
+                <p class="note">
+                    @_shown.Audience · Provider @_shown.Provider
+                    · Model @(_shown.Model ?? "—")
+                    · Prompt @_shown.PromptVersion
+                    · @_shown.GeneratedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")
+                </p>
+                @if (!string.IsNullOrWhiteSpace(_shown.FallbackReason))
+                {
+                    <p class="note">Fallback: @_shown.FallbackReason</p>
+                }
+            }
+            else if (_error is null)
+            {
+                <p class="note">No explanation generated for this evaluation yet.</p>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public Guid? EvaluationId { get; set; }
+    /// <summary>Подпись оценки в заголовке окна (триггер и время).</summary>
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private ElementReference _dialog;
+    private ExplanationAudience _audience = ExplanationAudience.FinanceUser;
+    private ExplanationVm? _shown;
+    private Guid? _loadedFor;
+    private Guid _commandId = Guid.NewGuid();
+    private string? _error;
+    private bool _busy;
+    private bool _focus;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Open || EvaluationId is null || _loadedFor == EvaluationId)
+        {
+            return;
+        }
+
+        _loadedFor = EvaluationId;
+        _shown = null;
+        _error = null;
+        _focus = true;
+        NewCommand();
+        var list = await Explanations.ListAsync(EvaluationId.Value, await CurrentActor.GetAsync());
+        _shown = list.OrderByDescending(item => item.GeneratedAt).FirstOrDefault();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focus && Open)
+        {
+            _focus = false;
+            await _dialog.FocusAsync();
+        }
+    }
+
+    private void NewCommand() => _commandId = Guid.NewGuid();
+
+    private async Task GenerateAsync()
+    {
+        if (EvaluationId is null || _busy)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+        try
+        {
+            var result = await Explanations.ExplainAsync(EvaluationId.Value, _audience, new CommandEnvelope(_commandId, null), await CurrentActor.GetAsync());
+            if (result.IsAccepted && result.Value is not null)
+            {
+                _shown = result.Value;
+                NewCommand();
+            }
+            else
+            {
+                _error = result.Reason ?? "Explanation was not saved.";
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private Task OnKeyDownAsync(KeyboardEventArgs e) => e.Key == "Escape" ? CloseAsync() : Task.CompletedTask;
+
+    private Task CloseAsync()
+    {
+        // При повторном открытии список перечитывается: объяснение могли сгенерировать в другой вкладке.
+        _loadedFor = null;
+        return OnClose.InvokeAsync();
+    }
+}
