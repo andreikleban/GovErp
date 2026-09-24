@@ -17,7 +17,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace GovErp.Application.Web.Reference;
 
-/// <summary>Справочники только на чтение: сегменты, комбинации, правила, поставщики и PO с балансами encumbrance.</summary>
+/// <summary>Read-only reference data: segments, combinations, rules, vendors and POs with encumbrance balances.</summary>
 public sealed class ReferenceAppService(ITenantOperationRunner runner, IRuleExplanationGenerator ruleExplanations) : IReferenceAppService
 {
     private static readonly IReadOnlyDictionary<string, string> NoAttributes = new Dictionary<string, string>();
@@ -62,7 +62,7 @@ public sealed class ReferenceAppService(ITenantOperationRunner runner, IRuleExpl
                 .Select(c => new CombinationVm(c.Code.ToString(), c.Status.ToString(), c.EffectiveFrom, c.EffectiveTo, c.Source.ToString()))
                 .ToList(), ct);
 
-    /// <summary>CurrentFingerprint — отпечаток общего набора без scope на бизнес-дату; scoped-правила показаны с ScopeFund и ScopeGrant.</summary>
+    /// <summary>CurrentFingerprint is the fingerprint of the general set without scope on the business date; scoped rules are shown with ScopeFund and ScopeGrant.</summary>
     public Task<RuleSetVm> GetRulesAsync(ActorContext actor, CancellationToken ct = default) =>
         runner.QueryAsync(actor, async (sp, token) =>
         {
@@ -88,13 +88,13 @@ public sealed class ReferenceAppService(ITenantOperationRunner runner, IRuleExpl
                 .ThenByDescending(r => r.Version)
                 .Select(r => RuleVmMapping.ToVm(r, current.Contains(r.Id)))
                 .ToList();
-            // Действующая версия общего набора; scoped-версии видны в истории.
+            // The current version of the general set; scoped versions are visible in the history.
             var applied = versions.FirstOrDefault(v => v.IsCurrent && v.ScopeFund is null && v.ScopeGrant is null)
                 ?? versions.FirstOrDefault(v => v.IsCurrent);
             return new RuleDetailVm(description, applied, versions);
         }, ct);
 
-    /// <summary>LLM вызывается вне транзакции и без сохранения: объяснение правила — справка, а не запись решения.</summary>
+    /// <summary>The LLM is called outside a transaction and nothing is stored: a rule explanation is help text, not a record of a decision.</summary>
     public async Task<ExplanationResult> ExplainRuleAsync(string ruleId, ExplanationAudience audience, ActorContext actor, CancellationToken ct = default)
     {
         var detail = await GetRuleDetailAsync(ruleId, actor, ct);
@@ -108,7 +108,7 @@ public sealed class ReferenceAppService(ITenantOperationRunner runner, IRuleExpl
                 .Select(v => new VendorVm(v.Id, v.Code, v.Name, v.Status.ToString(), v.SamRegistered))
                 .ToList(), ct);
 
-    /// <summary>Строки PO дополнены балансами Encumbrance той же строки; без encumbrance — авторизовано по строке, остаток 0.</summary>
+    /// <summary>PO lines are enriched with the Encumbrance balances of the same line; without an encumbrance: authorized per line, remaining 0.</summary>
     public Task<IReadOnlyList<PurchaseOrderVm>> GetPurchaseOrdersAsync(ActorContext actor, CancellationToken ct = default) =>
         runner.QueryAsync<IReadOnlyList<PurchaseOrderVm>>(actor, async (sp, token) =>
         {
@@ -130,7 +130,7 @@ public sealed class ReferenceAppService(ITenantOperationRunner runner, IRuleExpl
             return result;
         }, ct);
 
-    /// <summary>Карточка фонда: атрибуты, комбинации по Code.Fund и строки бюджета всех отслеживаемых счетов этого фонда.</summary>
+    /// <summary>Fund card: attributes, combinations by Code.Fund and budget lines of all tracked accounts of this fund.</summary>
     public Task<FundDetailVm> GetFundAsync(string code, ActorContext actor, CancellationToken ct = default) =>
         runner.QueryAsync(actor, async (sp, token) =>
         {
@@ -144,7 +144,7 @@ public sealed class ReferenceAppService(ITenantOperationRunner runner, IRuleExpl
                 fund.IsActive, combinations, lines);
         }, ct);
 
-    /// <summary>Карточка гранта: атрибуты, комбинации по Code.Grant и строки бюджета всех отслеживаемых счетов этого гранта.</summary>
+    /// <summary>Grant card: attributes, combinations by Code.Grant and budget lines of all tracked accounts of this grant.</summary>
     public Task<GrantDetailVm> GetGrantAsync(string code, ActorContext actor, CancellationToken ct = default) =>
         runner.QueryAsync(actor, async (sp, token) =>
         {
@@ -166,13 +166,13 @@ public sealed class ReferenceAppService(ITenantOperationRunner runner, IRuleExpl
                 .ToList(), ct);
 
     /// <summary>
-    /// Матрица строится из тех же констант и правил, что проверяют сервисы (не отдельная ручная таблица, spec §6):
-    /// создание/отправка — Roles.ApClerk (InvoiceAppService.SubmitAsync); согласование — Roles.Approvers (ApprovalAppService.ApproveAsync);
-    /// снятие Soft Stop — Roles.Overriders, пересечённое с ролями из OverridableBy действующих правил (та же проверка, что
-    /// в ApprovalAppService.OverrideAsync — там override разрешён по outcome.OverridableBy, а не по статичной Severity правила:
-    /// у BUDGET_AVAILABILITY, например, Severity в определении не задан — тяжесть считается по каждому исходу отдельно, но
-    /// OverridableBy непусто только у правил, которые действительно умеют быть мягкой остановкой); поправка бюджета —
-    /// Roles.Overriders (BudgetAppService.AmendAsync); проводка и payment hold — Roles.Posters (PostingAppService.PostAsync,
+    /// The matrix is built from the same constants and rules the services check (not a separate hand-made table, spec §6):
+    /// create/submit: Roles.ApClerk (InvoiceAppService.SubmitAsync); approve: Roles.Approvers (ApprovalAppService.ApproveAsync);
+    /// release Soft Stop: Roles.Overriders intersected with the roles from OverridableBy of the current rules (the same check as
+    /// in ApprovalAppService.OverrideAsync, where an override is allowed by outcome.OverridableBy rather than by the rule's static Severity:
+    /// BUDGET_AVAILABILITY, for example, has no Severity in its definition, severity is computed per outcome, but
+    /// OverridableBy is non-empty only for rules that can actually be a soft stop); budget amendment:
+    /// Roles.Overriders (BudgetAppService.AmendAsync); posting and payment hold: Roles.Posters (PostingAppService.PostAsync,
     /// InvoiceAppService.SetPaymentHoldAsync).
     /// </summary>
     public Task<RoleMatrixVm> GetRoleMatrixAsync(ActorContext actor, CancellationToken ct = default) =>
@@ -207,7 +207,7 @@ public sealed class ReferenceAppService(ITenantOperationRunner runner, IRuleExpl
             .Select(c => new CombinationVm(c.Code.ToString(), c.Status.ToString(), c.EffectiveFrom, c.EffectiveTo, c.Source.ToString()))
             .ToList();
 
-    /// <summary>Строки бюджета по всем годам, у которых заведены фискальные периоды: у BudgetLine есть год, у PO/фонда/гранта — нет.</summary>
+    /// <summary>Budget lines for all years that have fiscal periods: a BudgetLine has a year, a PO/fund/grant does not.</summary>
     private static async Task<IReadOnlyList<BudgetLineVm>> BudgetLinesAsync(IServiceProvider sp, Func<BudgetLine, bool> matches, CancellationToken ct)
     {
         var budgetLines = sp.GetRequiredService<IBudgetLineRepository>();

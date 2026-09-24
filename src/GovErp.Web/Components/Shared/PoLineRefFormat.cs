@@ -1,6 +1,6 @@
 namespace GovErp.Web.Components.Shared;
 
-/// <summary>Разбирает "NUMBER/lineNo" (PurchaseOrder.LineRef, Encumbrance.PoLineRef) для ссылки на карточку заказа.</summary>
+/// <summary>Parses "NUMBER/lineNo" (PurchaseOrder.LineRef, Encumbrance.PoLineRef) for a link to the purchase order card.</summary>
 public static class PoLineRefFormat
 {
     public static (string Number, int? LineNo) Split(string poLineRef)

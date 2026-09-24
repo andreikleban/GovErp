@@ -1,6 +1,6 @@
 namespace GovErp.Infrastructure.Master;
 
-/// <summary>Учётная запись пользователя в master-БД. Анемичная инфраструктурная модель, не домен (DDD-7).</summary>
+/// <summary>A user account in the master database. An anemic infrastructure model, not domain (DDD-7).</summary>
 public sealed class UserAccount
 {
     public Guid Id { get; set; }

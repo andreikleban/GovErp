@@ -5,8 +5,8 @@ namespace GovErp.Application.Web.Ledger;
 
 public static class LedgerMapping
 {
-    /// <summary>Баланс по (фонд, семейство): JournalEntry.Create уже гарантирует равенство дебета и кредита в каждой группе (GE-… инвариант),
-    /// здесь он только показывается — для прозрачности демо, а не как отдельная проверка.</summary>
+    /// <summary>Balance per (fund, family): JournalEntry.Create already guarantees equal debits and credits in each group (a GE invariant);
+    /// here it is only displayed, for demo transparency, not as a separate check.</summary>
     public static JournalEntryVm ToVm(JournalEntry entry, Guid? invoiceId, string? invoiceReference)
     {
         var lines = entry.Lines.Select(l => new JournalLineVm(l.Account.ToString(), l.Family.ToString(), l.Debit.Amount, l.Credit.Amount, l.Description)).ToList();

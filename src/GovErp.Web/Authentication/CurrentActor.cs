@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 
 namespace GovErp.Web.Authentication;
 
-/// <summary>Читает актора из cookie текущего запроса/circuit. Не кэшируется дольше вызова.</summary>
+/// <summary>Reads the actor from the cookie of the current request/circuit. Not cached beyond the call.</summary>
 public sealed class CurrentActor(AuthenticationStateProvider authentication)
 {
     public async Task<ActorContext> GetAsync()

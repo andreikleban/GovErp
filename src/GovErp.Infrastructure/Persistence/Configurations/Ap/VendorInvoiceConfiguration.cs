@@ -12,9 +12,9 @@ public sealed class VendorInvoiceConfiguration : IEntityTypeConfiguration<Vendor
         b.HasKey(x => x.Id);
         b.Property(x => x.Id).ValueGeneratedNever();
         b.Property(x => x.Number).HasMaxLength(50);
-        // Домен вычисляет NormalizedInvoiceNumber на лету; для уникального индекса хранится вычисляемая колонка.
-        // UPPER(TRIM(...)) отрезает только пробелы, string.Trim() — любые пробельные символы: первичная проверка
-        // дубликата — в домене и сборщике, индекс — последняя защита от гонки.
+        // The domain computes NormalizedInvoiceNumber on the fly; a computed column is stored for the unique index.
+        // UPPER(TRIM(...)) trims only spaces, string.Trim() trims any whitespace: the primary duplicate check
+        // is in the domain and the assembler, the index is the last guard against a race.
         b.Ignore(x => x.NormalizedInvoiceNumber);
         b.Property<string>("NormalizedNumber").IsRequired().HasMaxLength(50).HasComputedColumnSql("UPPER(TRIM([Number]))", stored: true);
         b.HasIndex("VendorId", "NormalizedNumber").IsUnique().HasDatabaseName("UX_VendorInvoices_Vendor_Number");
@@ -33,7 +33,7 @@ public sealed class VendorInvoiceConfiguration : IEntityTypeConfiguration<Vendor
         b.PrimitiveCollection(x => x.PoBillingClaimRefs);
         b.Property<IReadOnlyList<ApprovalRequirement>>("_requirements").HasColumnName("ApprovalRoute").AsJson();
 
-        // RemoveDistribution перенумеровывает строки через with: EF удаляет старые owned-строки и вставляет новые.
+        // RemoveDistribution renumbers lines via with: EF deletes the old owned rows and inserts new ones.
         b.OwnsMany(x => x.Distributions, o =>
         {
             o.ToTable("InvoiceDistributions", "ap");
@@ -52,7 +52,7 @@ public sealed class VendorInvoiceConfiguration : IEntityTypeConfiguration<Vendor
             o.Property<int>("Id").ValueGeneratedOnAdd();
             o.HasKey("Id");
             o.Property(a => a.Role).HasConversion<string>().HasMaxLength(30);
-            // DepartmentCode?: EF не передаёт null в конвертер, `!` снимает только различие nullability generic-аргумента.
+            // DepartmentCode?: EF does not pass null to the converter, `!` only removes the nullability difference of the generic argument.
             o.Property(a => a.Department).HasConversion(Conversions.Department!).HasMaxLength(4);
             o.Property(a => a.UserId).HasConversion(Conversions.User);
             o.Property(a => a.Decision).HasConversion<string>().HasMaxLength(10);
@@ -67,7 +67,7 @@ public sealed class VendorInvoiceConfiguration : IEntityTypeConfiguration<Vendor
             o.WithOwner().HasForeignKey("InvoiceId");
             o.Property<int>("Id").ValueGeneratedOnAdd();
             o.HasKey("Id");
-            // Позиционная запись InvoiceOverride: EF связывает конструктор только со скалярами, поэтому Target — JSON-колонка.
+            // Positional record InvoiceOverride: EF binds the constructor only to scalars, so Target is a JSON column.
             o.Property(v => v.Target).AsJson();
             o.Property(v => v.Role).HasConversion<string>().HasMaxLength(30);
             o.Property(v => v.UserId).HasConversion(Conversions.User);

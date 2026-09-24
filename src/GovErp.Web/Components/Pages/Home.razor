@@ -80,7 +80,7 @@ else
         _queue = await Approvals.GetQueueAsync(actor);
     }
 
-    /// <summary>Ссылки на работу роли — те же фильтры списков, что доступны вручную.</summary>
+    /// <summary>Links to the role's work: the same list filters that are available manually.</summary>
     private static List<(string, string)> ShortcutsFor(ActorContext actor)
     {
         var links = new List<(string, string)>();

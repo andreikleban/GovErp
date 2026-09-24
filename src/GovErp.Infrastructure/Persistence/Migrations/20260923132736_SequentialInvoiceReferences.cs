@@ -19,8 +19,8 @@ namespace GovErp.Infrastructure.Persistence.Migrations
                 nullable: false,
                 defaultValue: "");
 
-            // Уже созданные инвойсы сохраняют прежний номер INV-{Id}: на него ссылаются журнал (SourceRef),
-            // оценки (TransactionRef) и аудит. Новые получают AP-{год}-{номер} из счётчика.
+            // Existing invoices keep their INV-{Id} number: the journal (SourceRef),
+            // evaluations (TransactionRef) and audit refer to it. New ones get AP-{year}-{number} from the counter.
             migrationBuilder.Sql("UPDATE [ap].[VendorInvoices] SET [Reference] = N'INV-' + LOWER(CONVERT(nvarchar(36), [Id]));");
 
             migrationBuilder.CreateTable(

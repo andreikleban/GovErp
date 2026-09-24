@@ -7,7 +7,7 @@ using LedgerControl = GovErp.Domain.Ledger.Entities.BudgetControlMode;
 
 namespace GovErp.Infrastructure.Seed;
 
-/// <summary>Seed Springfield (spec §2.2–2.5). Каждый вызов Create() — новые объекты: тесты не делят изменяемое состояние.</summary>
+/// <summary>Springfield seed (spec §2.2–2.5). Every Create() call returns new objects: tests do not share mutable state.</summary>
 public sealed class SpringfieldData
 {
     public static readonly UserId ClerkId = new(Guid.Parse("10000000-0000-0000-0000-000000000001"));
@@ -114,7 +114,7 @@ public sealed class SpringfieldData
             new Vendor(DormantId, "DORMANT", "Dormant Supply", VendorStatus.Inactive, samRegistered: true),
         ]);
 
-        // Утверждённая сумма PO-строки копируется в Encumbrance один раз (GE-17).
+        // The approved amount of the PO line is copied into the Encumbrance once (GE-17).
         void Po(string number, string account, decimal amount)
         {
             d.PurchaseOrders.Add(new PurchaseOrder(number, AcmeId, [new PurchaseOrderLine(1, A(account), Money.Of(amount))]));
@@ -131,7 +131,7 @@ public sealed class SpringfieldData
             var period = new FiscalPeriod(date.Year, date.Month);
             if (date < new DateOnly(2026, 6, 1))
             {
-                period.Close();   // открыт только июнь 2026 — месяц демо-даты
+                period.Close();   // only June 2026 is open, the month of the demo date
             }
 
             d.Periods.Add(period);

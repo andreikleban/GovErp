@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Design;
 
 namespace GovErp.Infrastructure.Master;
 
-/// <summary>Только для dotnet ef: строка подключения нужна генератору миграций, соединение не открывается.</summary>
+/// <summary>For dotnet ef only: the migration generator needs a connection string, no connection is opened.</summary>
 public sealed class MasterDbContextFactory : IDesignTimeDbContextFactory<MasterDbContext>
 {
     public MasterDbContext CreateDbContext(string[] args) =>

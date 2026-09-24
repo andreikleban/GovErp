@@ -20,7 +20,7 @@ public static class ApprovalRouteResolver
             Add(ApproverRole.DepartmentHead, department, $"Department {department} is charged.");
         if (subject.Distributions.Any(d => d.Account.Grant is not null))
             Add(ApproverRole.GrantsManager, null, "Grant-funded distribution.");
-        // При правилах по scope действует строжайший (минимальный) порог среди фондов и грантов инвойса.
+        // With scoped rules, the strictest (lowest) threshold among the invoice's funds and grants applies.
         var threshold = subject.Distributions
             .Select(d => effectiveRules.ForScope(d.Account.Fund.Value, d.Account.Grant?.Value).Find(RuleCatalog.ApprovalRouteRuleId))
             .Select(rule => rule?.DecimalParameter("finance_director_threshold") ?? DefaultFinanceDirectorThreshold)

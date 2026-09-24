@@ -1,6 +1,6 @@
 namespace GovErp.Application.Web.Audit;
 
-/// <summary>SubjectInvoiceId — SubjectRef разрешён в инвойс, когда это его Reference (spec: «subject ссылается на документ»); иначе null.</summary>
+/// <summary>SubjectInvoiceId: SubjectRef resolved to an invoice when it is that invoice's Reference (spec: "the subject refers to a document"); otherwise null.</summary>
 public sealed record AuditEventVm(DateTimeOffset OccurredAt, string ActorName, string Action, string SubjectRef, string CorrelationId,
     string PayloadJson, Guid? SubjectInvoiceId = null)
 {

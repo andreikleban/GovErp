@@ -1,4 +1,4 @@
-@* Строка PO ведёт в карточку заказа (Purchasing › Purchase Orders). *@
+@* A PO line links to the purchase order card (Purchasing › Purchase Orders). *@
 <a href="@Href" title="Purchase order @Number">@Number@(LineNo is null ? "" : $"/{LineNo}")</a>
 
 @code {

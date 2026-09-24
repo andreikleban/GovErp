@@ -9,8 +9,8 @@ using GovErp.Domain.Validation.Repositories;
 
 namespace GovErp.Application.Web.Tests;
 
-// Фейки над List<T>, по одному классу на порт (src/GovErp.Domain.*/Repositories). Никакой персистентности:
-// тесты видят те же экземпляры, что были переданы в конструктор.
+// Fakes over List<T>, one class per port (src/GovErp.Domain.*/Repositories). No persistence:
+// tests see the same instances that were passed to the constructor.
 
 public sealed class InMemoryFundRepository(IEnumerable<Fund> items) : IFundRepository
 {
@@ -44,7 +44,7 @@ public sealed class InMemoryAccountCombinationRepository(IEnumerable<AccountComb
     }
 }
 
-/// <summary>Один порт над двумя справочниками (Department, ObjectCodeDefinition) — конструктор берёт обе коллекции.</summary>
+/// <summary>One port over two reference lists (Department, ObjectCodeDefinition): the constructor takes both collections.</summary>
 public sealed class InMemoryReferenceDataRepository(IEnumerable<Department> departments, IEnumerable<ObjectCodeDefinition> objects) : IReferenceDataRepository
 {
     private readonly List<Department> Departments = [.. departments];

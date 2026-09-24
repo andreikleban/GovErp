@@ -1,9 +1,9 @@
 namespace GovErp.Application.Web.Invoices.Contracts;
 
 /// <summary>
-/// Что инвойс удерживает в бюджете и по PO. Reserved — удерживаемые резервы бюджета, LiquidationClaimed — удерживаемые
-/// claims ликвидации encumbrance, BillingClaimed — удерживаемые billing claims PO; Consumed — погашенные при Post
-/// резервы и claims ликвидации (то, что стало actuals).
+/// What the invoice holds in the budget and on the PO. Reserved: budget reservations held; LiquidationClaimed: encumbrance
+/// liquidation claims held; BillingClaimed: PO billing claims held; Consumed: reservations and liquidation claims
+/// consumed at Post (what became actuals).
 /// </summary>
 public sealed record InvoiceFundsVm(decimal Reserved, decimal LiquidationClaimed, decimal BillingClaimed, decimal Consumed)
 {

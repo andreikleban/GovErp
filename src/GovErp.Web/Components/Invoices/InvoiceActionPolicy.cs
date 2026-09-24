@@ -6,9 +6,9 @@ using GovErp.Application.Web.Validation.Contracts;
 namespace GovErp.Web.Components.Invoices;
 
 /// <summary>
-/// Панель действий карточки: набор кнопок всегда один, а здесь для каждой — почему она сейчас недоступна
-/// (null — доступна). Правила повторяют проверки сервисов, чтобы UI не предлагал заведомый отказ; окончательно решает сервер.
-/// Решения по маршруту (Approve, Reject, Release Hold) берутся из очереди пользователя — той же, что на главной и в Approvals.
+/// The card action bar: the button set is always the same, and here each button gets the reason it is unavailable now
+/// (null means available). The rules mirror the service checks so the UI does not offer a certain refusal; the server decides in the end.
+/// Route decisions (Approve, Reject, Release Hold) come from the user's queue, the same one as on Home and in Approvals.
 /// </summary>
 public sealed partial class InvoiceActionPolicy
 {
@@ -20,9 +20,9 @@ public sealed partial class InvoiceActionPolicy
     private readonly bool _isPoster;
     private readonly bool _dirty;
 
-    /// <param name="invoice">Null — новый документ, ещё не сохранённый.</param>
-    /// <param name="pending">Элементы очереди текущего пользователя по этому инвойсу.</param>
-    /// <param name="dirty">В форме есть несохранённые правки.</param>
+    /// <param name="invoice">Null for a new document that is not saved yet.</param>
+    /// <param name="pending">The current user's queue items for this invoice.</param>
+    /// <param name="dirty">The form has unsaved edits.</param>
     public InvoiceActionPolicy(InvoiceVm? invoice, Guid userId, bool isClerk, bool isPoster, IReadOnlyList<ApprovalQueueItemVm> pending, bool dirty)
     {
         _invoice = invoice;
@@ -44,7 +44,7 @@ public sealed partial class InvoiceActionPolicy
     private IEnumerable<OutcomeVm> OpenSoftStops => Last?.Outcomes.Where(o => o.Severity == "SoftStop" && o.OverriddenBy is null) ?? [];
     private bool HasOpenHolds => Last?.Outcomes.Any(o => o.Severity is "SoftStop" or "HardStop" && o.OverriddenBy is null) == true;
 
-    /// <summary>Правка шапки и строк на месте: только автор-клерк и только Draft; новый документ — любой клерк.</summary>
+    /// <summary>In-place editing of the header and lines: only the author clerk and only in Draft; a new document: any clerk.</summary>
     public string? Edit =>
         !_isClerk ? "Only AP clerks edit invoices."
         : IsNew ? null
@@ -87,8 +87,8 @@ public sealed partial class InvoiceActionPolicy
         : $"Only {string.Join(" or ", OpenSoftStops.SelectMany(o => o.OverridableBy).Distinct().Select(RoleLabel))} can release these holds.";
 
     /// <summary>
-    /// Допуск к проводке (PostingEligibility) движок вычисляет только в оценке самой команды Post, поэтому кнопка
-    /// доступна по роли, статусу и отсутствию неснятых стопов; окончательную проверку делает сервер.
+    /// The engine computes posting eligibility (PostingEligibility) only in the evaluation of the Post command itself, so the button
+    /// is available by role, status and the absence of open stops; the server makes the final check.
     /// </summary>
     public string? Post =>
         IsNew ? SaveFirst

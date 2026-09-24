@@ -2,7 +2,7 @@ using GovErp.Application.Web.Invoices.Contracts;
 
 namespace GovErp.Web.Components.Invoices;
 
-/// <summary>Строка формы: сегменты счёта по отдельности, сумма и строка PO.</summary>
+/// <summary>A form line: account segments separately, the amount and the PO line.</summary>
 public sealed class LineModel
 {
     public string Fund { get; set; } = "";
@@ -14,7 +14,7 @@ public sealed class LineModel
 
     public string Account => string.IsNullOrWhiteSpace(Grant) ? $"{Fund}-{Department}-{Object}" : $"{Fund}-{Department}-{Object}-{Grant}";
 
-    /// <summary>Выпадающие списки сегментов не имеют пустого значения, поэтому новая строка сразу получает валидные коды.</summary>
+    /// <summary>Segment dropdowns have no empty value, so a new line gets valid codes right away.</summary>
     public static LineModel Default() => new() { Fund = "101", Department = "6000", Object = "53100" };
 
     public static LineModel From(DistributionVm d)
@@ -24,7 +24,7 @@ public sealed class LineModel
         return line;
     }
 
-    /// <summary>Разбирает код счёта «фонд-отдел-объект[-грант]»; грант может сам содержать дефисы.</summary>
+    /// <summary>Parses the account code "fund-department-object[-grant]"; the grant itself may contain hyphens.</summary>
     public void SetAccount(string account)
     {
         var parts = account.Split('-');

@@ -1,6 +1,6 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
-// Единый демо-пароль: SA контейнера SQL Server и runtime-учётки Master и тенантов.
+// Single demo password: SA of the SQL Server container and the runtime logins of Master and the tenants.
 const string DemoPassword = "1!Qwertyui";
 var sqlPassword = builder.AddParameter("sql-password", DemoPassword, secret: true);
 
@@ -17,8 +17,8 @@ var web = builder.AddProject<Projects.GovErp_Web>("web")
     .WithEnvironment("Tenancy__Credentials__springfield__Password", DemoPassword)
     .WithEnvironment("Tenancy__Credentials__shelbyville__Password", DemoPassword);
 
-// launchSettings AppHost не попадает в процесс Web. Провайдер и ключ читаются из конфигурации AppHost
-// (user-secrets или переменные окружения) и передаются сайту отдельно.
+// The AppHost launchSettings do not reach the Web process. Provider and key are read from the AppHost configuration
+// (user-secrets or environment variables) and passed to the site separately.
 Pass("Explanation__Provider", "EXPLANATION_PROVIDER", "Explanation:Provider");
 Pass("Explanation__Model", "EXPLANATION_MODEL", "Explanation:Model");
 Pass("Explanation__Endpoint", "EXPLANATION_ENDPOINT", "Explanation:Endpoint");

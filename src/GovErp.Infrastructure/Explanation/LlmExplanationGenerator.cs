@@ -5,9 +5,9 @@ using Microsoft.Extensions.AI;
 namespace GovErp.Infrastructure.Explanation;
 
 /// <summary>
-/// Вызывает IChatClient без tools. Пустой, слишком длинный ответ, таймаут и ошибка сети
-/// возвращают текст шаблона с причиной. Отмена вызывающего токена отменяет запрос и не подменяется шаблоном.
-/// Ключ и полный промпт не пишутся в журнал.
+/// Calls IChatClient without tools. An empty or too long answer, a timeout and a network error
+/// return the template text with a reason. Cancelling the caller's token cancels the request and is not replaced by the template.
+/// Neither the key nor the full prompt is logged.
 /// </summary>
 public sealed class LlmExplanationGenerator(TemplateExplanationGenerator template, ExplanationOptions options, IChatClient? chat = null)
     : IExplanationGenerator

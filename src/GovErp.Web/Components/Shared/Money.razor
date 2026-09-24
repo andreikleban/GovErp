@@ -1,5 +1,5 @@
 @using System.Globalization
-@* Сумма в формате 160,000.00; отрицательная выделяется. Выравнивание вправо задаёт ячейка (class="money"). *@
+@* An amount formatted as 160,000.00; negative amounts are highlighted. Right alignment is set by the cell (class="money"). *@
 <span class="amount @(Value < 0 ? "negative" : null)">@Value.ToString("N2", CultureInfo.InvariantCulture)</span>
 
 @code {

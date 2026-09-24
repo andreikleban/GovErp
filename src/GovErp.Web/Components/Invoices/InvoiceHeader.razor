@@ -1,7 +1,7 @@
 @using GovErp.Application.Web.Invoices.Contracts
 @using GovErp.Application.Web.Reference.Contracts
 
-@* Шапка документа сеткой полей. Правка на месте — только когда форма открыта для правки (автор, Draft, или новый документ). *@
+@* Document header as a grid of fields. Editable in place only when the form is open for editing (author, Draft, or a new document). *@
 <div class="fields">
     <div class="field">
         <span>Document</span>
@@ -65,7 +65,7 @@
     [Parameter] public bool Editable { get; set; }
     [Parameter] public IReadOnlyList<VendorVm> Vendors { get; set; } = [];
     [Parameter] public IReadOnlyList<PurchaseOrderVm> PurchaseOrders { get; set; } = [];
-    /// <summary>Любая правка поля: карточка пересчитывает доступность Submit и Check Funds.</summary>
+    /// <summary>Any field edit: the card recomputes the availability of Submit and Check Funds.</summary>
     [Parameter] public EventCallback OnChange { get; set; }
 
     private string VendorName
@@ -77,7 +77,7 @@
         }
     }
 
-    /// <summary>Выбор поставщика через строку: значение option — Guid поставщика.</summary>
+    /// <summary>Vendor selection via a string: the option value is the vendor's Guid.</summary>
     private string VendorText
     {
         get => Edit.VendorId.ToString();

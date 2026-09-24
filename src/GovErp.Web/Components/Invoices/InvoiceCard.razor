@@ -15,8 +15,8 @@
 @inject IPostingAppService Posting
 @inject CurrentActor CurrentActor
 
-@* Карточка инвойса по общему шаблону: панель действий → шапка → статусная строка → строки → вкладки.
-   Новый документ открывает ту же форму пустой; сохранённый правится на месте только автором в Draft. *@
+@* The invoice card follows the common template: action bar → header → status line → lines → tabs.
+   A new document opens the same form empty; a saved one is edited in place only by its author in Draft. *@
 <Breadcrumbs Items="@([new Crumb("Payables"), new Crumb("Invoices", "/invoices"), new Crumb(Invoice?.Reference ?? "New")])" />
 <h1>@(Invoice is null ? "New invoice" : $"Invoice {Invoice.Reference}")</h1>
 
@@ -126,16 +126,16 @@
     private enum CardTab { Holds, ValidationLog, Approvals, Accounting }
     private enum DialogKind { None, Reject, Withdraw, Release }
 
-    /// <summary>Сохранённый документ; null — новый, форма берётся из Draft.</summary>
+    /// <summary>The saved document; null for a new one, whose form comes from Draft.</summary>
     [Parameter] public InvoiceVm? Invoice { get; set; }
-    /// <summary>Начальная форма нового документа (поставщик, дата, предложенный номер).</summary>
+    /// <summary>Initial form of a new document (vendor, date, suggested number).</summary>
     [Parameter] public EditorModel? Draft { get; set; }
     [Parameter] public IReadOnlyList<VendorVm> Vendors { get; set; } = [];
     [Parameter] public IReadOnlyList<PurchaseOrderVm> PurchaseOrders { get; set; } = [];
     [Parameter] public SegmentsVm? Segments { get; set; }
     [Parameter] public bool Busy { get; set; }
     [Parameter] public string? Message { get; set; }
-    /// <summary>Оценка из ссылки (?evaluation=): карточка открывается на ней, если она принадлежит документу.</summary>
+    /// <summary>Evaluation from the link (?evaluation=): the card opens on it if it belongs to the document.</summary>
     [Parameter] public Guid? InitialEvaluationId { get; set; }
     [Parameter] public EventCallback<EditorModel> OnCreate { get; set; }
     [Parameter] public EventCallback<UpdateInvoiceCommand> OnSave { get; set; }
@@ -176,7 +176,7 @@
 
     private string VendorStatus => Vendors.FirstOrDefault(v => v.Id == (Invoice?.VendorId ?? _edit.VendorId))?.Status ?? "";
 
-    /// <summary>Текущая оценка документа: LastEvaluationRef активного инвойса, для Draft — последняя ручная проверка.</summary>
+    /// <summary>The document's current evaluation: LastEvaluationRef of an active invoice, for Draft the latest manual check.</summary>
     private Guid? LatestId => Invoice?.LastEvaluationRef ?? Invoice?.LastEvaluation?.Id;
 
     private EvaluationVm? Shown => _history.FirstOrDefault(e => e.Id == _selected) ?? Invoice?.LastEvaluation;
@@ -193,7 +193,7 @@
         (CardTab.Accounting, "Accounting"),
     ];
 
-    /// <summary>Первая содержательная вкладка: открытые блокировки; иначе маршрут для Submitted; учёт для Approved/Posted; иначе журнал проверки.</summary>
+    /// <summary>The first meaningful tab: open holds; otherwise the route for Submitted; accounting for Approved/Posted; otherwise the validation log.</summary>
     private CardTab DefaultTab() =>
         OpenHolds > 0 ? CardTab.Holds
         : Invoice?.Status == "Submitted" ? CardTab.Approvals
@@ -216,8 +216,8 @@
 
         if (!ReferenceEquals(_invoice, Invoice))
         {
-            // Форму пересобираем только когда документ на сервере действительно изменился (другой документ,
-            // новая версия содержания или статус). После отказа Save версия прежняя, и введённые правки остаются в форме.
+            // Rebuild the form only when the document really changed on the server (another document,
+            // a new content version or status). After a refused Save the version is the same, and the entered edits stay in the form.
             var otherDocument = _invoice is null || _invoice.Id != Invoice.Id;
             var documentChanged = otherDocument || _invoice!.ContentVersion != Invoice.ContentVersion || _invoice.Status != Invoice.Status;
             _invoice = Invoice;
@@ -257,7 +257,7 @@
 
         _history = await Explanations.GetEvaluationHistoryAsync(Invoice.Id, actor);
         _events = await Explanations.GetAuditTrailAsync(Invoice.Id, actor);
-        // Решения, которых по этому документу ждут именно от текущего пользователя (та же очередь, что на главной и в Approvals).
+        // Decisions on this document awaited from the current user specifically (the same queue as on Home and in Approvals).
         _pending = (await Approvals.GetQueueAsync(actor)).Where(q => q.InvoiceId == Invoice.Id).ToList();
         _journal = Invoice.Status == "Posted" ? await Posting.GetJournalAsync(Invoice.Id, actor) : [];
         if (_firstLoad && InitialEvaluationId is { } requested && _history.Any(e => e.Id == requested))
@@ -284,7 +284,7 @@
     private RenderFragment Button(string label, string? blocked, Action onClick) =>
         Button(label, blocked, () => { onClick(); return Task.CompletedTask; });
 
-    /// <summary>Правка формы: перерисовка карточки пересчитывает Dirty и доступность кнопок.</summary>
+    /// <summary>A form edit: re-rendering the card recomputes Dirty and button availability.</summary>
     private void Changed() { }
 
     private void OpenAudit() => _auditOpen = true;
@@ -293,7 +293,7 @@
     private void CloseExplanation() => _explanationOpen = false;
     private void ShowLatest() => _selected = LatestId;
 
-    /// <summary>Выбор оценки в журнале закрывает окно: вкладки и строки показывают её вместо последней.</summary>
+    /// <summary>Choosing an evaluation in the log closes the dialog: the tabs and lines show it instead of the latest one.</summary>
     private void Select(Guid id)
     {
         _selected = id;

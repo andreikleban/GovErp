@@ -29,11 +29,11 @@ public static class InvoiceMapping
         new(invoice.Id, invoice.Reference, invoice.Number, vendorName, invoice.Total.Amount, invoice.Status.ToString(), last?.Overall.ToString(),
             invoice.PostingDate, FundsOf(invoice), OpenHolds(last));
 
-    /// <summary>Коды фондов строк в порядке строк, без повторов.</summary>
+    /// <summary>Fund codes of the lines in line order, without duplicates.</summary>
     public static IReadOnlyList<string> FundsOf(VendorInvoice invoice) =>
         invoice.Distributions.Select(d => d.Account.Fund.Value).Distinct(StringComparer.Ordinal).ToList();
 
-    /// <summary>Блокировка — неснятый Soft Stop или Hard Stop оценки; Warning блокировкой не считается.</summary>
+    /// <summary>A hold is an open Soft Stop or a Hard Stop of the evaluation; a Warning is not a hold.</summary>
     public static int OpenHolds(EvaluationRecord? last) =>
         last?.Outcomes.Count(o => o.Severity >= Severity.SoftStop && !o.IsOverridden) ?? 0;
 }

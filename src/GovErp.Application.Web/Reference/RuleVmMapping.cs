@@ -6,7 +6,7 @@ namespace GovErp.Application.Web.Reference;
 
 internal static class RuleVmMapping
 {
-    /// <summary>Версии, которые применяются на дату: общий набор плюс scoped-версии в своём фонде и гранте.</summary>
+    /// <summary>Versions that apply on the date: the general set plus scoped versions within their fund and grant.</summary>
     public static HashSet<Guid> CurrentIds(IReadOnlyList<RuleDefinition> all, DateOnly onDate)
     {
         var current = RuleResolution.Resolve(all, onDate).Rules.Select(r => r.Id).ToHashSet();

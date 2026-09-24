@@ -101,7 +101,7 @@
 
     [SupplyParameterFromQuery(Name = "status")] public string? Status { get; set; }
     [SupplyParameterFromQuery(Name = "fund")] public string? Fund { get; set; }
-    /// <summary>yes — только с открытыми блокировками, no — только без них.</summary>
+    /// <summary>yes: only with open holds, no: only without them.</summary>
     [SupplyParameterFromQuery(Name = "holds")] public string? Holds { get; set; }
 
     private IReadOnlyList<InvoiceListItemVm>? _list;
@@ -122,8 +122,8 @@
     private static string? Value(ChangeEventArgs e) => e.Value?.ToString() is { Length: > 0 } value ? value : null;
 
     /// <summary>
-    /// Фильтры живут в адресе: ссылки с главной и кнопка «назад» открывают тот же список.
-    /// Пустая строка — «поле не менялось», null — фильтр снят.
+    /// Filters live in the address: links from Home and the "back" button open the same list.
+    /// An empty string means "the field did not change", null means the filter is cleared.
     /// </summary>
     private void Filter(string? status = "", string? fund = "", string? holds = "")
     {

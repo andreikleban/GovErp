@@ -3,8 +3,8 @@ using GovErp.Application.Web.Commands;
 namespace GovErp.Infrastructure.Persistence;
 
 /// <summary>
-/// Выставляет OriginalValue теневого RowVersion: устаревшая форма даёт DbUpdateConcurrencyException, runner превращает её в Conflict.
-/// RowVersion есть только у BudgetLine, Encumbrance и VendorInvoice; для остальных агрегатов Expect ничего не делает, VersionOf — null.
+/// Sets OriginalValue of the shadow RowVersion: a stale form causes DbUpdateConcurrencyException, which the runner turns into Conflict.
+/// Only BudgetLine, Encumbrance and VendorInvoice have a RowVersion; for other aggregates Expect does nothing and VersionOf is null.
 /// </summary>
 public sealed class EfConcurrencyGuard(GovErpDbContext db) : IConcurrencyGuard
 {

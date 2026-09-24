@@ -2,7 +2,7 @@ using GovErp.Domain.Validation.DomainServices.Rules;
 
 namespace GovErp.Domain.Validation.DomainServices;
 
-/// <summary>Правила, известные коду. Определение шагов 1–6 без реализации здесь — ошибка конфигурации.</summary>
+/// <summary>Rules known to the code. A definition for steps 1–6 without an implementation here is a configuration error.</summary>
 public sealed class RuleCatalog
 {
     public const string ApprovalRouteRuleId = "APPROVAL_ROUTE";
@@ -25,6 +25,6 @@ public sealed class RuleCatalog
 
     public IValidationRule? Find(string ruleId) => _byId.GetValueOrDefault(ruleId);
 
-    /// <summary>Обязательны все реализованные правила и параметры маршрута: их отсутствие в наборе — отказ, а не молчаливый пропуск.</summary>
+    /// <summary>All implemented rules and the route parameters are mandatory: their absence from the set is a refusal, not a silent skip.</summary>
     public IReadOnlyCollection<string> MandatoryRuleIds => _byId.Keys.Append(ApprovalRouteRuleId).ToArray();
 }

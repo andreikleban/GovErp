@@ -1,9 +1,9 @@
 namespace GovErp.Application.Web.Tenancy;
 
 /// <summary>
-/// Разрешение UserId → отображаемое имя для Audit (оценки, события) и для панели аудита в карточке инвойса —
-/// одна и та же логика переиспользуется везде (spec §6). Тенант демо-масштаба (десяток пользователей), поэтому
-/// один ListAsync на список — дёшево; для оценок/событий по одному документу это не хуже прежнего поведения.
+/// Resolves UserId → display name for Audit (evaluations, events) and for the audit panel in the invoice card;
+/// the same logic is reused everywhere (spec §6). The tenant is demo-sized (a dozen users), so
+/// one ListAsync per list is cheap; for the evaluations/events of a single document it is no worse than before.
 /// </summary>
 public static class TenantUserNaming
 {
@@ -11,7 +11,7 @@ public static class TenantUserNaming
         CancellationToken ct = default) =>
         (await directory.ListAsync(tenantId, ct)).ToDictionary(u => u.Id, u => u.DisplayName);
 
-    /// <summary>Неизвестный (например, удалённый) пользователь — сырой id как заглушка, как и для ссылок на инвойсы.</summary>
+    /// <summary>An unknown (for example, deleted) user falls back to the raw id, as for invoice links.</summary>
     public static string NameOf(this IReadOnlyDictionary<Guid, string> names, Guid userId) =>
         names.GetValueOrDefault(userId, userId.ToString());
 }

@@ -131,7 +131,7 @@ else
 
     private static string? Value(ChangeEventArgs e) => e.Value?.ToString() is { Length: > 0 } value ? value : null;
 
-    /// <summary>Фильтры живут в адресе, как в списке инвойсов: ссылки и «назад» открывают тот же журнал.</summary>
+    /// <summary>Filters live in the address, as in the invoice list: links and "back" open the same journal.</summary>
     private void Filter(string? fund = "", string? period = "", string? source = "")
     {
         var query = new Dictionary<string, object?>

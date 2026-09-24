@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace GovErp.Application.Web.Ledger;
 
-/// <summary>Журнал и периоды на чтение; SourceRef проводки совпадает с Reference инвойса, который её вызвал (см. PostingAppService).</summary>
+/// <summary>Read-only journal and periods; an entry's SourceRef equals the Reference of the invoice that caused it (see PostingAppService).</summary>
 public sealed class LedgerAppService(ITenantOperationRunner runner) : ILedgerAppService
 {
     public Task<IReadOnlyList<JournalEntryVm>> ListJournalAsync(JournalFilter filter, ActorContext actor, CancellationToken ct = default) =>

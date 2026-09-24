@@ -12,9 +12,9 @@ public sealed class VendorInvoice
     public Guid Id { get; private set; } = Guid.NewGuid();
     public string Number { get; private set; }
     public string NormalizedInvoiceNumber => NormalizeNumber(Number);
-    /// <summary>Правило сравнения номеров поставщика для проверки дубликатов (до создания инвойса тоже).</summary>
+    /// <summary>Comparison rule for vendor invoice numbers in the duplicate check (also before the invoice is created).</summary>
     public static string NormalizeNumber(string number) => number.Trim().ToUpperInvariant();
-    /// <summary>Регистрационный номер документа в AP (в журнале — SourceRef, в оценках — TransactionRef). Неизменяем.</summary>
+    /// <summary>The document's AP registration number (SourceRef in the journal, TransactionRef in evaluations). Immutable.</summary>
     public string Reference { get; private set; }
     public Guid VendorId { get; private set; }
     public DateOnly InvoiceDate { get; private set; }
@@ -33,7 +33,7 @@ public sealed class VendorInvoice
     public Guid? LastEvaluationRef { get; private set; }
     public string? RuleFingerprint { get; private set; }
     public bool PaymentHold { get; private set; }
-    /// <summary>Растёт при любом изменении, включая owned-коллекции: хранилище всегда обновляет корень и проверяет конкурентную версию.</summary>
+    /// <summary>Grows on any change, including owned collections: storage always updates the root and checks the concurrency version.</summary>
     public long ChangeStamp { get; private set; }
     public IReadOnlyList<InvoiceDistribution> Distributions => _distributions.AsReadOnly();
     public IReadOnlyList<InvoiceApproval> Approvals => _approvals.AsReadOnly();

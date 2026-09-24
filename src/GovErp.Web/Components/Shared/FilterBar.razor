@@ -1,4 +1,4 @@
-@* Фильтры над таблицей списка: поля передаются содержимым; Clear показывается, если страница умеет сбросить фильтры. *@
+@* Filters above a list table: the fields come as child content; Clear is shown if the page can reset the filters. *@
 <div class="filter-bar" role="search">
     @ChildContent
     @if (OnClear.HasDelegate)
@@ -10,6 +10,6 @@
 @code {
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public EventCallback OnClear { get; set; }
-    /// <summary>Есть ли выбранные фильтры: без них Clear ничего не меняет и неактивна.</summary>
+    /// <summary>Whether any filters are set: without them Clear changes nothing and is disabled.</summary>
     [Parameter] public bool Active { get; set; }
 }

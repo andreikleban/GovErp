@@ -2,8 +2,8 @@
 @using GovErp.Application.Web.Reference.Contracts
 @using GovErp.Application.Web.Validation.Contracts
 
-@* Строки документа. Колонка PO line — только при выбранном заказе (выбор из его строк); Available after и Status —
-   из показанной оценки; при несохранённых правках эти колонки пустые: оценка относится к сохранённой версии. *@
+@* Document lines. The PO line column appears only when an order is selected (chosen from its lines); Available after and Status
+   come from the shown evaluation; with unsaved edits these columns are empty, since the evaluation belongs to the saved version. *@
 <table class="lines">
     <thead>
         <tr>
@@ -108,10 +108,10 @@
 @code {
     [Parameter, EditorRequired] public EditorModel Edit { get; set; } = null!;
     [Parameter] public bool Editable { get; set; }
-    /// <summary>Бюджетный год сохранённого документа: счёт ведёт на строку бюджета этого года.</summary>
+    /// <summary>Budget year of the saved document: the account links to the budget line of that year.</summary>
     [Parameter] public int? FiscalYear { get; set; }
     [Parameter] public EvaluationVm? Evaluation { get; set; }
-    /// <summary>Форма изменена после сохранения: итоги оценки к ней не относятся.</summary>
+    /// <summary>The form changed after saving: the evaluation results do not apply to it.</summary>
     [Parameter] public bool Stale { get; set; }
     [Parameter] public SegmentsVm? Segments { get; set; }
     [Parameter] public IReadOnlyList<PurchaseOrderVm> PurchaseOrders { get; set; } = [];
@@ -122,7 +122,7 @@
 
     private decimal? AvailableAfter(int lineNo) => Evaluation?.LineBudgets.FirstOrDefault(b => b.LineNo == lineNo)?.AvailableAfter;
 
-    /// <summary>Худший итог по строке: неснятый Hard Stop, затем Soft Stop, Warning; снятый override'ом стоп — Released.</summary>
+    /// <summary>The worst result per line: an open Hard Stop, then Soft Stop, Warning; a stop released by override is Released.</summary>
     private (string Label, string Tone) LineStatus(int lineNo)
     {
         if (Evaluation is null)
@@ -162,7 +162,7 @@
         return ChangedAsync();
     }
 
-    /// <summary>Строка заказа задаёт и счёт: ликвидация идёт по счёту encumbrance, другой счёт движок отклонит.</summary>
+    /// <summary>The order line also sets the account: liquidation goes to the encumbrance account, the engine rejects another account.</summary>
     private Task PoLineChangedAsync(LineModel line)
     {
         if (OrderLines.FirstOrDefault(l => l.LineNo == line.PoLineNo) is { } po)

@@ -56,7 +56,7 @@ public class RuleExplanationTests
 
         answered.Text.Should().Be("Plain words.");
         answered.PromptVersion.Should().Be(RuleExplanationPrompt.Version);
-        ok.LastMessages!.Last().Text.Should().Contain("\"threshold\"").And.Contain("25000");   // модель получает описание и текущие значения
+        ok.LastMessages!.Last().Text.Should().Contain("\"threshold\"").And.Contain("25000");   // the model gets the description and the current values
         fallback.Provider.Should().Be("Template");
         fallback.FallbackReason.Should().Be("OpenAI request failed.");
         fallback.Text.Should().Contain(Procurement.Title);

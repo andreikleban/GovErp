@@ -80,7 +80,7 @@ else
         _events = await Audit.ListEventsAsync(new EventFilter(Action, Actor, Subject), actor);
     }
 
-    /// <summary>Первая пара «ключ: значение» как краткая подпись; полный payload — в раскрывающемся <details>.</summary>
+    /// <summary>The first "key: value" pair as a short caption; the full payload is in an expandable <details>.</summary>
     private static string Summarize(string payloadJson)
     {
         try

@@ -3,7 +3,7 @@ using Microsoft.Extensions.Options;
 
 namespace GovErp.Infrastructure.Common;
 
-/// <summary>Время оценок и аудита — реальное UTC; бизнес-дата — из конфигурации.</summary>
+/// <summary>Evaluation and audit time is real UTC; the business date comes from configuration.</summary>
 public sealed class SystemClock(IOptions<ClockOptions> options) : IClock
 {
     public DateTimeOffset Now => DateTimeOffset.UtcNow;

@@ -55,7 +55,7 @@
         }
         catch (ArgumentException ex)
         {
-            // Неверный бюджетный год из поля ввода — сообщение, а не обрыв circuit.
+            // An invalid budget year from the input field is a message, not a broken circuit.
             _error = ex.Message;
             _amendments = [];
         }

@@ -5,8 +5,8 @@ using Microsoft.Extensions.AI;
 namespace GovErp.Infrastructure.Explanation;
 
 /// <summary>
-/// Тот же провайдер, таймаут и ограничения, что у объяснения оценок. Пустой или слишком длинный ответ, таймаут и ошибка
-/// возвращают написанное описание с причиной; отмена вызывающего токена не подменяется шаблоном.
+/// The same provider, timeout and limits as the evaluation explanation. An empty or too long answer, a timeout and an error
+/// return the written description with a reason; cancelling the caller's token is not replaced by the template.
 /// </summary>
 public sealed class LlmRuleExplanationGenerator(ExplanationOptions options, IChatClient? chat = null) : IRuleExplanationGenerator
 {

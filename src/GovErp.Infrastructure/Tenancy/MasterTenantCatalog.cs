@@ -15,7 +15,7 @@ public sealed class MasterTenantCatalog(MasterDbContext master, IOptions<Tenancy
     public async Task<IReadOnlyList<TenantInfo>> ListAsync(CancellationToken ct = default) =>
         await master.Tenants.OrderBy(t => t.Name).Select(t => new TenantInfo(new TenantId(t.Id), t.Name, t.DatabaseName, t.IsDemo)).ToListAsync(ct);
 
-    /// <summary>Секрет берётся из конфигурации по CredentialKey тенанта и не покидает Infrastructure.</summary>
+    /// <summary>The secret is read from configuration by the tenant's CredentialKey and does not leave Infrastructure.</summary>
     public string RuntimeConnectionString(TenantInfo tenant)
     {
         var key = master.Tenants.Where(t => t.Id == tenant.Id.Value).Select(t => t.CredentialKey).Single();

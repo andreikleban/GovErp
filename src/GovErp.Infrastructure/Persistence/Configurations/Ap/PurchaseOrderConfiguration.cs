@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace GovErp.Infrastructure.Persistence.Configurations.Ap;
 
-/// <summary>Без rowversion: PO в коде неизменяем, billing claims живут на Encumbrance (GE-17).</summary>
+/// <summary>No rowversion: a PO is immutable in code, billing claims live on the Encumbrance (GE-17).</summary>
 public sealed class PurchaseOrderConfiguration : IEntityTypeConfiguration<PurchaseOrder>
 {
     public void Configure(EntityTypeBuilder<PurchaseOrder> b)

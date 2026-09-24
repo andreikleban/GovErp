@@ -3,7 +3,7 @@ using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.DomainServices.Rules;
 
-/// <summary>Шаг 1. Fund/Dept/Object гарантированы типом AccountCode; проверяется Grant по политике фонда.</summary>
+/// <summary>Step 1. Fund/Dept/Object are guaranteed by the AccountCode type; the Grant is checked against the fund's policy.</summary>
 public sealed class SegRequiredRule : IValidationRule
 {
     public string RuleId => "SEG_REQUIRED";

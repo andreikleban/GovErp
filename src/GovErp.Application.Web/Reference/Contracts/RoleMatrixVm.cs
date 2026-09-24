@@ -1,7 +1,7 @@
 namespace GovErp.Application.Web.Reference.Contracts;
 
 /// <summary>
-/// ReleaseSoftStopRoles — «кто может снять», из тех же ролей и правил, что и CanReleaseSoftStop в Rows (не отдельная догадка).
-/// SeparationOfDutiesNote — правило разделения обязанностей текстом под матрицей (проверяется сервисами, не самой матрицей).
+/// ReleaseSoftStopRoles is "who can release", built from the same roles and rules as CanReleaseSoftStop in Rows (not a separate guess).
+/// SeparationOfDutiesNote is the separation-of-duties rule as text under the matrix (enforced by the services, not by the matrix).
 /// </summary>
 public sealed record RoleMatrixVm(IReadOnlyList<RoleMatrixRowVm> Rows, IReadOnlyList<string> ReleaseSoftStopRoles, string SeparationOfDutiesNote);

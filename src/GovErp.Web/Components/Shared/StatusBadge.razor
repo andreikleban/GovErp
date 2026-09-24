@@ -4,7 +4,7 @@
     [Parameter, EditorRequired] public string Status { get; set; } = "";
     [Parameter] public string Title { get; set; } = "Document status";
 
-    /// <summary>Цвет по смыслу статуса: в работе, ждёт решения, согласован или проведён, отклонён.</summary>
+    /// <summary>Color by the meaning of the status: in progress, awaiting a decision, approved or posted, rejected.</summary>
     private string Tone => Status switch
     {
         "Submitted" => "info",

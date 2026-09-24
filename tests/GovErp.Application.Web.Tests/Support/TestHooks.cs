@@ -6,8 +6,8 @@ using GovErp.Domain.Payables.Repositories;
 namespace GovErp.Application.Web.Tests;
 
 /// <summary>
-/// Точка синхронизации гонки: первые Participants прибытий ждут друг друга (все прочитали данные), остальные проходят сразу —
-/// так повтор после конфликта и повторные чтения в той же операции не зависают.
+/// A race synchronization point: the first Participants arrivals wait for each other (all have read the data), the rest pass immediately,
+/// so a retry after a conflict and repeated reads within the same operation do not hang.
 /// </summary>
 public sealed class SyncPoint(int participants)
 {
@@ -56,7 +56,7 @@ public sealed class HookedBudgetLineRepository(IBudgetLineRepository inner, Test
     public Task AddAsync(BudgetLine line, CancellationToken ct = default) => inner.AddAsync(line, ct);
 }
 
-/// <summary>Сборщик снимка читает строку PO через encumbrance: барьер гонки claims стоит после FindByPoLineAsync.</summary>
+/// <summary>The snapshot assembler reads the PO line through the encumbrance: the claims race barrier sits after FindByPoLineAsync.</summary>
 public sealed class HookedEncumbranceRepository(IEncumbranceRepository inner, TestHooks hooks) : IEncumbranceRepository
 {
     public async Task<Encumbrance?> FindByPoLineAsync(string poLineRef, CancellationToken ct = default)

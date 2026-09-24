@@ -1,9 +1,9 @@
 namespace GovErp.Infrastructure.Tenancy;
 
 /// <summary>
-/// Секция "Tenancy". RuntimeConnectionTemplate: "Server=…;Database={0};User Id={1};Password={2};TrustServerCertificate=True";
+/// The "Tenancy" section. RuntimeConnectionTemplate: "Server=…;Database={0};User Id={1};Password={2};TrustServerCertificate=True";
 /// MigrationConnectionTemplate: "Server=…;Database={0};User Id=sa;Password=…;TrustServerCertificate=True";
-/// Credentials: CredentialKey тенанта → учётные данные runtime-пользователя его БД.
+/// Credentials: the tenant's CredentialKey → credentials of the runtime user of its database.
 /// </summary>
 public sealed class TenancyOptions
 {

@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace GovErp.Application.Web.Tests;
 
-/// <summary>Модель строится без подключения к БД: ловит ошибки маппинга до миграций и интеграционных тестов.</summary>
+/// <summary>The model builds without a database connection: catches mapping errors before migrations and integration tests.</summary>
 public class EfModelTests
 {
     private static IModel Model()

@@ -22,7 +22,7 @@ public sealed class ConcurrencyAndAtomicityTests(SqlServerFixture fixture)
         var inv = await t.CreateAsync(100_000m, null, (Fire, 100_000m, null));
         (await t.SubmitAsync(inv.Id)).IsAccepted.Should().BeTrue();
         (await t.BudgetAsync(Fire)).Held.Should().Be(100_000m);
-        await t.ApproveThroughAsync(inv.Id);                          // перевалидации на Approve не видят дефицита
+        await t.ApproveThroughAsync(inv.Id);                          // re-validations on Approve see no shortfall
         (await t.PostAsync(inv.Id)).IsAccepted.Should().BeTrue();
         var line = await t.BudgetAsync(Fire);
         (line.Available, line.Held, line.Actuals).Should().Be((47_000m, 0m, 232_000m));
@@ -59,7 +59,7 @@ public sealed class ConcurrencyAndAtomicityTests(SqlServerFixture fixture)
         var t = await fixture.CreateTenantAsync();
         var amend = await t.Service<IBudgetAppService>().AmendAsync(
             new AmendBudgetCommand(TenantDriver.Env(), Police, 2026, -240_000m, "BA-T-ZERO", SpringfieldData.Jun15), t.BudgetOfficer);
-        amend.IsAccepted.Should().BeTrue(amend.Reason);                // свободный бюджет Police = 0
+        amend.IsAccepted.Should().BeTrue(amend.Reason);                // Police free budget = 0
         var a = await t.CreateAsync(160_000m, "PO-2026-0451", (Police, 160_000m, 1));
         var b = await t.CreateAsync(160_000m, "PO-2026-0451", (Police, 160_000m, 1));
         t.Hooks.AfterEncumbranceRead = new SyncPoint(2);
@@ -88,7 +88,7 @@ public sealed class ConcurrencyAndAtomicityTests(SqlServerFixture fixture)
     public async Task MixedPostingTotals()
     {
         var t = await fixture.CreateTenantAsync();
-        var inv = await t.CreateAsync(164_800m, "PO-2026-0451", (Police, 164_800m, 1));   // 3% сверх PO — в допуске
+        var inv = await t.CreateAsync(164_800m, "PO-2026-0451", (Police, 164_800m, 1));   // 3% over the PO, within tolerance
         (await t.SubmitAsync(inv.Id)).IsAccepted.Should().BeTrue();
         await t.ApproveThroughAsync(inv.Id);
         (await t.PostAsync(inv.Id)).IsAccepted.Should().BeTrue();
@@ -101,7 +101,7 @@ public sealed class ConcurrencyAndAtomicityTests(SqlServerFixture fixture)
     {
         var t = await fixture.CreateTenantAsync();
         var inv = await t.CreateAsync(30_000m, null, ("101-6000-53100", 12_000m, null), ("202-4000-53100", 8_000m, null), ("501-5000-53100", 10_000m, null));
-        t.Hooks.FailOnSecondLookupOf = "202-4000-53100";               // первое чтение — сборщик снимка, второе — резервирование
+        t.Hooks.FailOnSecondLookupOf = "202-4000-53100";               // the first read is the snapshot assembler, the second the reservation
         await FluentActions.Awaiting(() => t.SubmitAsync(inv.Id)).Should().ThrowAsync<InvalidOperationException>();
         t.Hooks.Reset();
         (await t.GetAsync(inv.Id)).Status.Should().Be("Draft");

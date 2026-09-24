@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 
 namespace GovErp.Infrastructure.Startup;
 
-/// <summary>Порядок старта: ждать SQL, мигрировать Master, завести read-only master-пользователя, засеять Master, провижинить тенантов.</summary>
+/// <summary>Startup order: wait for SQL, migrate Master, create the read-only master user, seed Master, provision tenants.</summary>
 public static class DatabaseInitializer
 {
     private const int MaxAttempts = 20;
@@ -20,7 +20,7 @@ public static class DatabaseInitializer
         var startup = services.GetRequiredService<IOptions<StartupOptions>>().Value;
         var masterConnection = string.Format(CultureInfo.InvariantCulture, startup.MigrationConnectionTemplate, "master");
 
-        // SQL в контейнере стартует дольше приложения: до MaxAttempts попыток с паузой RetryDelay.
+        // SQL in a container starts slower than the application: up to MaxAttempts attempts with a RetryDelay pause.
         for (var attempt = 1; ; attempt++)
         {
             try

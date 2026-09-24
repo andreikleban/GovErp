@@ -13,8 +13,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace GovErp.Application.Web.Reference;
 
 /// <summary>
-/// Конфигурация правил: новая версия вместо правки существующей. Логика правила — в коде; меняются только данные
-/// определения. Набор проверяется разрешением движка (конфликты, ослабление вышестоящего слоя) до сохранения.
+/// Rule configuration: a new version instead of editing an existing one. The rule logic lives in code; only the definition
+/// data changes. The set is checked by the engine's resolution (conflicts, weakening a higher layer) before saving.
 /// </summary>
 public sealed class RuleAppService(ITenantOperationRunner runner) : IRuleAppService
 {
@@ -65,8 +65,8 @@ public sealed class RuleAppService(ITenantOperationRunner runner) : IRuleAppServ
             var created = new RuleDefinition(source.RuleId, version, source.Step, source.Layer, severity, cmd.Parameters, source.OverridableBy,
                 cmd.EffectiveFrom, null, source.Message, source.Resolution, enabled: true, source.ScopeFund, source.ScopeGrant);
 
-            // Движок должен разрешить набор с новой версией: иначе оценки на эту дату отказали бы с RULE_CONFIGURATION.
-            // ValidationException здесь — отказ runner'а; ничего ещё не сохранено.
+            // The engine must resolve the set with the new version, otherwise evaluations on that date would fail with RULE_CONFIGURATION.
+            // A ValidationException here becomes a runner refusal; nothing has been saved yet.
             var candidate = all.Append(created).ToList();
             RuleResolution.Resolve(candidate, cmd.EffectiveFrom, source.ScopeFund, source.ScopeGrant);
 
@@ -82,7 +82,7 @@ public sealed class RuleAppService(ITenantOperationRunner runner) : IRuleAppServ
             return CommandResult<RuleVm>.Accepted(RuleVmMapping.ToVm(created, RuleVmMapping.CurrentIds(candidate, clock.BusinessDate).Contains(created.Id)));
         }, ct: ct);
 
-    /// <summary>Набор параметров задан кодом правила: ключи те же, числовые значения остаются числами.</summary>
+    /// <summary>The parameter set is fixed by the rule's code: the same keys, and numeric values stay numeric.</summary>
     private static string? ParameterProblem(RuleDefinition source, IReadOnlyDictionary<string, string> parameters)
     {
         if (!source.Parameters.Keys.Order(StringComparer.Ordinal).SequenceEqual(parameters.Keys.Order(StringComparer.Ordinal), StringComparer.Ordinal))

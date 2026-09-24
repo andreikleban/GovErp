@@ -90,7 +90,7 @@ else
 @code {
     [Parameter] public string Number { get; set; } = "";
 
-    /// <summary>Демо ведёт всё в одном бюджетном годе; строки заказа сюда и ссылаются, пока PO не несёт свой FY.</summary>
+    /// <summary>The demo keeps everything in one budget year; order lines link to it until a PO carries its own FY.</summary>
     private const int _fiscalYear = 2026;
 
     private PurchaseOrderDetailVm? _order;

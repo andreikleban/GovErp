@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GovErp.Infrastructure.Seed;
 
-/// <summary>Демо-пользователи Master (spec §2). Тенантов создаёт TenantProvisioner, не этот класс.</summary>
+/// <summary>Master demo users (spec §2). Tenants are created by TenantProvisioner, not by this class.</summary>
 public static class MasterSeed
 {
     public const string DemoPassword = "1!Qwertyui";
@@ -13,7 +13,7 @@ public static class MasterSeed
     private const string Springfield = "springfield";
     private const string Shelbyville = "shelbyville";
 
-    // ap.clerk использует SpringfieldData.ClerkId — тот же пользователь фигурирует в демо-инвойсах (spec §2.4).
+    // ap.clerk uses SpringfieldData.ClerkId: the same user appears in the demo invoices (spec §2.4).
     public static readonly Guid FireChiefId = Guid.Parse("10000000-0000-0000-0000-000000000002");
     public static readonly Guid PoliceChiefId = Guid.Parse("10000000-0000-0000-0000-000000000003");
     public static readonly Guid PwDirectorId = Guid.Parse("10000000-0000-0000-0000-000000000004");
@@ -54,8 +54,8 @@ public static class MasterSeed
     }
 
     /// <summary>
-    /// Добавляет отсутствующих по UserName. Уже существующим выставляет общий демо-пароль,
-    /// если сохранённый хеш ему не соответствует.
+    /// Adds users missing by UserName. Existing users get the shared demo password
+    /// if the stored hash does not match it.
     /// </summary>
     public static async Task SeedUsersAsync(MasterDbContext master, IPasswordHasher<UserAccount> hasher, CancellationToken ct)
     {

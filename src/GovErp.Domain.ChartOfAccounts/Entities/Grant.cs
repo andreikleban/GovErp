@@ -7,9 +7,9 @@ public sealed class Grant
     public string Sponsor { get; private set; }
     public bool IsFederal { get; private set; }
     public DatePeriod Period { get; private set; }
-    /// <summary>Пусто — без ограничений.</summary>
+    /// <summary>Empty means no restriction.</summary>
     public IReadOnlyList<DepartmentCode> AllowedDepartments { get; private set; }
-    /// <summary>Пусто — без ограничений.</summary>
+    /// <summary>Empty means no restriction.</summary>
     public IReadOnlyList<ObjectCode> AllowableObjects { get; private set; }
     public GrantStatus Status { get; private set; }
 

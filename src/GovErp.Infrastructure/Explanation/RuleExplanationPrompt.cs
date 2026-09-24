@@ -6,8 +6,8 @@ using Microsoft.Extensions.AI;
 namespace GovErp.Infrastructure.Explanation;
 
 /// <summary>
-/// Промпт rule-explanation-v1. Факты — написанное описание и действующая версия правила; модель только пересказывает
-/// их для аудитории и не должна придумывать законы, пороги или источники.
+/// Prompt rule-explanation-v1. The facts are the written description and the current rule version; the model only retells
+/// them for the audience and must not invent laws, thresholds or sources.
 /// </summary>
 public static class RuleExplanationPrompt
 {

@@ -1,4 +1,4 @@
 namespace GovErp.Application.Web.Budget.Contracts;
 
-/// <summary>Карточка строки бюджета: суммы и поправки (Line), резервы с номерами инвойсов, encumbrance по этому счёту.</summary>
+/// <summary>Budget line card: amounts and amendments (Line), reservations with invoice numbers, encumbrances on this account.</summary>
 public sealed record BudgetLineDetailVm(BudgetLineVm Line, IReadOnlyList<BudgetReservationVm> Reservations, IReadOnlyList<EncumbranceVm> Encumbrances);

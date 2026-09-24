@@ -6,7 +6,7 @@ public sealed record CommandResult<T>(CommandStatus Status, T? Value, string? Re
 
     public static CommandResult<T> Accepted(T value) => new(CommandStatus.Accepted, value, null, false);
 
-    /// <summary>Бизнес-отказ: команда не изменила финансовое состояние; Value несёт актуальную оценку.</summary>
+    /// <summary>Business refusal: the command did not change financial state; Value carries the current evaluation.</summary>
     public static CommandResult<T> Refused(T? value, string reason) => new(CommandStatus.Refused, value, reason, false);
 
     public static CommandResult<T> Conflict(string reason) => new(CommandStatus.Conflict, default, reason, true);

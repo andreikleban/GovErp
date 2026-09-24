@@ -13,8 +13,8 @@ CultureInfo.DefaultThreadCurrentUICulture = unitedStates;
 var builder = WebApplication.CreateBuilder(args);
 if (builder.Environment.IsEnvironment("Demo"))
 {
-    // Статические ресурсы Blazor, включая blazor.web.js, подключаются сами только в Development.
-    // Aspire поднимает Web в среде Demo, и без этого скрипта кнопки на странице не получают события.
+    // Blazor static assets, including blazor.web.js, are wired up automatically only in Development.
+    // Aspire runs Web in the Demo environment, and without this script buttons on the page receive no events.
     builder.WebHost.UseStaticWebAssets();
 }
 

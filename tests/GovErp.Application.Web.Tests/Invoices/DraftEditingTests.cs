@@ -95,7 +95,7 @@ public sealed class DraftEditingTests(SqlServerFixture fixture)
         (first.Value!.Reference, second.Value!.Reference, preset.Value!.Reference)
             .Should().Be(("AP-2026-000001", "AP-2026-000002", "AP-2026-000003"));
         preset.Value.Number.Should().Be("MF-000003");
-        (await svc.SuggestNumberAsync(SpringfieldData.Jun15, t.Clerk)).Should().Be("INV-000004");   // подсказка ничего не резервирует
+        (await svc.SuggestNumberAsync(SpringfieldData.Jun15, t.Clerk)).Should().Be("INV-000004");   // the suggestion reserves nothing
     }
 
     [Fact]

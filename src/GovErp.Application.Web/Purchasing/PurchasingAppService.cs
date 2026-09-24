@@ -8,7 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace GovErp.Application.Web.Purchasing;
 
-/// <summary>Заказы на чтение: строки дополняются encumbrance той же строки (та же связка, что и в IReferenceAppService.GetPurchaseOrdersAsync).</summary>
+/// <summary>Read-only purchase orders: lines are enriched with the same line's encumbrance (the same pairing as IReferenceAppService.GetPurchaseOrdersAsync).</summary>
 public sealed class PurchasingAppService(ITenantOperationRunner runner) : IPurchasingAppService
 {
     public Task<IReadOnlyList<PurchaseOrderListItemVm>> ListOrdersAsync(ActorContext actor, CancellationToken ct = default) =>

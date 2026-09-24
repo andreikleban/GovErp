@@ -17,8 +17,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace GovErp.Infrastructure.Operations;
 
 /// <summary>
-/// Атомарная команда: scope и DbContext тенанта актора, транзакция, receipt по CommandId, один SaveChanges + commit.
-/// Конфликт rowversion или deadlock — откат и один повтор в новом scope, затем retryable Conflict.
+/// An atomic command: scope and DbContext of the actor's tenant, a transaction, a receipt by CommandId, one SaveChanges + commit.
+/// A rowversion conflict or deadlock means rollback and one retry in a new scope, then a retryable Conflict.
 /// </summary>
 public sealed class EfTenantOperationRunner(IServiceScopeFactory scopes) : ITenantOperationRunner
 {
@@ -61,10 +61,10 @@ public sealed class EfTenantOperationRunner(IServiceScopeFactory scopes) : ITena
                 await tx.CommitAsync(ct);
                 return result;
             }
-            // Оба фильтра IsTransient стоят раньше DbUpdateException: DbUpdateConcurrencyException — её наследник.
+            // Both IsTransient filters come before DbUpdateException: DbUpdateConcurrencyException derives from it.
             catch (Exception ex) when (IsTransient(ex) && attempt == 1)
             {
-                // Откат — при dispose транзакции; повтор в новом scope на свежих данных.
+                // Rollback happens when the transaction is disposed; the retry runs in a new scope on fresh data.
             }
             catch (Exception ex) when (IsTransient(ex))
             {
@@ -74,7 +74,7 @@ public sealed class EfTenantOperationRunner(IServiceScopeFactory scopes) : ITena
             {
                 if (index.Contains("ProcessedCommands", StringComparison.OrdinalIgnoreCase) && attempt == 1)
                 {
-                    continue;   // параллельный дубль той же команды: следующая попытка вернёт сохранённый receipt
+                    continue;   // a concurrent duplicate of the same command: the next attempt returns the saved receipt
                 }
 
                 return index.Contains("UX_VendorInvoices_Vendor_Number", StringComparison.OrdinalIgnoreCase)
@@ -89,8 +89,8 @@ public sealed class EfTenantOperationRunner(IServiceScopeFactory scopes) : ITena
             }
             catch (ArgumentException ex)
             {
-                // Значения домена (коды счетов, Money, обязательные строки) проверяют ввод конструктором.
-                // Неверный ввод формы — отказ с откатом, а не необработанное исключение в UI.
+                // Domain values (account codes, Money, required strings) validate input in their constructors.
+                // Invalid form input is a refusal with rollback, not an unhandled exception in the UI.
                 return CommandResult<T>.Refused(default, InputProblem(ex));
             }
         }
@@ -124,7 +124,7 @@ public sealed class EfTenantOperationRunner(IServiceScopeFactory scopes) : ITena
         ex is DbUpdateConcurrencyException
         || ex.GetBaseException() is SqlException { Number: 1205 or 3960 };   // deadlock victim, snapshot/serializable conflict
 
-    /// <summary>Сообщение без технического хвоста « (Parameter 'x')».</summary>
+    /// <summary>The message without the technical tail " (Parameter 'x')".</summary>
     private static string InputProblem(ArgumentException ex) =>
         ex.ParamName is { } name ? ex.Message.Replace($" (Parameter '{name}')", "", StringComparison.Ordinal) : ex.Message;
 

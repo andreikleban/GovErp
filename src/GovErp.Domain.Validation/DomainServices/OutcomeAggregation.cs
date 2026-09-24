@@ -3,9 +3,9 @@ using GovErp.Domain.Validation.ValueObjects;
 namespace GovErp.Domain.Validation.DomainServices;
 
 /// <summary>
-/// Overall = строжайший outcome без снятых overrides. Override снимает только Soft Stop и только если он
-/// привязан к тому же outcome предыдущей оценки (правило, версия, строка, доказательства) в том же цикле,
-/// версии содержания и наборе правил, выдан уполномоченной ролью, не автором и с причиной.
+/// Overall = the strictest outcome excluding released overrides. An override releases only a Soft Stop, and only if it
+/// is bound to the same outcome of the previous evaluation (rule, version, line, evidence) in the same cycle,
+/// content version and rule set, granted by an authorized role, not by the author, and with a reason.
 /// </summary>
 public static class OutcomeAggregation
 {
@@ -56,7 +56,7 @@ public static class OutcomeAggregation
             && SameEvidence(previous.Inputs, current.Inputs);
     }
 
-    /// <summary>Override выдан на конкретные цифры: если входы изменились, это новое исключение, а не старое.</summary>
+    /// <summary>An override is granted for specific figures: if the inputs changed, it is a new exception, not the old one.</summary>
     private static bool SameEvidence(IReadOnlyDictionary<string, string> a, IReadOnlyDictionary<string, string> b) =>
         a.Count == b.Count && a.All(pair => b.TryGetValue(pair.Key, out var value) && value == pair.Value);
 }

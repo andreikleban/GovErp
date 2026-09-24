@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace GovErp.Application.Web.Tests.Explanation;
 
-/// <summary>Регистрация клиентов проверяется без сетевого вызова: фабрика только конструирует клиент.</summary>
+/// <summary>Client registration is checked without a network call: the factory only constructs the client.</summary>
 public class ProviderConfigurationTests
 {
     [Fact]

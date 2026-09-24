@@ -9,8 +9,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace GovErp.Application.Web.Audit;
 
 /// <summary>
-/// Аудит на чтение по всему тенанту: оценки движка и события аудита за всеми документами (только инвойс — единственный
-/// документ, который сегодня проходит через ValidationPipeline и IAuditTrail). Latest 200 — после фильтров, по времени убыв.
+/// Tenant-wide read-only audit: engine evaluations and audit events across all documents (the invoice is the only
+/// document that goes through ValidationPipeline and IAuditTrail today). Latest 200 after filters, newest first.
 /// </summary>
 public sealed class AuditAppService(ITenantOperationRunner runner) : IAuditAppService
 {
@@ -57,8 +57,8 @@ public sealed class AuditAppService(ITenantOperationRunner runner) : IAuditAppSe
                 .OrderByDescending(e => e.OccurredAt)
                 .Take(Take);
 
-            // SubjectRef бывает разным по смыслу (Reference инвойса, счёт для BudgetAmended и т.п.): пробуем разрешить
-            // как инвойс и кэшируем по значению, чтобы не бить репозиторий повторно на одинаковых subjectRef.
+            // SubjectRef differs in meaning (invoice Reference, account for BudgetAmended, etc.): try to resolve it
+            // as an invoice and cache by value so the repository is not queried again for the same subjectRef.
             var invoices = sp.GetRequiredService<IVendorInvoiceRepository>();
             var cache = new Dictionary<string, Guid?>(StringComparer.Ordinal);
             var result = new List<AuditEventVm>();

@@ -15,8 +15,8 @@ namespace GovErp.Application.Web.Tests;
 public sealed class SqlCollection : ICollectionFixture<SqlServerFixture>;
 
 /// <summary>
-/// Один SQL Server на коллекцию "sql": Master и startup-конвейер как в Web-хосте, репозитории обёрнуты хуками TestHooks.
-/// Каждый тест получает свою tenant-БД (consistency §7: тесты не делят изменяемые остатки).
+/// One SQL Server for the "sql" collection: Master and the startup pipeline as in the Web host, repositories wrapped with TestHooks.
+/// Every test gets its own tenant database (consistency §7: tests do not share mutable balances).
 /// </summary>
 public sealed class SqlServerFixture : IAsyncLifetime
 {
@@ -31,8 +31,8 @@ public sealed class SqlServerFixture : IAsyncLifetime
     public IConfiguration Configuration { get; private set; } = null!;
 
     /// <summary>
-    /// App-сервисы зарегистрированы scoped (validateScopes запрещает брать их из корня); они без состояния —
-    /// каждая операция всё равно идёт в своём scope runner'а, поэтому тесты берут их из одного долгоживущего scope.
+    /// App services are registered as scoped (validateScopes forbids resolving them from the root); they are stateless,
+    /// and every operation runs in its own runner scope anyway, so tests take them from one long-lived scope.
     /// </summary>
     public IServiceProvider App => _appScope.ServiceProvider;
 
@@ -89,8 +89,8 @@ public sealed class SqlServerFixture : IAsyncLifetime
     }
 
     /// <summary>
-    /// Тенанты из DatabaseInitializer (springfield / shelbyville). Нужны для Users и имён актёров:
-    /// Master хранит пользователей только под этими TenantId, CreateTenantAsync заводит отдельную БД без строк в Master.
+    /// Tenants from DatabaseInitializer (springfield / shelbyville). Needed for Users and actor names:
+    /// Master stores users only under these TenantIds; CreateTenantAsync creates a separate database without rows in Master.
     /// </summary>
     public TenantDriver Named(string tenantId) => new(this, new TenantId(tenantId));
 

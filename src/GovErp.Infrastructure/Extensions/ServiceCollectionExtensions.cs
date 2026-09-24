@@ -28,8 +28,8 @@ namespace GovErp.Infrastructure.Extensions;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// EnableRetryOnFailure не включается: стратегия повторов EF несовместима с явной пользовательской транзакцией,
-    /// а повтор команды целиком делает runner.
+    /// EnableRetryOnFailure is not enabled: the EF retry strategy is incompatible with an explicit user transaction,
+    /// and the runner retries the whole command.
     /// </summary>
     public static IServiceCollection AddInfrastructure(this IServiceCollection s, IConfiguration cfg)
     {
@@ -41,7 +41,7 @@ public static class ServiceCollectionExtensions
         s.AddScoped<ITenantContextInitializer>(sp => sp.GetRequiredService<TenantContext>());
         s.AddSingleton<AppendOnlyInterceptor>();
         s.AddDbContext<GovErpDbContext>((sp, o) => o
-            .UseSqlServer(sp.GetRequiredService<ITenantContext>().ConnectionString)   // без EnableRetryOnFailure: повторы — забота runner'а
+            .UseSqlServer(sp.GetRequiredService<ITenantContext>().ConnectionString)   // no EnableRetryOnFailure: retries are the runner's job
             .AddInterceptors(sp.GetRequiredService<AppendOnlyInterceptor>()));
         s.AddSingleton<ITenantOperationRunner, EfTenantOperationRunner>();
         s.AddScoped<ICommandReceipts, EfCommandReceipts>();

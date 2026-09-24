@@ -111,7 +111,7 @@ h1 {
     font-weight: 600;
 }
 
-/* Заголовок страницы с действиями справа: линия под заголовком тянется на всю ширину. */
+/* Page title with actions on the right: the line under the title spans the full width. */
 .page-header {
     display: flex;
     align-items: center;
@@ -319,7 +319,7 @@ main > form, .signin {
 
 tbody tr.selected { background: #e7eef5; }
 
-/* Статус документа: скруглённая плашка, отличается от квадратных chip результатов проверки. */
+/* Document status: a rounded pill, distinct from the square chips of validation results. */
 .badge {
     display: inline-block;
     padding: 2px 10px;
@@ -350,11 +350,11 @@ h1 .badge { margin-left: 8px; }
 
 .payload.explanation { max-height: 24rem; }
 
-/* Меню по модулям: группа — подпись модуля и его экраны. */
+/* Menu by modules: a group is the module caption and its screens. */
 .rail-group { margin-bottom: 10px; }
 .rail-group + .rail-group { border-top: 1px solid var(--line); padding-top: 8px; }
 
-/* Хлебные крошки над заголовком страницы. */
+/* Breadcrumbs above the page title. */
 .crumbs ol {
     display: flex;
     flex-wrap: wrap;
@@ -368,7 +368,7 @@ h1 .badge { margin-left: 8px; }
 .crumbs li + li::before { content: "›"; margin-right: 4px; color: var(--muted); }
 .crumbs li[aria-current="page"] { color: var(--ink); font-weight: 600; }
 
-/* Фильтры списка: одна строка полей над таблицей. */
+/* List filters: one row of fields above the table. */
 .filter-bar {
     display: flex;
     flex-wrap: wrap;
@@ -385,7 +385,7 @@ h1 .badge { margin-left: 8px; }
 .amount.negative { color: var(--danger); }
 a.account { font-variant-numeric: tabular-nums; }
 
-/* Главная: ссылки на работу роли и плитки модулей. */
+/* Home: links to the role's work and module tiles. */
 .shortcuts { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; list-style: none; }
 .tiles {
     display: grid;
@@ -402,7 +402,7 @@ a.account { font-variant-numeric: tabular-nums; }
 .tile h2 { margin: 0 0 4px; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; }
 .tile a { display: block; padding: 2px 0; }
 
-/* Карточка документа: панель действий, шапка сеткой, статусная строка, строки, вкладки. */
+/* Document card: action bar, header grid, status line, lines, tabs. */
 .doc-toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -481,7 +481,7 @@ a.account { font-variant-numeric: tabular-nums; }
 .tab-body > .panel:first-child { margin-top: 0; border-top: 0; }
 .tab-body { margin-bottom: 14px; }
 
-/* Маленький диалог причины (Reject, Withdraw, Release Hold). */
+/* Small reason dialog (Reject, Withdraw, Release Hold). */
 .modal.small { width: min(520px, calc(100vw - 32px)); top: 18vh; }
 .modal.small textarea, .modal.small select { width: 100%; font: inherit; }
 .modal-footer {

@@ -11,7 +11,7 @@ public sealed class TenantContext : ITenantContext, ITenantContextInitializer
     public string ConnectionString => _connectionString ?? throw new InvalidOperationException("Tenant context is not initialized.");
     public bool IsInitialized => _tenantId is not null;
 
-    /// <summary>Один раз на scope операции; повторная инициализация другим тенантом — ошибка.</summary>
+    /// <summary>Once per operation scope; re-initializing with another tenant is an error.</summary>
     public void Initialize(TenantId tenantId, string connectionString)
     {
         if (_tenantId is not null && _tenantId != tenantId)

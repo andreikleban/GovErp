@@ -13,15 +13,15 @@ using Microsoft.Extensions.DependencyInjection;
 namespace GovErp.Application.Web.Posting;
 
 /// <summary>
-/// Любая ошибка после первого изменения агрегата выбрасывается исключением (период, баланс журнала, чужой claim):
-/// runner не вызывает SaveChanges, транзакция откатывается — ни бюджет, ни claims, ни статус не меняются.
-/// Повторный Post невозможен: статус уже Posted; параллельный второй Post упадёт на уникальном JournalEntries.SourceRef → Conflict.
+/// Any failure after the first aggregate change is thrown as an exception (period, journal balance, a foreign claim):
+/// the runner does not call SaveChanges and the transaction rolls back, so neither the budget, nor claims, nor the status change.
+/// A repeated Post is impossible: the status is already Posted; a concurrent second Post fails on the unique JournalEntries.SourceRef → Conflict.
 /// </summary>
 public sealed class PostingAppService(ITenantOperationRunner runner) : IPostingAppService
 {
     /// <summary>
-    /// Spec §5.4: Serializable-транзакция — перевалидация; при смене правил или маршрута инвойс уходит в новый цикл
-    /// согласования (Reevaluate) и Post отклоняется; иначе погашение своих резервов и claims, ликвидация, журнал, статус.
+    /// Spec §5.4: a Serializable transaction re-validates; if the rules or the route changed, the invoice goes into a new approval
+    /// cycle (Reevaluate) and Post is refused; otherwise it consumes its reservations and claims, liquidates, journals and sets the status.
     /// </summary>
     public Task<CommandResult<InvoiceVm>> PostAsync(InvoiceActionCommand cmd, ActorContext actor, CancellationToken ct = default) =>
         runner.ExecuteAsync(actor, cmd.Envelope, "PostInvoice", cmd, async (sp, token) =>
@@ -42,7 +42,7 @@ public sealed class PostingAppService(ITenantOperationRunner runner) : IPostingA
             var (record, restarted) = await ws.EvaluateAsync(invoice, EvaluationTrigger.Post, actor, token);
             if (restarted)
             {
-                // Новая оценка и новый цикл сохраняются: согласующие увидят инвойс снова (REVALIDATION_REQUIRED).
+                // The new evaluation and the new cycle are saved: approvers will see the invoice again (REVALIDATION_REQUIRED).
                 ws.Audit.Record(actor, "ApprovalCycleRestarted", invoice.Reference, record.Id.ToString(), new { Reason = "rule set or route changed since approval" });
                 return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token),
                     "REVALIDATION_REQUIRED: rules or the approval route changed since approval; the invoice returned to approval.");
@@ -81,7 +81,7 @@ public sealed class PostingAppService(ITenantOperationRunner runner) : IPostingA
                     .ConsumeBillingClaim(id, invoice.Id, cv);
             }
 
-            // Инвариант consistency §4: actuals растут ровно на сумму инвойса. Нарушение — ошибка программы, не отказ.
+            // Consistency invariant §4: actuals grow by exactly the invoice amount. A violation is a program error, not a refusal.
             if (charged != invoice.Total)
             {
                 throw new InvalidOperationException($"Posting would change actuals by {charged}, expected {invoice.Total}.");

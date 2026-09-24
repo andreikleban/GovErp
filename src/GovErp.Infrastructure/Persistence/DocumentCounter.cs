@@ -1,6 +1,6 @@
 namespace GovErp.Infrastructure.Persistence;
 
-/// <summary>Последний выданный номер серии (например, «AP-2026»). Инфраструктурная модель, не домен.</summary>
+/// <summary>The last issued number of a series (for example, "AP-2026"). An infrastructure model, not domain.</summary>
 public sealed class DocumentCounter
 {
     public string Series { get; set; } = "";

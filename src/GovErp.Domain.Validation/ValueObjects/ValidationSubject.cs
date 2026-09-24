@@ -58,8 +58,8 @@ public sealed record ValidationSubject
     public Guid? PreviousEvaluationId { get; init; }
 
     /// <summary>
-    /// Оценки, на которые ссылаются действующие overrides, если их больше одной (Soft Stop'ы сняты в разные моменты).
-    /// Пара PreviousEvaluationId / PreviousOutcomes — частный случай одной оценки.
+    /// Evaluations referenced by active overrides when there is more than one (Soft Stops released at different times).
+    /// The PreviousEvaluationId / PreviousOutcomes pair is the special case of a single evaluation.
     /// </summary>
     public IReadOnlyList<PreviousEvaluation> PreviousEvaluations
     {

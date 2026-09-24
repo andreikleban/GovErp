@@ -3,7 +3,7 @@ using Microsoft.Data.SqlClient;
 
 namespace GovErp.Infrastructure.Startup;
 
-/// <summary>Runtime-пользователь тенанта: чтение/запись своей БД, запрет UPDATE/DELETE append-only таблиц (GE-12). Миграции — отдельным пользователем.</summary>
+/// <summary>The tenant runtime user: read/write of its own database, UPDATE/DELETE denied on append-only tables (GE-12). Migrations use a separate user.</summary>
 public static partial class DatabaseSecurity
 {
     private static readonly string[] AppendOnlyTables =
@@ -13,7 +13,7 @@ public static partial class DatabaseSecurity
     {
         RequireIdentifier(database);
         RequireIdentifier(login);
-        ArgumentException.ThrowIfNullOrWhiteSpace(password);   // пустой пароль из недонастроенной конфигурации — ошибка старта, а не открытый логин
+        ArgumentException.ThrowIfNullOrWhiteSpace(password);   // an empty password from incomplete configuration is a startup error, not an open login
         var pwd = password.Replace("'", "''", StringComparison.Ordinal);
         var sql = $"""
             {LoginSql(login, pwd)}
@@ -30,12 +30,12 @@ public static partial class DatabaseSecurity
         await command.ExecuteNonQueryAsync(ct);
     }
 
-    /// <summary>Master runtime-пользователь: только чтение каталога тенантов и учётных записей (без db_datawriter, без DENY).</summary>
+    /// <summary>The Master runtime user: read-only access to the tenant catalog and user accounts (no db_datawriter, no DENY).</summary>
     public static async Task EnsureReadOnlyUserAsync(string migrationConnection, string database, string login, string password, CancellationToken ct)
     {
         RequireIdentifier(database);
         RequireIdentifier(login);
-        ArgumentException.ThrowIfNullOrWhiteSpace(password);   // пустой пароль из недонастроенной конфигурации — ошибка старта, а не открытый логин
+        ArgumentException.ThrowIfNullOrWhiteSpace(password);   // an empty password from incomplete configuration is a startup error, not an open login
         var pwd = password.Replace("'", "''", StringComparison.Ordinal);
         var sql = $"""
             {LoginSql(login, pwd)}
@@ -51,8 +51,8 @@ public static partial class DatabaseSecurity
     }
 
     /// <summary>
-    /// Логин создаётся при первом старте, а при следующих получает пароль из текущей конфигурации:
-    /// смена пароля в .env / AppHost применяется к уже существующей базе без ручного ALTER LOGIN.
+    /// The login is created on first start and gets the password from the current configuration on later starts:
+    /// a password change in .env / AppHost applies to an existing database without a manual ALTER LOGIN.
     /// </summary>
     private static string LoginSql(string login, string escapedPassword) => $"""
         IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'{login}')
@@ -61,7 +61,7 @@ public static partial class DatabaseSecurity
             ALTER LOGIN [{login}] WITH PASSWORD = N'{escapedPassword}';
         """;
 
-    /// <summary>Идентификаторы нельзя передать параметром — только проверенные имена.</summary>
+    /// <summary>Identifiers cannot be passed as parameters, so only validated names are used.</summary>
     private static void RequireIdentifier(string value)
     {
         if (!Identifier().IsMatch(value))

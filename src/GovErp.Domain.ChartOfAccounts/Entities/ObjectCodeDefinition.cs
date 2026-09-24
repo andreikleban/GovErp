@@ -1,6 +1,6 @@
 namespace GovErp.Domain.ChartOfAccounts.Entities;
 
-/// <summary>Справочная запись object-кода: вид расхода / актива / обязательства / бюджетный счёт.</summary>
+/// <summary>Reference entry of an object code: expense / asset / liability / budgetary account.</summary>
 public sealed class ObjectCodeDefinition
 {
     public ObjectCode Code { get; private set; }

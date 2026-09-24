@@ -1,4 +1,4 @@
-@* Маленький диалог причины для Reject, Withdraw и Release Hold: без причины подтвердить нельзя (сервер её требует). *@
+@* A small reason dialog for Reject, Withdraw and Release Hold: it cannot be confirmed without a reason (the server requires one). *@
 @if (Open)
 {
     <div class="modal-backdrop" @onclick="CancelAsync"></div>
@@ -38,7 +38,7 @@
 
     protected override void OnParametersSet()
     {
-        // Каждое открытие начинается с пустой причины: прежний текст относился к другому действию.
+        // Every opening starts with an empty reason: the previous text belonged to another action.
         if (Open && !_shown)
         {
             _reason = "";

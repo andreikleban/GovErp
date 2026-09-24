@@ -5,9 +5,9 @@ using Microsoft.EntityFrameworkCore;
 namespace GovErp.Infrastructure.Persistence;
 
 /// <summary>
-/// Счётчик в строке ap.DocumentCounters меняется в транзакции команды (runner уже открыл её на этом DbContext):
-/// HOLDLOCK держит строку до commit, поэтому параллельные создания получают номера по очереди, а откат
-/// команды возвращает номер — нумерация без пропусков.
+/// The counter row in ap.DocumentCounters changes inside the command transaction (the runner has already opened it on this DbContext):
+/// HOLDLOCK holds the row until commit, so concurrent creations get numbers in turn, and a rollback
+/// of the command returns the number: numbering without gaps.
 /// </summary>
 public sealed class EfInvoiceNumbering(GovErpDbContext db) : IInvoiceNumbering
 {

@@ -3,8 +3,8 @@ using GovErp.Application.Web.Commands;
 namespace GovErp.Application.Web.Reference.Commands;
 
 /// <summary>
-/// Новая версия правила на основе существующей (SourceId): те же код, шаг, слой и scope; меняются только параметры,
-/// серьёзность и дата начала действия. Severity = null оставляет серьёзность исходной версии.
+/// A new rule version based on an existing one (SourceId): same code, step, layer and scope; only parameters,
+/// severity and effective date change. Severity = null keeps the severity of the source version.
 /// </summary>
 public sealed record NewRuleVersionCommand(CommandEnvelope Envelope, Guid SourceId, IReadOnlyDictionary<string, string> Parameters,
     string? Severity, DateOnly EffectiveFrom, string Reason);

@@ -7,8 +7,8 @@ using GovErp.Domain.Validation.ValueObjects;
 namespace GovErp.Infrastructure.Explanation;
 
 /// <summary>
-/// Детерминированное объяснение только из EvaluationRecord: без внешних вызовов и без обращения к БД.
-/// Шаги берутся из record.Steps (конвейер сам отмечает пропущенные), данные транзакции — из InputSnapshot.
+/// A deterministic explanation from the EvaluationRecord alone: no external calls and no database access.
+/// Steps come from record.Steps (the pipeline marks skipped ones itself), transaction data from InputSnapshot.
 /// </summary>
 public sealed class TemplateExplanationGenerator : IExplanationGenerator
 {
@@ -80,7 +80,7 @@ public sealed class TemplateExplanationGenerator : IExplanationGenerator
     private static string ChecksLine(EvaluationRecord record)
     {
         var executed = record.Steps.Where(s => s.Status == StepExecutionStatus.Executed).Select(s => s.Step.ToString()).ToList();
-        // PostingEligibility выполняется только на Post; остальные пропуски — после Hard Stop.
+        // PostingEligibility runs only on Post; other skips follow a Hard Stop.
         var skippedAfterStop = record.Steps
             .Where(s => s.Status == StepExecutionStatus.Skipped && s.Step != ValidationStep.PostingEligibility)
             .Select(s => s.Step.ToString()).ToList();

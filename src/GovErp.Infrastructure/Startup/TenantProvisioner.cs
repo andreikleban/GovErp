@@ -12,7 +12,7 @@ namespace GovErp.Infrastructure.Startup;
 
 public sealed class TenantProvisioner(IOptions<StartupOptions> startup, IOptions<TenancyOptions> tenancy, IClock clock)
 {
-    /// <summary>Реестр тенантов пишется migration-пользователем: runtime-пользователь Master только читает.</summary>
+    /// <summary>The tenant registry is written by the migration user: the Master runtime user only reads.</summary>
     private MasterDbContext MasterForWrite() => new(new DbContextOptionsBuilder<MasterDbContext>()
         .UseSqlServer(string.Format(CultureInfo.InvariantCulture, startup.Value.MigrationConnectionTemplate, startup.Value.MasterDatabase)).Options);
 
@@ -23,7 +23,7 @@ public sealed class TenantProvisioner(IOptions<StartupOptions> startup, IOptions
         {
             await db.Database.MigrateAsync(ct);
             await TenantSeeder.SeedAsync(db, seed, ct);
-            // Неразрешимый набор (конфликт слоёв, ослабление) — ValidationException из Resolve; пропуск обязательного правила — ниже.
+            // An unresolvable set (layer conflict, weakening) throws ValidationException from Resolve; a missing mandatory rule is checked below.
             var effective = RuleResolution.Resolve(await db.RuleDefinitions.ToListAsync(ct), clock.BusinessDate);
             var missing = RuleCatalog.Default.MandatoryRuleIds.Where(id => effective.Find(id) is null).ToList();
             if (missing.Count > 0)

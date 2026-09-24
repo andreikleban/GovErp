@@ -7,7 +7,7 @@ namespace GovErp.Application.Web.Budget;
 
 public static class BudgetMapping
 {
-    /// <summary>Opening balance строки — по OpeningBalanceId среди opening balances её финансового года.</summary>
+    /// <summary>The line's opening balance, found by OpeningBalanceId among the opening balances of its fiscal year.</summary>
     public static async Task<BudgetLineVm> ToVmAsync(BudgetLine line, IOpeningBalanceRepository openings, CancellationToken ct) =>
         ToVm(line, await openings.ListAsync(line.FiscalYear, ct));
 
@@ -20,7 +20,7 @@ public static class BudgetMapping
             line.Amendments.Select(a => new AmendmentVm(a.Amount.Amount, a.Reference, a.EffectiveDate)).ToList());
     }
 
-    /// <summary>Резервы строки с номером инвойса, который держит (или держал) каждый; инвойс мог быть уже удалён из вида — тогда id как заглушка.</summary>
+    /// <summary>The line's reservations with the number of the invoice that holds (or held) each; if the invoice is no longer visible, its id is shown instead.</summary>
     public static async Task<IReadOnlyList<BudgetReservationVm>> ReservationsAsync(BudgetLine line, IVendorInvoiceRepository invoices, CancellationToken ct)
     {
         var result = new List<BudgetReservationVm>();
@@ -33,7 +33,7 @@ public static class BudgetMapping
         return result;
     }
 
-    /// <summary>Encumbrance с claims ликвидации и billing claims, у каждого — номер инвойса вместо голого id.</summary>
+    /// <summary>Encumbrance with liquidation claims and billing claims, each with an invoice number instead of a bare id.</summary>
     public static async Task<EncumbranceVm> ToEncumbranceVmAsync(Encumbrance encumbrance, IVendorInvoiceRepository invoices, CancellationToken ct)
     {
         var claims = new List<EncumbranceClaimVm>();

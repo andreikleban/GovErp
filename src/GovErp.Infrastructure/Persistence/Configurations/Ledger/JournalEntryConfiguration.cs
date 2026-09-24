@@ -11,7 +11,7 @@ public sealed class JournalEntryConfiguration : IEntityTypeConfiguration<Journal
         b.ToTable("JournalEntries", "ledger");
         b.HasKey(x => x.Id);
         b.Property(x => x.Id).ValueGeneratedNever();
-        // Один журнал на инвойс: вторая попытка Post падает на индексе.
+        // One journal entry per invoice: a second Post attempt fails on the index.
         b.Property(x => x.SourceRef).HasMaxLength(100);
         b.HasIndex(x => x.SourceRef).IsUnique();
         b.Property(x => x.PostedBy).HasConversion(Conversions.User);

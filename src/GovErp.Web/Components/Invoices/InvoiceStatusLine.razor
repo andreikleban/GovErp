@@ -3,7 +3,7 @@
 @using GovErp.Application.Web.Invoices.Contracts
 @inject IClock Clock
 
-@* Состояние документа одной строкой: статус, проверка, согласование, деньги, учёт, оплата — по текущей (последней) оценке. *@
+@* Document state in one line: status, check, approval, money, accounting, payment, from the current (latest) evaluation. *@
 <dl class="status-line">
     <div>
         <dt>Document</dt>
@@ -97,7 +97,7 @@
 
     private string Accounting => Invoice?.PostedAt is { } at ? $"Posted {at.LocalDateTime:yyyy-MM-dd}" : "Not posted";
 
-    /// <summary>Готовность к передаче в оплату: те же условия, что ReadyForPaymentHandoff; первая невыполненная — причина.</summary>
+    /// <summary>Readiness for payment handoff: the same conditions as ReadyForPaymentHandoff; the first unmet one is the reason.</summary>
     private (string Text, string? Tone) Payment =>
         Invoice is null ? ("—", (string?)null)
         : Invoice.PaymentHold ? ("On hold", "bad")

@@ -28,7 +28,7 @@ public sealed class RuleVersionTests(SqlServerFixture fixture)
         var before = await reference.GetRulesAsync(t.Clerk);
         var source = Current(before, "PROCUREMENT_THRESHOLD");
 
-        // 26,000 без PO: по версии 1 (порог 25,000) — Soft Stop закупки.
+        // 26,000 without a PO: under version 1 (threshold 25,000) it is a procurement Soft Stop.
         var invoice = await t.CreateAsync(26_000m, null, (Water, 26_000m, null));
         var first = await t.Service<IInvoiceAppService>().ValidateAsync(new InvoiceActionCommand(TenantDriver.Env(), invoice.Id), t.Clerk);
         first.Value!.LastEvaluation!.Outcomes.Should().Contain(o => o.RuleId == "PROCUREMENT_THRESHOLD" && o.Severity == "SoftStop");
@@ -39,7 +39,7 @@ public sealed class RuleVersionTests(SqlServerFixture fixture)
         created.Value!.Version.Should().Be(source.Version + 1);
         var after = await reference.GetRulesAsync(t.Clerk);
         Current(after, "PROCUREMENT_THRESHOLD").Parameters["threshold"].Should().Be("200000");
-        after.Rules.Single(r => r.Id == source.Id).IsCurrent.Should().BeFalse();       // прежняя версия осталась в истории
+        after.Rules.Single(r => r.Id == source.Id).IsCurrent.Should().BeFalse();       // the previous version stays in history
         after.CurrentFingerprint.Should().NotBe(before.CurrentFingerprint);
 
         var second = await t.Service<IInvoiceAppService>().ValidateAsync(new InvoiceActionCommand(TenantDriver.Env(), invoice.Id), t.Clerk);
@@ -77,7 +77,7 @@ public sealed class RuleVersionTests(SqlServerFixture fixture)
         detail.Versions.Select(v => v.Version).Should().Equal(2, 1);
 
         var explained = await reference.ExplainRuleAsync("PROCUREMENT_THRESHOLD", Application.Web.Explanation.ExplanationAudience.Auditor, t.Clerk);
-        explained.Text.Should().Contain("threshold = 30000");                // шаблон (провайдер в тестах — Template) видит действующую версию
+        explained.Text.Should().Contain("threshold = 30000");                // the template (the provider in tests is Template) sees the current version
         await Assert.ThrowsAsync<Application.Web.Common.NotFoundException>(() => reference.GetRuleDetailAsync("NO_SUCH_RULE", t.Clerk));
     }
 
@@ -95,6 +95,6 @@ public sealed class RuleVersionTests(SqlServerFixture fixture)
         (await rules.CreateVersionAsync(unknownKey, t.FinanceDirector)).Status.Should().Be(CommandStatus.Refused);
 
         var rulesAfter = await t.Service<IReferenceAppService>().GetRulesAsync(t.Clerk);
-        rulesAfter.Rules.Count(r => r.RuleId == "PROCUREMENT_THRESHOLD").Should().Be(1);   // отказы ничего не сохранили
+        rulesAfter.Rules.Count(r => r.RuleId == "PROCUREMENT_THRESHOLD").Should().Be(1);   // the refusals saved nothing
     }
 }

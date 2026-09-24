@@ -1,8 +1,8 @@
 namespace GovErp.Application.Web.Invoices.Contracts;
 
 /// <summary>
-/// Фильтры списка инвойсов; null — без ограничения. Status — имя статуса документа (Draft, Submitted, ...),
-/// Fund — код фонда хотя бы одной строки, HasHolds — есть ли в последней оценке неснятые Soft/Hard Stop.
+/// Invoice list filters; null means no restriction. Status is the document status name (Draft, Submitted, ...),
+/// Fund is the fund code of at least one line, HasHolds is whether the latest evaluation has open Soft/Hard Stops.
 /// </summary>
 public sealed record InvoiceListFilter(string? Status = null, string? Fund = null, bool? HasHolds = null)
 {

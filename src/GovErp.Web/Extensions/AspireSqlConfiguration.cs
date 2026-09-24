@@ -3,8 +3,8 @@ using System.Data.Common;
 namespace GovErp.Web.Extensions;
 
 /// <summary>
-/// Aspire кладёт SA-строку в ConnectionStrings:sql. От неё собираются шаблоны миграции,
-/// runtime-тенантов и Master — несколько БД на одном экземпляре (GE-6).
+/// Aspire puts the SA string into ConnectionStrings:sql. The migration, tenant runtime and Master templates
+/// are built from it: several databases on one instance (GE-6).
 /// </summary>
 public static class AspireSqlConfiguration
 {
@@ -36,7 +36,7 @@ public static class AspireSqlConfiguration
     }
 
     /// <summary>
-    /// Aspire генерирует SA-пароль со скобками. Их нельзя класть в шаблон <c>string.Format</c> как есть.
+    /// Aspire generates an SA password with braces. They cannot go into a <c>string.Format</c> template as is.
     /// </summary>
     private static string ToFormatTemplate(string server, string database, string user, string password)
     {

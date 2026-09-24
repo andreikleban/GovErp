@@ -1,6 +1,6 @@
 namespace GovErp.Domain.ChartOfAccounts.Entities;
 
-/// <summary>Фонд — самостоятельная учётная единица с ограничениями на использование. Справочник (анемичный), кроме Check.</summary>
+/// <summary>A fund is a self-balancing accounting entity with restrictions on its use. Reference data (anemic), except Check.</summary>
 public sealed class Fund
 {
     public FundCode Code { get; private set; }
@@ -9,9 +9,9 @@ public sealed class Fund
     public AccountingBasis Basis { get; private set; }
     public BudgetControlMode ControlMode { get; private set; }
     public GrantPolicy GrantPolicy { get; private set; }
-    /// <summary>Пусто — без ограничений.</summary>
+    /// <summary>Empty means no restriction.</summary>
     public IReadOnlyList<DepartmentCode> AllowedDepartments { get; private set; }
-    /// <summary>Пусто — без ограничений.</summary>
+    /// <summary>Empty means no restriction.</summary>
     public IReadOnlyList<ObjectCode> AllowedObjects { get; private set; }
     public bool IsActive { get; private set; }
 
@@ -42,7 +42,7 @@ public sealed class Fund
         IsActive = isActive;
     }
 
-    /// <summary>Для восстановления из хранилища (DDD-9).</summary>
+    /// <summary>For rehydration from storage (DDD-9).</summary>
     private Fund()
     {
         Code = null!;

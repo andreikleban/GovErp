@@ -2,7 +2,7 @@ using GovErp.Domain.Ledger.Exceptions;
 
 namespace GovErp.Domain.Ledger.Entities;
 
-/// <summary>Проведённая запись журнала. Неизменяема после создания. Баланс — по каждому фонду и семейству счетов.</summary>
+/// <summary>A posted journal entry. Immutable after creation. Balanced per fund and account family.</summary>
 public sealed class JournalEntry
 {
     private readonly List<JournalLine> _lines = [];

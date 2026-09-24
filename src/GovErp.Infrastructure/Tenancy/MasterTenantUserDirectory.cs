@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GovErp.Infrastructure.Tenancy;
 
-/// <summary>Читает Master.Users своего тенанта. Roles — JSON-колонка; материализуем сущности, затем проецируем (EF не переводит List{string} в проекции).</summary>
+/// <summary>Reads Master.Users of its tenant. Roles is a JSON column; entities are materialized first, then projected (EF does not translate List{string} in projections).</summary>
 public sealed class MasterTenantUserDirectory(MasterDbContext master) : ITenantUserDirectory
 {
     public async Task<IReadOnlyList<TenantUserRecord>> ListAsync(TenantId tenantId, CancellationToken ct = default) =>

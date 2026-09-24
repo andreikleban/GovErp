@@ -3,7 +3,7 @@ using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Infrastructure.Seed;
 
-/// <summary>12 определений spec §4.2. Пороги и слои — допущения демо, не юридические нормы.</summary>
+/// <summary>The 12 definitions of spec §4.2. Thresholds and layers are demo assumptions, not legal norms.</summary>
 public static class RuleSeed
 {
     public static IReadOnlyList<RuleDefinition> All(DateOnly from)

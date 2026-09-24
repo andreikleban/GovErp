@@ -9,7 +9,7 @@ public sealed class EfEncumbranceRepository(GovErpDbContext db) : IEncumbranceRe
     public Task<Encumbrance?> FindByPoLineAsync(string poLineRef, CancellationToken ct = default) =>
         db.Encumbrances.SingleOrDefaultAsync(e => e.PoLineRef == poLineRef, ct);
 
-    /// <summary>Владелец claim ликвидации или billing claim.</summary>
+    /// <summary>Owner of the liquidation claim or billing claim.</summary>
     public Task<Encumbrance?> FindByClaimAsync(Guid claimId, CancellationToken ct = default) =>
         db.Encumbrances.SingleOrDefaultAsync(e => e.Claims.Any(c => c.Id == claimId) || e.BillingClaims.Any(c => c.Id == claimId), ct);
 

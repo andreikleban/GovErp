@@ -19,7 +19,7 @@ public sealed class RuleDefinitionConfiguration : IEntityTypeConfiguration<RuleD
         b.Property(x => x.ScopeGrant).HasMaxLength(32);
         b.Property(x => x.Parameters).AsJson();
         b.Property(x => x.OverridableBy).AsJson();
-        // Без фильтра: по умолчанию EF на SQL Server фильтрует IS NOT NULL, и правила без scope выпали бы из проверки.
+        // No filter: by default EF on SQL Server filters IS NOT NULL, and rules without scope would drop out of the check.
         b.HasIndex(x => new { x.RuleId, x.Layer, x.Version, x.ScopeFund, x.ScopeGrant }).IsUnique().HasFilter(null);
     }
 }

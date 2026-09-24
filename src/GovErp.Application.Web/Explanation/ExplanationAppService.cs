@@ -10,7 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace GovErp.Application.Web.Explanation;
 
-/// <summary>Объяснения оценок. Генерация (сеть, LLM) — до и вне транзакции (consistency §4); транзакция только сохраняет результат.</summary>
+/// <summary>Evaluation explanations. Generation (network, LLM) runs before and outside the transaction (consistency §4); the transaction only stores the result.</summary>
 public sealed class ExplanationAppService(ITenantOperationRunner runner, IExplanationGenerator generator) : IExplanationAppService
 {
     public async Task<CommandResult<ExplanationVm>> ExplainAsync(Guid evaluationId, ExplanationAudience audience, CommandEnvelope envelope,
@@ -22,7 +22,7 @@ public sealed class ExplanationAppService(ITenantOperationRunner runner, IExplan
             return CommandResult<ExplanationVm>.NotFound($"Evaluation {evaluationId} not found.");
         }
 
-        var result = await generator.ExplainAsync(record, audience, ct);   // сеть — до и вне транзакции
+        var result = await generator.ExplainAsync(record, audience, ct);   // network: before and outside the transaction
         return await runner.ExecuteAsync(actor, envelope, "ExplainEvaluation", new { evaluationId, audience }, (sp, token) =>
         {
             var clock = sp.GetRequiredService<IClock>();
@@ -40,7 +40,7 @@ public sealed class ExplanationAppService(ITenantOperationRunner runner, IExplan
             (await sp.GetRequiredService<IExplanationRepository>().ListByEvaluationAsync(evaluationId, token))
                 .Select(ExplanationMapping.ToVm).ToList(), ct);
 
-    /// <summary>Имена акторов — та же логика, что у Audit (Tenancy.TenantUserNaming): дёшево при размере тенанта демо.</summary>
+    /// <summary>Actor names use the same logic as Audit (Tenancy.TenantUserNaming): cheap at the demo tenant size.</summary>
     public Task<IReadOnlyList<EvaluationVm>> GetEvaluationHistoryAsync(Guid invoiceId, ActorContext actor, CancellationToken ct = default) =>
         runner.QueryAsync<IReadOnlyList<EvaluationVm>>(actor, async (sp, token) =>
         {
@@ -54,7 +54,7 @@ public sealed class ExplanationAppService(ITenantOperationRunner runner, IExplan
         runner.QueryAsync<IReadOnlyList<AuditEventVm>>(actor, async (sp, token) =>
         {
             var reference = await ReferenceOfAsync(sp, invoiceId, token);
-            // Здесь SubjectRef каждого события — Reference именно этого инвойса (ListBySubjectAsync фильтрует по нему).
+            // Here the SubjectRef of every event is the Reference of this very invoice (ListBySubjectAsync filters by it).
             return (await sp.GetRequiredService<IAuditTrail>().ListBySubjectAsync(reference, token))
                 .Select(e => AuditEventVm.From(e, invoiceId)).ToList();
         }, ct);

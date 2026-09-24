@@ -3,7 +3,7 @@ using GovErp.Application.Web.Common;
 
 namespace GovErp.Web.Authentication;
 
-/// <summary>Единственное место, где ActorContext становится cookie-claims и обратно (GE-5).</summary>
+/// <summary>The only place where ActorContext becomes cookie claims and back (GE-5).</summary>
 public static class ActorClaims
 {
     public const string Tenant = "tenant";

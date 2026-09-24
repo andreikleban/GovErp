@@ -27,7 +27,7 @@ public class JournalEntryTests
     [Fact]
     public void Multi_fund_entry_must_balance_per_fund()
     {
-        // Итог сходится (30k/30k), но фонд 101 — Дт 12k / Кт 8k, фонд 202 — Дт 8k / Кт 12k.
+        // The total balances (30k/30k), but fund 101 is Dr 12k / Cr 8k, fund 202 is Dr 8k / Cr 12k.
         FluentActions.Invoking(() => JournalEntry.Create("INV-2",
             [Dr("101-6000-53100", 12_000m), Cr("101-0000-2100", 8_000m),
              Dr("202-4000-53100", 8_000m),  Cr("202-0000-2100", 12_000m),
@@ -48,7 +48,7 @@ public class JournalEntryTests
     [Fact]
     public void Budgetary_and_financial_families_balance_separately()
     {
-        // Сторно encumbrance (Budgetary) + расход (Financial) — обе пары внутри своих семейств.
+        // Encumbrance reversal (Budgetary) + expense (Financial): both pairs within their own families.
         var entry = JournalEntry.Create("INV-3",
             [Dr("701-0000-2900-G-COPS-26", 160_000m, LedgerFamily.Budgetary), Cr("701-3000-5900-G-COPS-26", 160_000m, LedgerFamily.Budgetary),
              Dr("701-3000-53100-G-COPS-26", 160_000m), Cr("701-0000-2100", 160_000m)], OpenSep, Poster, At);

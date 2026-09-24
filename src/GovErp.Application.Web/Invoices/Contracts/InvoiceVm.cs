@@ -3,8 +3,8 @@ using GovErp.Application.Web.Validation.Contracts;
 namespace GovErp.Application.Web.Invoices.Contracts;
 
 /// <summary>
-/// RowVersion и Funds заполнены только в ответах чтения (GetAsync): после команды UI перечитывает инвойс, а резервы,
-/// созданные ещё не сохранённой командой, запросом к хранилищу не видны.
+/// RowVersion and Funds are filled only in read responses (GetAsync): after a command the UI re-reads the invoice, and reservations
+/// created by a command that is not yet saved are not visible to a storage query.
 /// </summary>
 public sealed record InvoiceVm(Guid Id, string Number, string Reference, Guid VendorId, string VendorName,
     DateOnly InvoiceDate, DateOnly ServiceDate, DateOnly PostingDate, DateOnly DueDate, int FiscalYear, decimal Total, string? PoRef,

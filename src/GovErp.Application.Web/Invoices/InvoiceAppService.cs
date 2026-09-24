@@ -12,9 +12,9 @@ using Microsoft.Extensions.DependencyInjection;
 namespace GovErp.Application.Web.Invoices;
 
 /// <summary>
-/// Сценарии инвойса. Правило для всех команд: возвращённый Refused / Forbidden сохраняет изменения тела вместе с receipt
-/// (запись оценки, аудит отказа, новый цикл согласования); отказ после изменения агрегатов, которое нельзя сохранять,
-/// оформляется только доменным исключением — runner превращает его в Refused и откатывает всё.
+/// Invoice use cases. Rule for all commands: a returned Refused / Forbidden keeps the body's changes together with the receipt
+/// (the evaluation record, the refusal audit, a new approval cycle); a refusal after aggregate changes that must not be saved
+/// is raised only as a domain exception: the runner turns it into Refused and rolls everything back.
 /// </summary>
 public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceAppService
 {
@@ -25,7 +25,7 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
             var result = new List<InvoiceListItemVm>();
             var status = string.IsNullOrWhiteSpace(filter.Status) ? null : filter.Status.Trim();
             var fund = string.IsNullOrWhiteSpace(filter.Fund) ? null : filter.Fund.Trim();
-            // Фильтры по статусу и фонду дешёвые (поля документа) и идут до чтения оценки; «есть блокировки» — по последней оценке.
+            // Status and fund filters are cheap (document fields) and run before the evaluation is read; "has holds" uses the latest evaluation.
             var matching = (await ws.Invoices.ListAsync(token))
                 .Where(i => status is null || string.Equals(i.Status.ToString(), status, StringComparison.OrdinalIgnoreCase))
                 .Where(i => fund is null || InvoiceMapping.FundsOf(i).Contains(fund, StringComparer.Ordinal))
@@ -77,23 +77,23 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
                 return CommandResult<InvoiceVm>.Refused(null, $"Purchase order {cmd.PoRef} not found.");
             }
 
-            // Дубликат номера поставщика проверяется до выдачи регистрационного номера: пока ничего не изменено,
-            // отказ можно вернуть. Гонку двух одинаковых номеров закрывает уникальный индекс (runner → Refused).
+            // The duplicate vendor number is checked before the registration number is issued: nothing has changed yet,
+            // so a refusal can be returned. A race of two identical numbers is closed by the unique index (runner → Refused).
             if (cmd.GeneratedNumberPrefix is null
                 && await ws.Invoices.ExistsDuplicateAsync(cmd.VendorId, VendorInvoice.NormalizeNumber(cmd.Number), null, token))
             {
                 return CommandResult<InvoiceVm>.Refused(null, "An invoice with this number already exists for this vendor.");
             }
 
-            // Регистрационный номер — последним шагом перед созданием: блокировка счётчика держится до commit,
-            // поэтому её окно короткое, а любой отказ ниже (исключением) откатывает и номер — нумерация без пропусков.
+            // The registration number is the last step before creation: the counter lock is held until commit,
+            // so its window is short, and any refusal below (an exception) rolls the number back too: numbering without gaps.
             var fiscalYear = FiscalYear.FromDate(cmd.PostingDate);
             var sequence = await sp.GetRequiredService<IInvoiceNumbering>().NextAsync(fiscalYear, token);
             var number = cmd.GeneratedNumberPrefix is { } prefix
                 ? IInvoiceNumbering.GeneratedNumber(prefix, sequence)
                 : cmd.Number;
 
-            // Конструктор и AddDistribution проверяют инварианты; даты вне правила 6 отклонит конвейер (VALIDATION_INPUT).
+            // The constructor and AddDistribution check invariants; dates outside rule 6 are rejected by the pipeline (VALIDATION_INPUT).
             var invoice = new VendorInvoice(number, cmd.VendorId, cmd.InvoiceDate, cmd.ServiceDate, cmd.PostingDate, cmd.DueDate,
                 Money.Of(cmd.Total), cmd.PoRef, actor.UserId, ws.Clock.Now, IInvoiceNumbering.Reference(fiscalYear, sequence));
             foreach (var d in cmd.Distributions)
@@ -104,7 +104,7 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
             if (cmd.GeneratedNumberPrefix is not null
                 && await ws.Invoices.ExistsDuplicateAsync(invoice.VendorId, invoice.NormalizedInvoiceNumber, null, token))
             {
-                // Сгенерированный номер уже занят вручную введённым: счётчик сдвинут, поэтому отказ исключением (откат номера).
+                // The generated number is already taken by a manually entered one: the counter has moved, so refuse with an exception (rolls the number back).
                 throw new PayablesException("An invoice with this number already exists for this vendor.");
             }
 
@@ -139,7 +139,7 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
             }
 
             invoice.UpdateHeader(cmd.Number, cmd.VendorId, cmd.InvoiceDate, cmd.ServiceDate, cmd.PostingDate, cmd.DueDate,
-                Money.Of(cmd.Total), cmd.PoRef);   // не Draft → PayablesException → Refused
+                Money.Of(cmd.Total), cmd.PoRef);   // not Draft → PayablesException → Refused
             var wanted = cmd.Distributions.Select(d => (AccountCode.Parse(d.Account), Money.Of(d.Amount), d.PoLineNo)).ToList();
             if (!invoice.Distributions.Select(d => (d.Account, d.Amount, d.PoLineNo)).SequenceEqual(wanted))
             {
@@ -156,7 +156,7 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
 
             if (await ws.Invoices.ExistsDuplicateAsync(invoice.VendorId, invoice.NormalizedInvoiceNumber, invoice.Id, token))
             {
-                // Агрегат уже изменён: отказ только исключением, чтобы runner откатил изменения.
+                // The aggregate has already changed: refuse only with an exception so the runner rolls the changes back.
                 throw new PayablesException("An invoice with this number already exists for this vendor.");
             }
 
@@ -176,8 +176,8 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
         }, ct: ct);
 
     /// <summary>
-    /// Атомарный Submit (spec §5.3): оценка черновика; Hard Stop — отказ без удержаний; иначе резервы, claims,
-    /// billing claims, статус и повторная оценка в статусе Submitted (её outcome'ы — основа для override) — одна транзакция.
+    /// Atomic Submit (spec §5.3): evaluate the draft; Hard Stop means refusal without holds; otherwise reservations, claims,
+    /// billing claims, the status and a re-evaluation in Submitted status (its outcomes are the basis for overrides), all in one transaction.
     /// </summary>
     public Task<CommandResult<InvoiceVm>> SubmitAsync(InvoiceActionCommand cmd, ActorContext actor, CancellationToken ct = default) =>
         runner.ExecuteAsync(actor, cmd.Envelope, "SubmitInvoice", cmd, async (sp, token) =>
@@ -220,7 +220,7 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
             var ws = sp.GetRequiredService<InvoiceWorkspace>();
             var invoice = await ws.LoadAsync(cmd.InvoiceId, token);
             ws.Concurrency.Expect(invoice, cmd.Envelope.ExpectedRowVersion);
-            var release = invoice.Withdraw(actor.UserId, cmd.Reason, ws.Clock.Now);   // не автор / не активен → PayablesException → Refused
+            var release = invoice.Withdraw(actor.UserId, cmd.Reason, ws.Clock.Now);   // not the author / not active → PayablesException → Refused
             await ws.ReleaseAsync(release, token);
             ws.Audit.Record(actor, "InvoiceWithdrawn", invoice.Reference, cmd.Envelope.CommandId.ToString(), new { cmd.Reason });
             return CommandResult<InvoiceVm>.Accepted(await ws.ToVmAsync(invoice, token));
@@ -237,7 +237,7 @@ public sealed class InvoiceAppService(ITenantOperationRunner runner) : IInvoiceA
             }
 
             ws.Concurrency.Expect(invoice, cmd.Envelope.ExpectedRowVersion);
-            invoice.ReturnToDraft();   // не Rejected → PayablesException → Refused
+            invoice.ReturnToDraft();   // not Rejected → PayablesException → Refused
             ws.Audit.Record(actor, "InvoiceReturnedToDraft", invoice.Reference, cmd.Envelope.CommandId.ToString(), new { invoice.ContentVersion });
             return CommandResult<InvoiceVm>.Accepted(await ws.ToVmAsync(invoice, token));
         }, ct: ct);

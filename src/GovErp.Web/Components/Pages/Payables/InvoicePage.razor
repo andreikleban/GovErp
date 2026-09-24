@@ -43,7 +43,7 @@ else
 
 @code {
     [Parameter] public Guid? Id { get; set; }
-    /// <summary>Открыть карточку на прошлой оценке (ссылка из аудита).</summary>
+    /// <summary>Opens the card on a past evaluation (a link from the audit).</summary>
     [SupplyParameterFromQuery(Name = "evaluation")] public Guid? Evaluation { get; set; }
 
     private InvoiceVm? _invoice;
@@ -89,8 +89,8 @@ else
 
     private async Task CreateAsync(EditorModel edit)
     {
-        // Кнопка не выключается по пустому номеру: поле обновляет модель только при уходе фокуса,
-        // и неактивная кнопка без объяснения выглядит как поломка. Говорим, чего не хватает.
+        // The button is not disabled for an empty number: the field updates the model only when focus leaves,
+        // and an inactive button without an explanation looks broken. Say what is missing.
         if (string.IsNullOrWhiteSpace(edit.Number))
         {
             _error = "Enter the vendor's invoice number (as printed on the invoice).";
@@ -103,8 +103,8 @@ else
             var command = edit.ToCreate(new CommandEnvelope(_createCommandId, null));
             if (edit.Number.Trim() == _suggested)
             {
-                // Предложенный номер не резервировался: сервер выдаст его из последовательности при сохранении,
-                // так что он совпадёт с регистрационным номером, даже если кто-то создал документ раньше.
+                // The suggested number was not reserved: the server issues it from the sequence on save,
+                // so it matches the registration number even if someone created a document earlier.
                 command = command with { Number = "", GeneratedNumberPrefix = IInvoiceNumbering.SuggestedPrefix };
             }
 
@@ -115,7 +115,7 @@ else
                 return;
             }
 
-            // Отказ не сохранил ничего; следующая попытка с исправленными данными — новая команда.
+            // The refusal saved nothing; the next attempt with corrected data is a new command.
             _error = result.Reason;
             _createCommandId = Guid.NewGuid();
         });

@@ -8,8 +8,8 @@ namespace GovErp.Application.Web.Validation;
 public static class EvaluationMapping
 {
     /// <summary>
-    /// evaluatedByName — отображаемое имя актора (Audit, Tenancy.TenantUserNaming); по умолчанию сырой id как заглушка,
-    /// как и для инвойса в LastEvaluation, где имя не нужно на каждой загрузке карточки (spec §6, «если дёшево»).
+    /// evaluatedByName is the actor's display name (Audit, Tenancy.TenantUserNaming); by default the raw id as a fallback,
+    /// as for the invoice's LastEvaluation, where the name is not needed on every card load (spec §6, "if cheap").
     /// </summary>
     public static EvaluationVm ToVm(EvaluationRecord r, string? evaluatedByName = null) => new(
         r.Id, r.TransactionRef, r.TransactionVersion, r.ApprovalCycleId, r.Trigger.ToString(), r.EvaluatedAt,
@@ -35,9 +35,9 @@ public static class EvaluationMapping
         new(l.Account.ToString(), l.Family, l.Debit.Amount, l.Credit.Amount, l.Description);
 
     /// <summary>
-    /// «Available after» по строкам — формула BUDGET_AVAILABILITY над входным снимком оценки: по счёту и году
-    /// available + свой резерв − новая потребность (часть сверх ликвидации PO). Строки одного счёта получают одно значение.
-    /// Правило пишет эти цифры только в outcome'ы отказа, поэтому для прошедших строк они вычисляются здесь тем же способом.
+    /// "Available after" per line is the BUDGET_AVAILABILITY formula over the evaluation's input snapshot: per account and year,
+    /// available + own reservation − new need (the part above the PO liquidation). Lines of the same account get the same value.
+    /// The rule writes these figures only into failing outcomes, so for passed lines they are computed here the same way.
     /// </summary>
     public static IReadOnlyList<LineBudgetVm> LineBudgets(ValidationSubject? subject)
     {

@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GovErp.Infrastructure.Seed;
 
-/// <summary>Что засеять при провижининге тенанта: полный демо-датасет или только справочники (без движения средств).</summary>
+/// <summary>What to seed when provisioning a tenant: the full demo dataset or reference data only (no money movement).</summary>
 public enum TenantSeed
 {
     Springfield,
@@ -12,7 +12,7 @@ public enum TenantSeed
 
 public static class TenantSeeder
 {
-    /// <summary>Засевает только пустую БД тенанта. Остатки — OpeningBalance, а не проводки (spec §5, правило 7).</summary>
+    /// <summary>Seeds only an empty tenant database. Balances are OpeningBalance, not journal entries (spec §5, rule 7).</summary>
     public static async Task SeedAsync(GovErpDbContext db, TenantSeed seed, CancellationToken ct)
     {
         if (await db.Funds.AnyAsync(ct))

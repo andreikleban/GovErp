@@ -58,7 +58,7 @@ public sealed record RuleOutcome
         IReadOnlyDictionary<string, string> inputs, IReadOnlyDictionary<string, string> computed, string? message = null) =>
         new(rule, severity, line, inputs, computed, message);
 
-    /// <summary>Восстановление сохранённого outcome (JSON-колонки оценки). Не вычисляет ничего заново.</summary>
+    /// <summary>Rehydrates a stored outcome (the evaluation's JSON columns). Recomputes nothing.</summary>
     public static RuleOutcome Restore(Guid outcomeRef, string ruleId, int ruleVersion, ValidationStep step, RuleLayer layer,
         int? distributionLine, Severity severity, IReadOnlyDictionary<string, string> inputs, IReadOnlyDictionary<string, string> computed,
         string message, string resolution, IReadOnlyList<ApproverRole> overridableBy, OverrideSnapshot? overriddenBy) =>

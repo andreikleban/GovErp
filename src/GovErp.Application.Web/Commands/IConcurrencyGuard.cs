@@ -1,6 +1,6 @@
 namespace GovErp.Application.Web.Commands;
 
-/// <summary>Связывает агрегат с RowVersion, который видел пользователь: устаревшая форма даёт Conflict, а не тихую перезапись.</summary>
+/// <summary>Binds an aggregate to the RowVersion the user saw: a stale form yields Conflict instead of a silent overwrite.</summary>
 public interface IConcurrencyGuard
 {
     void Expect(object aggregate, string? rowVersion);

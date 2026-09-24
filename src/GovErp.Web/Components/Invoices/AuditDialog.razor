@@ -31,7 +31,7 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // Фокус в окно при открытии: Escape и Tab работают сразу, без щелчка мышью.
+        // Focus the dialog on open: Escape and Tab work right away, without a mouse click.
         if (Open && !_focused)
         {
             _focused = true;

@@ -48,8 +48,8 @@ public sealed class ApprovalAppService(ITenantOperationRunner runner) : IApprova
         }, ct);
 
     /// <summary>
-    /// Spec §5, правило 2: перед согласованием — оценка; смена fingerprint или маршрута уже открыла новый цикл внутри
-    /// EvaluateAsync. Неснятый Soft Stop или Hard Stop блокирует (CanApprove). Согласование пишется по шагу базового маршрута.
+    /// Spec §5, rule 2: evaluate before approving; a fingerprint or route change has already opened a new cycle inside
+    /// EvaluateAsync. An open Soft Stop or a Hard Stop blocks (CanApprove). The approval is recorded against a base route step.
     /// </summary>
     public Task<CommandResult<InvoiceVm>> ApproveAsync(InvoiceActionCommand cmd, ActorContext actor, CancellationToken ct = default) =>
         runner.ExecuteAsync(actor, cmd.Envelope, "ApproveInvoice", cmd, async (sp, token) =>
@@ -99,9 +99,9 @@ public sealed class ApprovalAppService(ITenantOperationRunner runner) : IApprova
                 invoice.MarkApproved();
             }
 
-            // Согласование привязано к оценке до решения; последняя оценка должна отражать уже записанное решение —
-            // иначе маршрут в карточке, очередь согласующих и CanPost видят шаг несогласованным. Маршрут и fingerprint
-            // не меняются, поэтому новый цикл здесь не открывается.
+            // The approval is tied to the evaluation made before the decision; the latest evaluation must reflect the recorded decision,
+            // otherwise the card route, the approver queue and CanPost see the step as unapproved. Route and fingerprint
+            // do not change, so no new cycle is opened here.
             _ = await ws.EvaluateAsync(invoice, EvaluationTrigger.Approve, actor, token);
             ws.Audit.Record(actor, "InvoiceApproved", invoice.Reference, record.Id.ToString(),
                 new { Role = step.Role.ToString(), Department = step.Department?.Value, invoice.ApprovalCycleId, Status = invoice.Status.ToString() });
@@ -134,8 +134,8 @@ public sealed class ApprovalAppService(ITenantOperationRunner runner) : IApprova
         }, ct: ct);
 
     /// <summary>
-    /// Override выдаётся только на outcome последней оценки инвойса (spec §4.3, OutcomeRef): чужую или устаревшую
-    /// оценку домен не примет. После override — переоценка: её результат — новая последняя оценка.
+    /// An override is granted only on an outcome of the invoice's latest evaluation (spec §4.3, OutcomeRef): the domain rejects
+    /// a foreign or stale evaluation. After the override the invoice is re-evaluated; that result becomes the latest evaluation.
     /// </summary>
     public Task<CommandResult<InvoiceVm>> OverrideAsync(OverrideCommand cmd, ActorContext actor, CancellationToken ct = default) =>
         runner.ExecuteAsync(actor, cmd.Envelope, "OverrideRule", cmd, async (sp, token) =>
@@ -159,7 +159,7 @@ public sealed class ApprovalAppService(ITenantOperationRunner runner) : IApprova
                 return CommandResult<InvoiceVm>.Refused(await ws.ToVmAsync(invoice, token), $"No open soft stop {cmd.RuleId} on that line.");
             }
 
-            // Cast к nullable: FirstOrDefault по enum вернул бы DepartmentHead вместо «нет совпадения».
+            // Cast to nullable: FirstOrDefault over the enum would return DepartmentHead instead of "no match".
             if (outcome.OverridableBy.Cast<ApproverRole?>().FirstOrDefault(r => actor.IsInRole(r!.Value.ToString())) is not { } role)
             {
                 return CommandResult<InvoiceVm>.Forbidden($"{cmd.RuleId} cannot be overridden by {actor.UserName}.");

@@ -1,8 +1,8 @@
 namespace GovErp.Application.Web.Validation.Contracts;
 
 /// <summary>
-/// Остаток бюджета по счёту строки после этого инвойса — тот же расчёт, что у BUDGET_AVAILABILITY
-/// (available + свой резерв − новая потребность по счёту), по входному снимку оценки. Null — строки бюджета нет
-/// или снимок строки противоречив.
+/// Budget remaining on the line's account after this invoice, the same calculation as BUDGET_AVAILABILITY
+/// (available + own reservation − new need on the account), from the evaluation's input snapshot. Null when there is no budget line
+/// or the line snapshot is inconsistent.
 /// </summary>
 public sealed record LineBudgetVm(int LineNo, string Account, int FiscalYear, decimal? AvailableAfter);

@@ -2,7 +2,7 @@ using GovErp.Domain.ChartOfAccounts.Exceptions;
 
 namespace GovErp.Domain.ChartOfAccounts.Entities;
 
-/// <summary>Заведённый и утверждённый полный адрес счёта (whitelist) с effective dating.</summary>
+/// <summary>A registered and approved full account address (whitelist) with effective dating.</summary>
 public sealed class AccountCombination
 {
     public Guid Id { get; private set; }

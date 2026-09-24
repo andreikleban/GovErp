@@ -75,7 +75,7 @@ public sealed class BudgetAppService(ITenantOperationRunner runner) : IBudgetApp
             var lines = sp.GetRequiredService<IBudgetLineRepository>();
             var line = await lines.FindAsync(AccountCode.Parse(cmd.Account), new FiscalYear(cmd.FiscalYear), token)
                 ?? throw new NotFoundException($"Budget line {cmd.Account} FY{cmd.FiscalYear} not found.");
-            line.Amend(Money.Of(cmd.Amount), cmd.Reference, cmd.EffectiveDate);   // дата вне FY → LedgerException → Refused
+            line.Amend(Money.Of(cmd.Amount), cmd.Reference, cmd.EffectiveDate);   // date outside the FY → LedgerException → Refused
             sp.GetRequiredService<IAuditTrail>().Record(actor, "BudgetAmended", cmd.Account, cmd.Envelope.CommandId.ToString(),
                 new { cmd.FiscalYear, cmd.Amount, cmd.Reference, cmd.EffectiveDate, Amended = line.Amended.Amount });
             return CommandResult<BudgetLineVm>.Accepted(await BudgetMapping.ToVmAsync(line, sp.GetRequiredService<IOpeningBalanceRepository>(), token));

@@ -10,7 +10,7 @@ using Microsoft.Extensions.Options;
 
 namespace GovErp.Application.Web.Validation;
 
-/// <summary>Единственное место, где встречаются четыре контекста (GE-9): читает агрегаты и строит снимки.</summary>
+/// <summary>The only place where the four contexts meet (GE-9): reads the aggregates and builds the snapshots.</summary>
 public sealed class ValidationSubjectAssembler(
     IFundRepository funds, IGrantRepository grants, IAccountCombinationRepository combinations,
     IBudgetLineRepository budgetLines, IEncumbranceRepository encumbrances, IFiscalPeriodRepository periods,

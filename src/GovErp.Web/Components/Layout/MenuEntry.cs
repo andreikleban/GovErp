@@ -2,5 +2,5 @@ using Microsoft.AspNetCore.Components.Routing;
 
 namespace GovErp.Web.Components.Layout;
 
-/// <summary>Пункт меню модуля: экран-список; Prefix подсвечивает пункт и на карточках под этим адресом.</summary>
+/// <summary>A module menu item: a list screen; Prefix also highlights the item on the cards under that address.</summary>
 public sealed record MenuEntry(string Label, string Href, NavLinkMatch Match = NavLinkMatch.Prefix);

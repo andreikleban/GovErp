@@ -1,4 +1,4 @@
 namespace GovErp.Application.Web.Tenancy;
 
-/// <summary>Пользователь тенанта из Master (только чтение, DDD-7 — не домен). Roles — те же строки, что и в ActorContext.Roles.</summary>
+/// <summary>A tenant user from Master (read-only, DDD-7: not domain). Roles are the same strings as in ActorContext.Roles.</summary>
 public sealed record TenantUserRecord(Guid Id, string UserName, string DisplayName, IReadOnlyList<string> Roles, string? DepartmentCode);

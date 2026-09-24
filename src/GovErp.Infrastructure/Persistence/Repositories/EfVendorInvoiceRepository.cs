@@ -15,7 +15,7 @@ public sealed class EfVendorInvoiceRepository(GovErpDbContext db) : IVendorInvoi
     public async Task<IReadOnlyList<VendorInvoice>> ListAsync(CancellationToken ct = default) =>
         await db.VendorInvoices.OrderBy(i => i.Number).ToListAsync(ct);
 
-    /// <summary>Предварительная проверка; гонку закрывает уникальный индекс по вычисляемой колонке NormalizedNumber.</summary>
+    /// <summary>A preliminary check; a race is closed by the unique index on the computed NormalizedNumber column.</summary>
     public Task<bool> ExistsDuplicateAsync(Guid vendorId, string normalizedNumber, Guid? excludingInvoiceId, CancellationToken ct = default) =>
         db.VendorInvoices.AnyAsync(i => i.VendorId == vendorId && EF.Property<string>(i, "NormalizedNumber") == normalizedNumber
             && (excludingInvoiceId == null || i.Id != excludingInvoiceId), ct);

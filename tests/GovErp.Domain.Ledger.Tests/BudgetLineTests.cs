@@ -9,7 +9,7 @@ public class BudgetLineTests
     private static readonly FiscalYear Fy = new(2026);
     private static readonly DateOnly Today = new(2026, 6, 15);
 
-    /// <summary>Строка задания: 375,000 − 132,000 − 96,000 = 147,000.</summary>
+    /// <summary>The exercise line: 375,000 − 132,000 − 96,000 = 147,000.</summary>
     private static BudgetLine ExerciseLine(BudgetControlMode mode = BudgetControlMode.Hard)
     {
         var line = new BudgetLine(Cops, Fy, mode, adopted: Money.Of(375_000m));

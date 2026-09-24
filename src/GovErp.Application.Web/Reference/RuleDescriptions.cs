@@ -4,9 +4,9 @@ using GovErp.Domain.Validation.DomainServices;
 namespace GovErp.Application.Web.Reference;
 
 /// <summary>
-/// Описания правил каталога движка. Текст сверен с классами в Domain.Validation/DomainServices/Rules:
-/// при изменении логики правила меняется и описание (тест требует описание для каждого обязательного правила).
-/// «Source» честно разделяет: требование задания, типичный контроль AP, допущение демо.
+/// Descriptions of the engine catalog rules. The text is checked against the classes in Domain.Validation/DomainServices/Rules:
+/// when the rule logic changes, the description changes too (a test requires a description for every mandatory rule).
+/// "Source" separates honestly: exercise requirement, typical AP control, demo assumption.
 /// </summary>
 public static class RuleDescriptions
 {

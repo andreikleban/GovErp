@@ -4,8 +4,8 @@
 @inject IExplanationAppService Explanations
 @inject CurrentActor CurrentActor
 
-@* Объяснение оценки открывается из журнала проверки: окно показывает последнее сохранённое объяснение
-   этой оценки и генерирует новое для выбранной аудитории. *@
+@* The evaluation explanation opens from the validation log: the dialog shows the latest saved explanation
+   of this evaluation and generates a new one for the chosen audience. *@
 @if (Open && EvaluationId is not null)
 {
     <div class="modal-backdrop" @onclick="CloseAsync"></div>
@@ -57,7 +57,7 @@
 @code {
     [Parameter] public bool Open { get; set; }
     [Parameter] public Guid? EvaluationId { get; set; }
-    /// <summary>Подпись оценки в заголовке окна (триггер и время).</summary>
+    /// <summary>Evaluation caption in the dialog title (trigger and time).</summary>
     [Parameter] public string? Title { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
 
@@ -129,7 +129,7 @@
 
     private Task CloseAsync()
     {
-        // При повторном открытии список перечитывается: объяснение могли сгенерировать в другой вкладке.
+        // The list is re-read on the next open: an explanation may have been generated in another tab.
         _loadedFor = null;
         return OnClose.InvokeAsync();
     }

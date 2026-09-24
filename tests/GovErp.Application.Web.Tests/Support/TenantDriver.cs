@@ -13,7 +13,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace GovErp.Application.Web.Tests;
 
-/// <summary>Акторы и сценарии одного тенанта. Каждый вызов — отдельная операция runner'а (свой scope и DbContext).</summary>
+/// <summary>Actors and use cases of one tenant. Every call is a separate runner operation (its own scope and DbContext).</summary>
 public sealed class TenantDriver(SqlServerFixture fixture, TenantId tenant)
 {
     public TenantId Tenant { get; } = tenant;
@@ -47,7 +47,7 @@ public sealed class TenantDriver(SqlServerFixture fixture, TenantId tenant)
     public async Task<CommandResult<InvoiceVm>> SubmitAsync(Guid id) =>
         await Service<IInvoiceAppService>().SubmitAsync(new InvoiceActionCommand(Env((await GetAsync(id)).RowVersion), id), Clerk);
 
-    /// <summary>Override всех открытых Soft Stop директором, затем согласование каждого шага подходящим актором — до статуса Approved.</summary>
+    /// <summary>The director overrides all open Soft Stops, then each step is approved by a suitable actor, up to the Approved status.</summary>
     public async Task ApproveThroughAsync(Guid id)
     {
         for (var guard = 0; guard < 20; guard++)

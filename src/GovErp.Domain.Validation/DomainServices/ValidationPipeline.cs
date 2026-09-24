@@ -6,9 +6,9 @@ using GovErp.Domain.Validation.ValueObjects;
 namespace GovErp.Domain.Validation.DomainServices;
 
 /// <summary>
-/// Восемь шагов над снимками. Сначала проверяются вход и конфигурация правил (fail-closed); затем шаги 1–6 —
-/// правила каталога по их scope (фонд, грант), Hard Stop прерывает; шаг 7 — маршрут; шаг 8 — только при Post.
-/// Чистая функция: без портов и часов; единственная случайность — идентификаторы записи и outcome'ов.
+/// Eight steps over snapshots. The input and the rule configuration are checked first (fail-closed); then steps 1–6
+/// run the catalog rules by their scope (fund, grant), a Hard Stop stops the run; step 7 is the route; step 8 runs only on Post.
+/// A pure function: no ports and no clock; the only randomness is the ids of the record and the outcomes.
 /// </summary>
 public sealed class ValidationPipeline(RuleCatalog catalog)
 {
@@ -25,7 +25,7 @@ public sealed class ValidationPipeline(RuleCatalog catalog)
 
     private readonly RuleCatalog _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
 
-    /// <summary>Разрешает определения по scope строк субъекта и оценивает. Неразрешимая конфигурация — отказ, а не исключение.</summary>
+    /// <summary>Resolves the definitions by the scope of the subject's lines and evaluates. An unresolvable configuration is a refusal, not an exception.</summary>
     public EvaluationRecord Evaluate(ValidationSubject subject, IReadOnlyList<RuleDefinition> definitions, EvaluationTrigger trigger,
         UserId evaluatedBy, DateTimeOffset evaluatedAt)
     {
@@ -56,7 +56,7 @@ public sealed class ValidationPipeline(RuleCatalog catalog)
             return Refuse(subject, rules, trigger, evaluatedBy, evaluatedAt, ValidationInputRuleId, inputProblem);
         }
 
-        // Конфигурация проверяется до шагов: неизвестное правило не должно скрываться за ранним Hard Stop.
+        // Configuration is checked before the steps: an unknown rule must not hide behind an early Hard Stop.
         if (ConfigurationProblem(subject, rules) is { } configurationProblem)
         {
             return Refuse(subject, rules, trigger, evaluatedBy, evaluatedAt, RuleConfigurationRuleId, configurationProblem);
@@ -104,7 +104,7 @@ public sealed class ValidationPipeline(RuleCatalog catalog)
             preview?.Lines ?? [], check, ReadyForPaymentHandoff(subject));
     }
 
-    /// <summary>Возможности зависят и от результата оценки, и от статуса документа.</summary>
+    /// <summary>Capabilities depend on both the evaluation result and the document status.</summary>
     private static Capabilities CapabilitiesFor(string status, Severity overall, bool? postingPassed)
     {
         var byResult = Capabilities.For(overall, postingPassed);
@@ -120,7 +120,7 @@ public sealed class ValidationPipeline(RuleCatalog catalog)
     private static bool ReadyForPaymentHandoff(ValidationSubject subject) =>
         subject.BusinessDate is { } businessDate && PostingEligibility.ReadyForPaymentHandoff(subject, businessDate);
 
-    /// <summary>Каждому определению — строки тех scope, где оно действует; правило видит только свои строки.</summary>
+    /// <summary>Each definition gets the lines of the scopes where it applies; a rule sees only its own lines.</summary>
     private static IReadOnlyList<(RuleDefinition Definition, ValidationSubject Scoped)> Assign(ValidationSubject subject, EffectiveRuleSet rules)
     {
         var lines = new Dictionary<RuleDefinition, List<DistributionSnapshot>>(ReferenceEqualityComparer.Instance);

@@ -1,7 +1,7 @@
 @using GovErp.Application.Web.Approvals.Contracts
 @using GovErp.Application.Web.Validation.Contracts
 
-@* Блокировки оценки: Hard Stop и Soft Stop, открытые и снятые override'ом — правило, причина, цифры, кто может снять. *@
+@* Evaluation holds: Hard Stops and Soft Stops, open and released by override, with the rule, reason, figures and who can release. *@
 <section class="panel">
     <h2>Holds</h2>
     @if (Evaluation is null)
@@ -64,7 +64,7 @@
     private string? _describing;
 
     [Parameter] public EvaluationVm? Evaluation { get; set; }
-    /// <summary>Soft Stop, которые текущий пользователь вправе снять (из его очереди).</summary>
+    /// <summary>Soft Stops the current user may release (from their queue).</summary>
     [Parameter] public IReadOnlyList<ApprovalQueueItemVm> Releasable { get; set; } = [];
 
     private IReadOnlyList<OutcomeVm> Holds =>
@@ -75,7 +75,7 @@
 
     private static string SeverityText(string severity) => severity == "HardStop" ? "Hard stop" : "Soft stop";
 
-    /// <summary>Расчёт правила; если его нет — входные данные.</summary>
+    /// <summary>The rule's calculation; if there is none, the inputs.</summary>
     private static string Figures(OutcomeVm hold)
     {
         var values = hold.Computed.Count > 0 ? hold.Computed : hold.Inputs;

@@ -4,8 +4,8 @@ using GovErp.Application.Web.Invoices.Commands;
 namespace GovErp.Application.Web.Invoices;
 
 /// <summary>
-/// Демо-инвойсы spec §2.3. Номер уникален и идемпотентен: тот же CommandId даёт тот же номер.
-/// Vendor id приходит параметром: Application не ссылается на seed-данные Infrastructure.
+/// Demo invoices of spec §2.3. The number is unique and idempotent: the same CommandId yields the same number.
+/// The vendor id comes as a parameter: Application does not reference Infrastructure seed data.
 /// </summary>
 public static class Presets
 {

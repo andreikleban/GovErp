@@ -11,7 +11,7 @@ namespace GovErp.Infrastructure.Startup;
 
 public static class DemoReset
 {
-    /// <summary>demo-reset --tenant springfield --confirm springfield. Только Environment=Demo, IsDemo, имя БД в allowlist.</summary>
+    /// <summary>demo-reset --tenant springfield --confirm springfield. Only with Environment=Demo, IsDemo and a database name on the allowlist.</summary>
     public static async Task<int> RunAsync(string[] args, IServiceProvider services, IHostEnvironment env, CancellationToken ct)
     {
         string? Arg(string name) => args.SkipWhile(a => a != name).Skip(1).FirstOrDefault();
@@ -37,7 +37,7 @@ public static class DemoReset
         await using (var connection = new SqlConnection(migration))
         {
             await connection.OpenAsync(ct);
-            // Имя БД прошло allowlist; SINGLE_USER закрывает активные операции на время сброса.
+            // The database name passed the allowlist; SINGLE_USER closes active operations for the duration of the reset.
             await using var drop = new SqlCommand(
                 $"IF DB_ID(N'{tenant.DatabaseName}') IS NOT NULL BEGIN ALTER DATABASE [{tenant.DatabaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{tenant.DatabaseName}]; END",
                 connection);

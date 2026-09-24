@@ -9,10 +9,10 @@ public interface IReferenceAppService
     Task<IReadOnlyList<CombinationVm>> GetCombinationsAsync(ActorContext actor, CancellationToken ct = default);
     Task<RuleSetVm> GetRulesAsync(ActorContext actor, CancellationToken ct = default);
 
-    /// <summary>Описание правила, действующая версия и история версий. Неизвестный код — NotFoundException.</summary>
+    /// <summary>Rule description, current version and version history. An unknown code throws NotFoundException.</summary>
     Task<RuleDetailVm> GetRuleDetailAsync(string ruleId, ActorContext actor, CancellationToken ct = default);
 
-    /// <summary>Пересказ правила для аудитории (LLM или написанное описание при откате). Решений не меняет и не сохраняется.</summary>
+    /// <summary>Retells the rule for an audience (LLM, or the written description on fallback). Changes no decisions and is not stored.</summary>
     Task<Explanation.ExplanationResult> ExplainRuleAsync(string ruleId, Explanation.ExplanationAudience audience, ActorContext actor,
         CancellationToken ct = default);
     Task<IReadOnlyList<VendorVm>> GetVendorsAsync(ActorContext actor, CancellationToken ct = default);

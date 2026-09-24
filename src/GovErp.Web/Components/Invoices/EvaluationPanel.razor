@@ -69,12 +69,12 @@
 
 @code {
     [Parameter] public EvaluationVm? Evaluation { get; set; }
-    /// <summary>Открыть объяснение этой оценки в отдельном окне.</summary>
+    /// <summary>Opens the explanation of this evaluation in a separate dialog.</summary>
     [Parameter] public EventCallback OnExplain { get; set; }
 
     /// <summary>
-    /// Результат шага различает, что именно мешает: Hard Stop блокирует, неснятый Soft Stop требует override,
-    /// снятый override'ом Soft Stop шаг больше не блокирует. Шаг маршрута ничего не «проходит» — он строит список согласований.
+    /// The step result tells what exactly is in the way: a Hard Stop blocks, an open Soft Stop needs an override,
+    /// a Soft Stop released by an override no longer blocks the step. The route step does not "pass" anything; it builds the approval list.
     /// </summary>
     private static string ResultOf(StepVm step, IReadOnlyList<OutcomeVm> outcomes, EvaluationVm evaluation)
     {

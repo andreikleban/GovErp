@@ -53,7 +53,7 @@ public sealed class PlatformTests(SqlServerFixture fixture)
         })).Should().ThrowAsync<InvalidOperationException>().WithMessage("*append-only*");
 
         await FluentActions.Awaiting(() => t.WithDbAsync(db => db.Database.ExecuteSqlRawAsync("UPDATE audit.Events SET Action = N'x'")))
-            .Should().ThrowAsync<Microsoft.Data.SqlClient.SqlException>();   // DENY для runtime-пользователя
+            .Should().ThrowAsync<Microsoft.Data.SqlClient.SqlException>();   // DENY for the runtime user
     }
 
     [Fact]

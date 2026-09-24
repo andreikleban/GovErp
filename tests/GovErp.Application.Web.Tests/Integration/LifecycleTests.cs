@@ -27,8 +27,8 @@ public sealed class LifecycleTests(SqlServerFixture fixture)
 
         (await t.Service<IBudgetAppService>().AmendAsync(new AmendBudgetCommand(TenantDriver.Env(), Fire, 2026, 13_000m, "BA-2026-14", SpringfieldData.Jun15), t.BudgetOfficer))
             .IsAccepted.Should().BeTrue();
-        (await t.SubmitAsync(inv.Id)).IsAccepted.Should().BeTrue();   // Soft Stop (procurement) не мешает Submit
-        await t.ApproveThroughAsync(inv.Id);                          // override → Warning (остаток 0 < 10%)
+        (await t.SubmitAsync(inv.Id)).IsAccepted.Should().BeTrue();   // a Soft Stop (procurement) does not block Submit
+        await t.ApproveThroughAsync(inv.Id);                          // override → Warning (remaining 0 < 10%)
         (await t.GetAsync(inv.Id)).LastEvaluation!.Overall.Should().Be("Warning");
         (await t.PostAsync(inv.Id)).IsAccepted.Should().BeTrue();
         var line = await t.BudgetAsync(Fire);
@@ -44,7 +44,7 @@ public sealed class LifecycleTests(SqlServerFixture fixture)
         await t.ApproveThroughAsync(inv.Id);
         (await t.PostAsync(inv.Id)).IsAccepted.Should().BeTrue();
         var line = await t.BudgetAsync(Police);
-        line.OpeningActuals.Should().Be(100_000m);                    // снимок не меняется
+        line.OpeningActuals.Should().Be(100_000m);                    // the snapshot does not change
         line.Actuals.Should().Be(line.OpeningActuals + 160_000m);
     }
 
@@ -67,9 +67,9 @@ public sealed class LifecycleTests(SqlServerFixture fixture)
         var refused = await t.PostAsync(inv.Id);
         refused.Status.Should().Be(CommandStatus.Refused);
         refused.Reason.Should().Contain("REVALIDATION_REQUIRED");
-        (await t.GetAsync(inv.Id)).Status.Should().Be("Submitted");  // открыт новый цикл
+        (await t.GetAsync(inv.Id)).Status.Should().Be("Submitted");  // a new cycle is open
 
-        await t.ApproveThroughAsync(inv.Id);                          // согласование по актуальному fingerprint
+        await t.ApproveThroughAsync(inv.Id);                          // approval against the current fingerprint
         (await t.PostAsync(inv.Id)).IsAccepted.Should().BeTrue();
     }
 
@@ -84,7 +84,7 @@ public sealed class LifecycleTests(SqlServerFixture fixture)
         var after = await t.GetAsync(inv.Id);
         after.ContentVersion.Should().Be(before.ContentVersion);
         after.RowVersion.Should().NotBe(before.RowVersion);
-        (await t.BudgetAsync(Police)).Held.Should().Be(0m);          // полностью ликвидируемый PO-инвойс резерв не берёт
+        (await t.BudgetAsync(Police)).Held.Should().Be(0m);          // a fully liquidating PO invoice takes no reservation
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public sealed class LifecycleTests(SqlServerFixture fixture)
         (await t.Service<IInvoiceAppService>().WithdrawAsync(new ReasonedActionCommand(TenantDriver.Env(v.RowVersion), inv.Id, "fix"), t.Clerk)).IsAccepted.Should().BeTrue();
         (await t.SubmitAsync(inv.Id)).IsAccepted.Should().BeTrue();
         var resubmitted = await t.GetAsync(inv.Id);
-        resubmitted.ApprovalCycleId.Should().NotBeNull().And.NotBe(v.ApprovalCycleId!.Value);   // FA 7: у Guid? нет NotBe(Guid?)
+        resubmitted.ApprovalCycleId.Should().NotBeNull().And.NotBe(v.ApprovalCycleId!.Value);   // FA 7: Guid? has no NotBe(Guid?)
         resubmitted.Approvals.Should().ContainSingle(a => !a.IsActiveCycle);
         (await t.Service<IApprovalAppService>().GetQueueAsync(t.PoliceChief)).Should().Contain(q => q.InvoiceId == inv.Id);
     }
@@ -144,10 +144,10 @@ public sealed class LifecycleTests(SqlServerFixture fixture)
         var t = await fixture.CreateTenantAsync();
         var inv = await t.CreateAsync(12_000m, null, ("101-6000-53100", 12_000m, null));
         (await t.SubmitAsync(inv.Id)).IsAccepted.Should().BeTrue();
-        (await t.BudgetAsync("101-6000-53100")).Held.Should().Be(12_000m);   // дефицит 2,000 удерживается
+        (await t.BudgetAsync("101-6000-53100")).Held.Should().Be(12_000m);   // the 2,000 shortfall is held
         var v = await t.GetAsync(inv.Id);
         (await t.Service<IApprovalAppService>().ApproveAsync(new InvoiceActionCommand(TenantDriver.Env(v.RowVersion), inv.Id), t.FireChief))
-            .Status.Should().Be(CommandStatus.Refused);                    // неснятый Soft Stop
+            .Status.Should().Be(CommandStatus.Refused);                    // open Soft Stop
         (await t.PostAsync(inv.Id)).Status.Should().Be(CommandStatus.Refused);
     }
 
@@ -158,10 +158,10 @@ public sealed class LifecycleTests(SqlServerFixture fixture)
         var full = await t.CreateAsync(160_000m, "PO-2026-0451", (Police, 160_000m, 1));
         (await t.SubmitAsync(full.Id)).IsAccepted.Should().BeTrue();
         await t.ApproveThroughAsync(full.Id);
-        (await t.PostAsync(full.Id)).IsAccepted.Should().BeTrue();     // PO выставлен полностью
+        (await t.PostAsync(full.Id)).IsAccepted.Should().BeTrue();     // the PO is fully billed
 
-        var a = await t.CreateAsync(5_000m, "PO-2026-0451", (Police, 5_000m, 1));   // по отдельности 3.125% — в допуске
-        var b = await t.CreateAsync(5_000m, "PO-2026-0451", (Police, 5_000m, 1));   // вместе 6.25% — сверх 5%
+        var a = await t.CreateAsync(5_000m, "PO-2026-0451", (Police, 5_000m, 1));   // 3.125% each, within tolerance
+        var b = await t.CreateAsync(5_000m, "PO-2026-0451", (Police, 5_000m, 1));   // 6.25% together, over 5%
         t.Hooks.AfterEncumbranceRead = new SyncPoint(2);
         var results = await Task.WhenAll(Task.Run(() => t.SubmitAsync(a.Id)), Task.Run(() => t.SubmitAsync(b.Id)));
         t.Hooks.Reset();
@@ -186,9 +186,9 @@ public sealed class LifecycleTests(SqlServerFixture fixture)
     [Fact]
     public async Task PaymentHandoffReadiness()
     {
-        var t = await fixture.CreateTenantAsync();                    // BusinessDate фикстуры — 2026-07-15 = DueDate
+        var t = await fixture.CreateTenantAsync();                    // the fixture BusinessDate is 2026-07-15 = DueDate
         var inv = await t.CreateAsync(160_000m, "PO-2026-0451", (Police, 160_000m, 1));
-        (await t.GetAsync(inv.Id)).ReadyForPaymentHandoff.Should().BeFalse();   // не Posted
+        (await t.GetAsync(inv.Id)).ReadyForPaymentHandoff.Should().BeFalse();   // not Posted
         (await t.SubmitAsync(inv.Id)).IsAccepted.Should().BeTrue();
         await t.ApproveThroughAsync(inv.Id);
         (await t.PostAsync(inv.Id)).IsAccepted.Should().BeTrue();

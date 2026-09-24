@@ -17,7 +17,7 @@ using PayablesRequirement = GovErp.Domain.Payables.Entities.ApprovalRequirement;
 
 namespace GovErp.Application.Web.Invoices;
 
-/// <summary>Общие шаги сценариев инвойса. Scoped: живёт в scope операции runner'а, все репозитории — на одном DbContext.</summary>
+/// <summary>Shared steps of the invoice use cases. Scoped: lives in the runner's operation scope, all repositories share one DbContext.</summary>
 public sealed class InvoiceWorkspace(
     IVendorInvoiceRepository invoices, IVendorRepository vendors, IPurchaseOrderRepository purchaseOrders,
     IBudgetLineRepository budgetLines, IEncumbranceRepository encumbrances, IFiscalPeriodRepository periods,
@@ -43,12 +43,12 @@ public sealed class InvoiceWorkspace(
     public async Task<VendorInvoice> LoadAsync(Guid id, CancellationToken ct) =>
         await invoices.FindAsync(id, ct) ?? throw new NotFoundException($"Invoice {id} not found.");
 
-    /// <summary>Определения читаются один раз на операцию: вся команда оценивает по одному набору правил.</summary>
+    /// <summary>Definitions are read once per operation: the whole command evaluates against one rule set.</summary>
     public async Task<IReadOnlyList<RuleDefinition>> DefinitionsAsync(CancellationToken ct) => _definitions ??= await rules.ListAsync(ct);
 
     /// <summary>
-    /// Оценка с сохранением записи. Для Submitted/Approved — Reevaluate: инвойс запоминает оценку, а смена fingerprint
-    /// или базового маршрута открывает новый цикл; тогда оценка повторяется, чтобы последняя запись отражала новый цикл.
+    /// Evaluation with a stored record. For Submitted/Approved it is Reevaluate: the invoice remembers the evaluation, and a fingerprint
+    /// or base route change opens a new cycle; the evaluation is then repeated so the latest record reflects the new cycle.
     /// </summary>
     public async Task<(EvaluationRecord Record, bool CycleRestarted)> EvaluateAsync(
         VendorInvoice invoice, EvaluationTrigger trigger, ActorContext actor, CancellationToken ct)
@@ -71,7 +71,7 @@ public sealed class InvoiceWorkspace(
         return (record, true);
     }
 
-    /// <summary>Базовый маршрут (без требований override, D-6) — то, что хранит и проверяет VendorInvoice.</summary>
+    /// <summary>The base route (without override requirements, D-6): what VendorInvoice stores and checks.</summary>
     public async Task<IReadOnlyList<PayablesRequirement>> RouteForAsync(EvaluationRecord record, CancellationToken ct)
     {
         var subject = record.InputSnapshot;
@@ -82,8 +82,8 @@ public sealed class InvoiceWorkspace(
     }
 
     /// <summary>
-    /// Submit: резервы на бюджетных ключах, claims ликвидации и billing claims по строкам PO — из той же аллокации,
-    /// что видел конвейер. Порядок ключей стабильный (меньше deadlock'ов). Проигранная гонка — LedgerException → Refused.
+    /// Submit: reservations on budget keys, liquidation claims and billing claims on PO lines, from the same allocation
+    /// the pipeline saw. Key order is stable (fewer deadlocks). A lost race is LedgerException → Refused.
     /// </summary>
     public async Task<InvoiceHolds> HoldAsync(VendorInvoice invoice, ValidationSubject subject, CancellationToken ct)
     {
@@ -132,7 +132,7 @@ public sealed class InvoiceWorkspace(
         return new InvoiceHolds(reservations, claims, billing);
     }
 
-    /// <summary>Reject / Withdraw: освобождает ровно то, что инвойс удерживал в своей версии содержания (GE-14).</summary>
+    /// <summary>Reject / Withdraw: releases exactly what the invoice held in its content version (GE-14).</summary>
     public async Task ReleaseAsync(InvoiceRelease release, CancellationToken ct)
     {
         foreach (var id in release.ReservationRefs)
@@ -155,8 +155,8 @@ public sealed class InvoiceWorkspace(
     }
 
     /// <summary>
-    /// Оценка этой операции (ещё не сохранена — запрос к БД её не увидит), иначе LastEvaluationRef, иначе для Draft —
-    /// последняя сохранённая проверка.
+    /// This operation's evaluation (not saved yet, so a DB query would not see it), otherwise LastEvaluationRef, otherwise for Draft
+    /// the latest saved check.
     /// </summary>
     public async Task<EvaluationRecord?> LastEvaluationAsync(VendorInvoice invoice, CancellationToken ct) =>
         _evaluated.GetValueOrDefault(invoice.Id)
@@ -165,8 +165,8 @@ public sealed class InvoiceWorkspace(
             : (await evaluations.ListByTransactionAsync(invoice.Reference, ct)).LastOrDefault());
 
     /// <summary>
-    /// withRowVersion — ответ чтения: тогда же читаются удержания (Funds). В ответе команды их нет: резервы и claims,
-    /// созданные этой ещё не сохранённой операцией, запрос к хранилищу не находит.
+    /// withRowVersion means a read response: the holds (Funds) are read as well. A command response has none: reservations and claims
+    /// created by this not-yet-saved operation are not found by a storage query.
     /// </summary>
     public async Task<InvoiceVm> ToVmAsync(VendorInvoice invoice, CancellationToken ct, bool withRowVersion = false)
     {
@@ -177,8 +177,8 @@ public sealed class InvoiceWorkspace(
     }
 
     /// <summary>
-    /// Удержания инвойса по его ссылкам (ReservationRefs, EncumbranceClaimRefs, PoBillingClaimRefs): удерживаемые суммы
-    /// и погашенные при Post. Освобождённые (Reject) не считаются; Withdraw и Return to Draft очищают сами ссылки.
+    /// Invoice holds by its references (ReservationRefs, EncumbranceClaimRefs, PoBillingClaimRefs): amounts held
+    /// and consumed at Post. Released ones (Reject) are not counted; Withdraw and Return to Draft clear the references themselves.
     /// </summary>
     public async Task<InvoiceFundsVm> FundsAsync(VendorInvoice invoice, CancellationToken ct)
     {
@@ -207,8 +207,8 @@ public sealed class InvoiceWorkspace(
     }
 
     /// <summary>
-    /// Причина отказа — только outcome'ы, которые блокируют именно это действие: Submit блокирует лишь Hard Stop
-    /// (Soft Stop не мешает отправке), согласование и Post — ещё и неснятый Soft Stop.
+    /// The refusal reason lists only outcomes that block this particular action: Submit is blocked only by a Hard Stop
+    /// (a Soft Stop does not prevent submission); approval and Post are also blocked by an open Soft Stop.
     /// </summary>
     public static string ReasonOf(EvaluationRecord record, Severity blocking) =>
         string.Join(" ", record.Outcomes.Where(o => o.Severity >= blocking && !o.IsOverridden).Select(o => o.Message));

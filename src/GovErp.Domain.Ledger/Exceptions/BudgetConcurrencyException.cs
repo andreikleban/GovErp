@@ -1,6 +1,6 @@
 namespace GovErp.Domain.Ledger.Exceptions;
 
-/// <summary>Бросается реализацией репозитория при конфликте rowversion. Слой сценариев ловит без ссылки на EF.</summary>
+/// <summary>Thrown by the repository implementation on a rowversion conflict. The use-case layer catches it without referencing EF.</summary>
 public sealed class BudgetConcurrencyException(AccountCode account, FiscalYear fiscalYear)
     : LedgerException($"Budget line {account} {fiscalYear} was modified concurrently.")
 {

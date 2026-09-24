@@ -15,7 +15,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace GovErp.Application.Web.Tests;
 
-/// <summary>Граф зависимостей AddApplication + AddInfrastructure собирается без БД: ловит незарегистрированные порты и захват scoped из singleton.</summary>
+/// <summary>The AddApplication + AddInfrastructure dependency graph builds without a database: catches unregistered ports and scoped services captured by singletons.</summary>
 public class CompositionTests
 {
     [Fact]
@@ -41,7 +41,7 @@ public class CompositionTests
         sp.GetRequiredService<ITenantUserDirectory>().Should().NotBeNull();
         sp.GetRequiredService<IExplanationAppService>().Should().NotBeNull();
 
-        // Как в runner'е: DbContext тенанта строится только после инициализации контекста тенанта (подключения к БД нет).
+        // As in the runner: the tenant DbContext is built only after the tenant context is initialized (no database connection).
         sp.GetRequiredService<ITenantContextInitializer>().Initialize(new TenantId("demo"), "Server=.;Database=GovErpDemo");
         sp.GetRequiredService<InvoiceWorkspace>().Should().NotBeNull();
     }

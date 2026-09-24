@@ -42,14 +42,14 @@ public static class JsonColumn
         public override void Write(Utf8JsonWriter w, AccountCode v, JsonSerializerOptions o) => w.WriteStringValue(v.ToString());
     }
 
-    /// <summary>UserId — struct: STJ создаёт его неявным конструктором по умолчанию и без конвертера теряет значение.</summary>
+    /// <summary>UserId is a struct: STJ creates it with the implicit default constructor and loses the value without a converter.</summary>
     private sealed class UserIdJsonConverter : JsonConverter<UserId>
     {
         public override UserId Read(ref Utf8JsonReader r, Type t, JsonSerializerOptions o) => new(r.GetGuid());
         public override void Write(Utf8JsonWriter w, UserId v, JsonSerializerOptions o) => w.WriteStringValue(v.Value);
     }
 
-    /// <summary>RuleOutcome создаётся только из RuleDefinition; из хранилища — через RuleOutcome.Restore.</summary>
+    /// <summary>RuleOutcome is created only from a RuleDefinition; from storage via RuleOutcome.Restore.</summary>
     private sealed class RuleOutcomeJsonConverter : JsonConverter<RuleOutcome>
     {
         private sealed record Dto(Guid OutcomeRef, string RuleId, int RuleVersion, ValidationStep Step, RuleLayer Layer, int? DistributionLine,
