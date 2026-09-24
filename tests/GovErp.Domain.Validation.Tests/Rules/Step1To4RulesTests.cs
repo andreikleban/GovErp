@@ -5,33 +5,16 @@ namespace GovErp.Domain.Validation.Tests.Rules;
 
 public class Step1To4RulesTests
 {
-    [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, true)]
-    public void Inactive_or_unidentified_vendor_fails_closed(bool active, bool emptyId)
+    // Missing or mismatched facts (fund, grant, combination, vendor) are refused by the pipeline before any rule runs:
+    // PipelineScenarioTests.Missing_or_mismatched_facts_are_refused_before_any_rule.
+
+    [Fact]
+    public void Inactive_vendor_is_hard_stop()
     {
         var s = SubjectBuilder.Exercise();
-        s = s with { Transaction = s.Transaction with { Vendor = s.Transaction.Vendor with
-        { IsActive = active, VendorId = emptyId ? Guid.Empty : Guid.NewGuid() } } };
+        s = s with { Transaction = s.Transaction with { Vendor = s.Transaction.Vendor with { IsActive = false } } };
         new VendorEligibleRule().Evaluate(s, Def("VENDOR_ELIGIBLE"))
-            .Should().ContainSingle(o => o.Severity == Severity.HardStop);
-    }
-
-    [Fact]
-    public void Mismatched_fund_facts_fail_closed()
-    {
-        var d = SubjectBuilder.Distribution(1, "701-6000-53100-G-COPS-26", 1m, fund: SubjectBuilder.General101());
-        new FundDeptObjectAllowedRule().Evaluate(new SubjectBuilder().With(d).Build(), Def("FUND_DEPT_OBJECT_ALLOWED"))
-            .Should().ContainSingle(o => o.Severity == Severity.HardStop);
-    }
-
-    [Fact]
-    public void Mismatched_grant_facts_fail_closed()
-    {
-        var d = SubjectBuilder.Distribution(1, "701-6000-53100-G-COPS-26", 1m,
-            grant: SubjectBuilder.Cops() with { Code = "G-OTHER" });
-        new GrantEligibleRule().Evaluate(new SubjectBuilder().With(d).Build(), Def("GRANT_ELIGIBLE"))
-            .Should().ContainSingle(o => o.Severity == Severity.HardStop);
+            .Should().ContainSingle(o => o.Severity == Severity.HardStop && o.DistributionLine == null);
     }
 
     [Theory]
@@ -61,23 +44,6 @@ public class Step1To4RulesTests
     }
 
     [Fact]
-    public void Missing_combination_facts_fail_closed()
-    {
-        var d = SubjectBuilder.Distribution(1, "101-6000-53100", 1m) with { Combination = null! };
-        new CoaCombinationActiveRule().Evaluate(new SubjectBuilder().With(d).Build(), Def("COA_COMBINATION_ACTIVE"))
-            .Should().ContainSingle(o => o.Severity == Severity.HardStop);
-    }
-
-    [Fact]
-    public void Missing_vendor_facts_fail_closed()
-    {
-        var s = SubjectBuilder.Exercise();
-        s = s with { Transaction = s.Transaction with { Vendor = null! } };
-        new VendorEligibleRule().Evaluate(s, Def("VENDOR_ELIGIBLE"))
-            .Should().ContainSingle(o => o.Severity == Severity.HardStop && o.DistributionLine == null);
-    }
-
-    [Fact]
     public void Object_restriction_is_reported_for_the_correct_line()
     {
         var s = new SubjectBuilder()
@@ -86,34 +52,6 @@ public class Step1To4RulesTests
                 fund: SubjectBuilder.Street202(FundRestriction.ObjectNotAllowed))).Build();
         new FundDeptObjectAllowedRule().Evaluate(s, Def("FUND_DEPT_OBJECT_ALLOWED"))
             .Should().ContainSingle(o => o.DistributionLine == 2 && o.Computed["restriction"] == "ObjectNotAllowed");
-    }
-
-    [Theory]
-    [InlineData("SEG_REQUIRED")]
-    [InlineData("SEG_GRANT_FORBIDDEN")]
-    [InlineData("FUND_DEPT_OBJECT_ALLOWED")]
-    public void Missing_fund_facts_fail_closed(string id)
-    {
-        var d = SubjectBuilder.Distribution(1, "701-6000-53100-G-COPS-26", 1m) with { Fund = null };
-        DomainServices.IValidationRule rule = id switch
-        {
-            "SEG_REQUIRED" => new SegRequiredRule(),
-            "SEG_GRANT_FORBIDDEN" => new SegGrantForbiddenRule(),
-            _ => new FundDeptObjectAllowedRule(),
-        };
-        rule.Evaluate(new SubjectBuilder().With(d).Build(), Def(id))
-            .Should().ContainSingle(o => o.Severity == Severity.HardStop && o.DistributionLine == 1);
-    }
-
-    [Fact]
-    public void Missing_grant_facts_for_a_grant_segment_fail_closed()
-    {
-        var d = SubjectBuilder.Distribution(1, "701-6000-53100-G-COPS-26", 1m) with { Grant = null };
-        var s = new SubjectBuilder().With(d).Vendor(sam: false).Build();
-        new GrantEligibleRule().Evaluate(s, Def("GRANT_ELIGIBLE"))
-            .Should().ContainSingle(o => o.Severity == Severity.HardStop);
-        new VendorEligibleRule().Evaluate(s, Def("VENDOR_ELIGIBLE"))
-            .Should().ContainSingle(o => o.Severity == Severity.HardStop && o.DistributionLine == null);
     }
 
     [Fact]

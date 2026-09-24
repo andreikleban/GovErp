@@ -1,30 +1,32 @@
-using GovErp.Domain.Validation.Entities;
-using GovErp.Domain.Validation.Exceptions;
 using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.DomainServices.Rules;
 
-public sealed class ProcurementThresholdRule : IValidationRule
+/// <summary>Step 4. A non-PO invoice at or above the threshold needs a purchase order or a documented procurement exception.</summary>
+public sealed class ProcurementThresholdRule : ValidationRule
 {
-    public string RuleId => "PROCUREMENT_THRESHOLD";
+    public override string RuleId => "PROCUREMENT_THRESHOLD";
 
-    public IReadOnlyList<RuleOutcome> Evaluate(ValidationSubject subject, RuleDefinition definition)
+    protected override Severity DefaultSeverity => Severity.SoftStop;
+
+    protected override IEnumerable<Finding> Check(ValidationSubject subject, RuleParameters parameters)
     {
-        var threshold = Money.Of(definition.DecimalParameter("threshold"));
-        if (threshold <= Money.Zero)
-        {
-            throw new ValidationException($"Rule {RuleId}: threshold must be positive.");
-        }
-        var t = subject.Transaction;
-        if (t.IsPoBacked || t.Total < threshold)
-        {
-            return [];
-        }
+        // Scope: the invoice as a whole.
+        var invoice = subject.Transaction;
+        var threshold = parameters.PositiveAmount("threshold");
 
-        return [RuleOutcome.From(definition, definition.Severity ?? Severity.SoftStop, null,
-            RuleSupport.Map(("total", t.Total.ToString()), ("threshold", threshold.ToString()), ("poBacked", "false")),
-            RuleSupport.Map(),
-            $"Non-PO invoice of {t.Total} meets the {threshold} procurement threshold; a purchase order or documented procurement exception is required.")];
+        // Decide: a large purchase without a purchase order.
+        Verdict verdict;
+        if (!invoice.IsPoBacked && invoice.Total >= threshold)
+            verdict = Fail($"Non-PO invoice of {invoice.Total} meets the {threshold} procurement threshold; "
+                           + "a purchase order or documented procurement exception is required.");
+        else
+            yield break;
+
+        // Evidence
+        yield return verdict.OnInvoice()
+            .Input(invoice.Total)
+            .Input(threshold)
+            .InputAs("poBacked", "false");
     }
 }
-

@@ -1,43 +1,41 @@
-using System.Globalization;
-using GovErp.Domain.Validation.Entities;
 using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.DomainServices.Rules;
 
-public sealed class BudgetLowRemainingRule : IValidationRule
+/// <summary>Step 5. An early warning: after the invoice, less than the configured share of the amended budget remains.</summary>
+public sealed class BudgetLowRemainingRule : ValidationRule
 {
-    public string RuleId => "BUDGET_LOW_REMAINING";
+    public override string RuleId => "BUDGET_LOW_REMAINING";
 
-    public IReadOnlyList<RuleOutcome> Evaluate(ValidationSubject subject, RuleDefinition definition)
+    protected override Severity DefaultSeverity => Severity.Warning;
+
+    protected override IEnumerable<Finding> Check(ValidationSubject subject, RuleParameters parameters)
     {
-        var threshold = definition.DecimalParameter("pct");
-        if (threshold is < 0 or > 1)
-            throw new GovErp.Domain.Validation.Exceptions.ValidationException("Low remaining pct must be between 0 and 1 inclusive.");
-        var outcomes = new List<RuleOutcome>();
-        foreach (var group in BudgetAllocation.Allocate(subject).GroupBy(x => (x.Distribution.Account, x.Distribution.Budget.FiscalYear)))
+        // Scope: every budget line (account and fiscal year) the invoice charges.
+        var threshold = parameters.Share("pct");
+        foreach (var demand in BudgetAllocation.ByBudgetLine(subject))
         {
-            var d = group.First().Distribution;
-            var b = d.Budget;
-            var inputs = new Dictionary<string, string> { ["account"] = d.Account.ToString(),
-                ["amended"] = b.Amended.ToString(), ["available"] = b.Available.ToString(),
-                ["ownHeld"] = b.OwnHeld.ToString(), ["thresholdPct"] = (threshold * 100).ToString("0.00", CultureInfo.InvariantCulture) };
-            var error = group.Select(x => x.Error).FirstOrDefault(x => x != null);
-            if (error != null)
-            {
-                outcomes.Add(RuleOutcome.From(definition, Severity.HardStop, d.LineNo, inputs, new Dictionary<string, string>(), error));
+            var budget = demand.Budget;
+
+            // Decide: little budget remains. An overage or a missing budget line is BUDGET_AVAILABILITY's finding.
+            Verdict verdict;
+            if (demand.Error is { } error)
+                verdict = HardStop(error);
+            else if (budget.Exists && budget.Amended > Money.Zero && !demand.AvailableAfter.IsNegative && demand.RemainingShare < threshold)
+                verdict = Fail($"After this invoice, {demand.AvailableAfter} ({Percent(demand.RemainingShare)}%) remains for {demand.Account}.");
+            else
                 continue;
-            }
-            if (!b.Exists || b.Amended <= Money.Zero) continue;
-            var after = b.AvailableForThisInvoice - new Money(group.Sum(x => x.RequiredNewBudget.Amount));
-            if (after.IsNegative) continue;
-            var pct = after.Amount / b.Amended.Amount;
-            if (pct >= threshold) continue;
-            var computed = new Dictionary<string, string> { ["availableAfter"] = after.ToString(),
-                ["projectedAvailable"] = after.ToString(), ["remainingPct"] = (pct * 100).ToString("0.00", CultureInfo.InvariantCulture) };
-            outcomes.Add(RuleOutcome.From(definition, definition.Severity ?? Severity.Warning, d.LineNo, inputs, computed,
-                $"After this invoice, {after} ({computed["remainingPct"]}%) remains for {d.Account}."));
+
+            // Evidence
+            yield return verdict.OnGroup(demand.FirstLine)
+                .Input(demand.Account)
+                .Input(budget.Amended)
+                .Input(budget.Available)
+                .Input(budget.OwnHeld)
+                .InputAs("thresholdPct", Percent(threshold))
+                .Computed(demand.AvailableAfter)
+                .ComputedAs("projectedAvailable", demand.AvailableAfter)
+                .ComputedAs("remainingPct", Percent(demand.RemainingShare));
         }
-        return outcomes;
     }
 }
-

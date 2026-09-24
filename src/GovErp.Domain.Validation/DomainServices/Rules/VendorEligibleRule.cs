@@ -1,50 +1,36 @@
-using GovErp.Domain.Validation.Entities;
 using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.DomainServices.Rules;
 
-public sealed class VendorEligibleRule : IValidationRule
+/// <summary>Step 4. The vendor is active and not debarred; payments from a federal grant also need SAM registration (demo policy).</summary>
+public sealed class VendorEligibleRule : ValidationRule
 {
-    public string RuleId => "VENDOR_ELIGIBLE";
+    public override string RuleId => "VENDOR_ELIGIBLE";
 
-    public IReadOnlyList<RuleOutcome> Evaluate(ValidationSubject subject, RuleDefinition definition)
+    protected override IEnumerable<Finding> Check(ValidationSubject subject, RuleParameters parameters)
     {
-        var v = subject.Transaction.Vendor;
-        if (v is null || v.VendorId == Guid.Empty)
-        {
-            return [RuleOutcome.From(definition, Severity.HardStop, null,
-                RuleSupport.Map(("transactionRef", subject.Transaction.TransactionRef)),
-                RuleSupport.Map(("missingFact", "vendor")), "Identified vendor facts are required.")];
-        }
+        // Scope: the invoice's vendor, and whether any line is paid from a federal grant.
+        var vendor = subject.Transaction.Vendor;
+        var federalGrant = subject.Distributions.Any(d => d.Grant is { IsFederal: true });
 
-        var inputs = RuleSupport.Map(("vendor", v.Name), ("vendorId", v.VendorId.ToString()),
-            ("active", v.IsActive.ToString()), ("debarred", v.IsDebarred.ToString()), ("samRegistered", v.SamRegistered.ToString()));
-        if (!v.IsActive)
-        {
-            return [RuleOutcome.From(definition, definition.Severity ?? Severity.HardStop, null, inputs, RuleSupport.Map(),
-                $"Vendor {v.Name} is inactive.")];
-        }
-        if (v.IsDebarred)
-        {
-            return [RuleOutcome.From(definition, definition.Severity ?? Severity.HardStop, null, inputs, RuleSupport.Map(),
-                $"Vendor {v.Name} is debarred from government contracts.")];
-        }
+        // Decide: the first reason the vendor may not be paid.
+        Verdict verdict;
+        if (!vendor.IsActive)
+            verdict = Fail($"Vendor {vendor.Name} is inactive.");
+        else if (vendor.IsDebarred)
+            verdict = Fail($"Vendor {vendor.Name} is debarred from government contracts.");
+        else if (federalGrant && !vendor.SamRegistered)
+            verdict = Fail($"Demo policy requires vendor {vendor.Name} to be registered in SAM.gov for federal grant payments.");
+        else
+            yield break;
 
-        if (subject.Distributions.Any(d => d.Account.Grant is not null && d.Grant is null))
-        {
-            return [RuleOutcome.From(definition, Severity.HardStop, null, inputs,
-                RuleSupport.Map(("missingFact", "grant")),
-                "Grant facts are required to determine vendor SAM eligibility.")];
-        }
-
-        var touchesFederalGrant = subject.Distributions.Any(d => d.Grant is { IsFederal: true });
-        if (touchesFederalGrant && !v.SamRegistered)
-        {
-            return [RuleOutcome.From(definition, definition.Severity ?? Severity.HardStop, null, inputs, RuleSupport.Map(("federalGrant", "true")),
-                $"Demo policy requires vendor {v.Name} to be registered in SAM.gov for federal grant payments.")];
-        }
-
-        return [];
+        // Evidence
+        yield return verdict.OnInvoice()
+            .InputAs("vendor", vendor.Name)
+            .Input(vendor.VendorId)
+            .InputAs("active", vendor.IsActive)
+            .InputAs("debarred", vendor.IsDebarred)
+            .Input(vendor.SamRegistered)
+            .Computed(federalGrant);
     }
 }
-

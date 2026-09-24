@@ -1,33 +1,39 @@
-using System.Globalization;
-using GovErp.Domain.Validation.Entities;
 using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.DomainServices.Rules;
 
-public sealed class GrantEligibleRule : IValidationRule
+/// <summary>Step 3. For grant lines: the grant is active, the service date is within its period, and the cost is allowable under it.</summary>
+public sealed class GrantEligibleRule : ValidationRule
 {
-    public string RuleId => "GRANT_ELIGIBLE";
+    public override string RuleId => "GRANT_ELIGIBLE";
 
-    public IReadOnlyList<RuleOutcome> Evaluate(ValidationSubject subject, RuleDefinition definition)
+    protected override IEnumerable<Finding> Check(ValidationSubject subject, RuleParameters parameters)
     {
-        var date = (subject.Transaction.ServiceDate ?? subject.Transaction.Date).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        return subject.Distributions
-            .Where(d => d.Account.Grant is not null && (d.Grant is null || d.Grant.Code != d.Account.Grant.Value || d.Grant.Eligibility != GrantEligibilityResult.Eligible))
-            .Select(d => d.Grant is null ? RuleSupport.MissingFact(definition, d, "grant") :
-                d.Grant.Code != d.Account.Grant!.Value ? RuleOutcome.From(definition, Severity.HardStop, d.LineNo,
-                    RuleSupport.Inputs(d, ("grant", d.Grant.Code)), RuleSupport.Map(("mismatchedFact", "grant")),
-                    $"Grant facts for {d.Grant.Code} do not match account grant {d.Account.Grant} (line {d.LineNo}).") :
-                RuleOutcome.From(definition, definition.Severity ?? Severity.HardStop, d.LineNo,
-                RuleSupport.Inputs(d, ("grant", d.Grant.Code), ("grantStatus", d.Grant.Status), ("date", date)),
-                RuleSupport.Map(("eligibility", d.Grant.Eligibility.ToString())),
-                d.Grant.Eligibility switch
-                {
-                    GrantEligibilityResult.GrantNotActive => $"Grant {d.Grant.Code} is {d.Grant.Status} (line {d.LineNo}).",
-                    GrantEligibilityResult.OutsidePeriod => $"Service date (or invoice date when absent) {date} is outside the period of grant {d.Grant.Code} (line {d.LineNo}).",
-                    GrantEligibilityResult.DepartmentNotAllowed => $"Department {d.Account.Department} is not covered by grant {d.Grant.Code} (line {d.LineNo}).",
-                    _ => $"Object {d.Account.Object} is not an allowable cost under grant {d.Grant.Code} (line {d.LineNo}).",
-                }))
-            .ToList();
+        // Scope: every line with a grant segment, on the service date (the invoice date when there is none).
+        var date = subject.Transaction.ServiceDate ?? subject.Transaction.Date;
+        foreach (var line in subject.Distributions.Where(d => d.Account.Grant is not null))
+        {
+            var grant = line.KnownGrant();
+
+            // Decide: the first reason the cost is not allowable under the grant.
+            Verdict verdict;
+            if (grant.Eligibility == GrantEligibilityResult.GrantNotActive)
+                verdict = Fail($"Grant {grant.Code} is {grant.Status} (line {line.LineNo}).");
+            else if (grant.Eligibility == GrantEligibilityResult.OutsidePeriod)
+                verdict = Fail($"Service date (or invoice date when absent) {date:yyyy-MM-dd} is outside the period of grant {grant.Code} (line {line.LineNo}).");
+            else if (grant.Eligibility == GrantEligibilityResult.DepartmentNotAllowed)
+                verdict = Fail($"Department {line.Account.Department} is not covered by grant {grant.Code} (line {line.LineNo}).");
+            else if (grant.Eligibility == GrantEligibilityResult.ObjectNotAllowed)
+                verdict = Fail($"Object {line.Account.Object} is not an allowable cost under grant {grant.Code} (line {line.LineNo}).");
+            else
+                continue;
+
+            // Evidence
+            yield return verdict.On(line)
+                .InputAs("grant", grant.Code)
+                .InputAs("grantStatus", grant.Status)
+                .Input(date)
+                .Computed(grant.Eligibility);
+        }
     }
 }
-

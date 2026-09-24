@@ -196,6 +196,38 @@ public class PipelineScenarioTests
         r.Outcomes.Should().Contain(x => x.RuleId == "VALIDATION_INPUT");
     }
 
+    [Theory]
+    [InlineData("vendor-missing")]
+    [InlineData("vendor-id")]
+    [InlineData("combination")]
+    [InlineData("fund-missing")]
+    [InlineData("fund-mismatch")]
+    [InlineData("grant-missing")]
+    [InlineData("grant-mismatch")]
+    [InlineData("po-line")]
+    public void Missing_or_mismatched_facts_are_refused_before_any_rule(string invalid)
+    {
+        var grantLine = SubjectBuilder.Distribution(1, "701-6000-53100-G-COPS-26", 1000, budget: SubjectBuilder.Budget(100000, 0, 0));
+        var s = Healthy();
+        var d = s.Distributions[0];
+        s = invalid switch
+        {
+            "vendor-missing" => s with { Transaction = s.Transaction with { Vendor = null! } },
+            "vendor-id" => s with { Transaction = s.Transaction with { Vendor = s.Transaction.Vendor with { VendorId = Guid.Empty } } },
+            "combination" => s with { Distributions = [d with { Combination = null! }] },
+            "fund-missing" => s with { Distributions = [d with { Fund = null }] },
+            "fund-mismatch" => s with { Distributions = [d with { Fund = SubjectBuilder.Grants701() }] },
+            "grant-missing" => s with { Distributions = [grantLine with { Grant = null }] },
+            "grant-mismatch" => s with { Distributions = [grantLine with { Grant = SubjectBuilder.Cops() with { Code = "G-OTHER" } }] },
+            "po-line" => s with { Transaction = s.Transaction with { IsPoBacked = true } },
+            _ => s
+        };
+        var r = Run(s);
+        r.Overall.Should().Be(Severity.HardStop);
+        r.Outcomes.Should().ContainSingle().Which.RuleId.Should().Be("VALIDATION_INPUT");
+        r.Steps.Where(x => x.Step != ValidationStep.RequiredSegments).Should().OnlyContain(x => x.Status == StepExecutionStatus.Skipped);
+    }
+
     [Fact]
     public void Invalid_evaluating_actor_is_rejected()
     {

@@ -144,17 +144,15 @@ public class Step5And6RulesTests
     }
 
     [Fact]
-    public void Closed_zero_authorized_and_missing_po_fail_closed()
+    public void Closed_and_zero_authorized_po_fail_closed()
     {
+        // A line of a PO-backed invoice without a PO line is refused by the pipeline (VALIDATION_INPUT).
         foreach (var p in new[] { Po() with { IsOpen = false }, Po(authorized: 0) })
         {
             BudgetAllocation.Allocate(Subject(Line(1, 1, po: p))).Single().LiquidationAmount.Should().Be(Money.Zero);
             new PoLiquidationRule().Evaluate(Subject(Line(1, 1, po: p)), Def("PO_LIQUIDATION"))
                 .Should().ContainSingle(x => x.Severity == Severity.HardStop);
         }
-        var s = Subject(Line(1, 1));
-        s = s with { Transaction = s.Transaction with { IsPoBacked = true } };
-        new PoLiquidationRule().Evaluate(s, Def("PO_LIQUIDATION")).Should().ContainSingle(x => x.Severity == Severity.HardStop);
     }
 
     [Fact]

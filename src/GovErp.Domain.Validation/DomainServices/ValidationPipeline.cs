@@ -198,6 +198,26 @@ public sealed class ValidationPipeline(RuleCatalog catalog)
         var fiscalYear = FiscalYear.FromDate(posting).Year;
         if (subject.Distributions.Any(d => d.Budget.Exists && d.Budget.FiscalYear != fiscalYear))
             return $"Budget snapshots must belong to FY{fiscalYear} of the posting date.";
+        return MissingFacts(subject);
+    }
+
+    /// <summary>The snapshot carries every fact the rules decide on, so no rule has to guess about a missing fund, grant or vendor.</summary>
+    private static string? MissingFacts(ValidationSubject subject)
+    {
+        var t = subject.Transaction;
+        if (t.Vendor is null || t.Vendor.VendorId == Guid.Empty) return "The invoice vendor is not identified.";
+        foreach (var line in subject.Distributions)
+        {
+            if (line.Combination is null) return $"Line {line.LineNo}: account combination facts are missing.";
+            if (line.Fund is null) return $"Line {line.LineNo}: fund facts are missing for {line.Account}.";
+            if (line.Fund.Code != line.Account.Fund.Value)
+                return $"Line {line.LineNo}: fund facts {line.Fund.Code} do not match the account fund {line.Account.Fund}.";
+            if (line.Account.Grant is { } grant && line.Grant is null) return $"Line {line.LineNo}: grant facts are missing for {grant}.";
+            if (line.Account.Grant is { } coded && line.Grant is { } facts && facts.Code != coded.Value)
+                return $"Line {line.LineNo}: grant facts {facts.Code} do not match the account grant {coded}.";
+            if (t.IsPoBacked && line.Encumbrance is null) return $"Line {line.LineNo} of a PO-backed invoice is not linked to a PO line.";
+        }
+
         return null;
     }
 

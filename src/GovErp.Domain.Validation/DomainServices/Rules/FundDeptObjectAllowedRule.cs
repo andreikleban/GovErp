@@ -1,26 +1,35 @@
-using GovErp.Domain.Validation.Entities;
 using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.DomainServices.Rules;
 
-public sealed class FundDeptObjectAllowedRule : IValidationRule
+/// <summary>Step 3. The fund is active and the line's department and object are an allowed use of it.</summary>
+public sealed class FundDeptObjectAllowedRule : ValidationRule
 {
-    public string RuleId => "FUND_DEPT_OBJECT_ALLOWED";
+    public override string RuleId => "FUND_DEPT_OBJECT_ALLOWED";
 
-    public IReadOnlyList<RuleOutcome> Evaluate(ValidationSubject subject, RuleDefinition definition) =>
-        subject.Distributions
-            .Where(d => d.Fund is null || d.Fund.Code != d.Account.Fund.Value || !d.Fund.IsActive || d.Fund.Restriction != FundRestriction.Allowed)
-            .Select(d => d.Fund is null ? RuleSupport.MissingFact(definition, d, "fund") :
-                d.Fund.Code != d.Account.Fund.Value ? RuleOutcome.From(definition, Severity.HardStop, d.LineNo,
-                    RuleSupport.Inputs(d, ("fund", d.Fund.Code)), RuleSupport.Map(("mismatchedFact", "fund")),
-                    $"Fund facts for {d.Fund.Code} do not match account fund {d.Account.Fund} (line {d.LineNo}).") :
-                RuleOutcome.From(definition, definition.Severity ?? Severity.HardStop, d.LineNo,
-                RuleSupport.Inputs(d, ("fund", d.Fund!.Code)),
-                RuleSupport.Map(("restriction", d.Fund.Restriction.ToString()), ("active", d.Fund.IsActive.ToString())),
-                !d.Fund.IsActive ? $"Fund {d.Fund.Code} is inactive (line {d.LineNo})." :
-                d.Fund.Restriction == FundRestriction.DepartmentNotAllowed
-                    ? $"Department {d.Account.Department} may not spend from fund {d.Fund.Code} ({d.Fund.Name}) (line {d.LineNo})."
-                    : $"Object {d.Account.Object} is not an allowed use of fund {d.Fund.Code} ({d.Fund.Name}) (line {d.LineNo})."))
-            .ToList();
+    protected override IEnumerable<Finding> Check(ValidationSubject subject, RuleParameters parameters)
+    {
+        // Scope: every invoice line.
+        foreach (var line in subject.Distributions)
+        {
+            var fund = line.KnownFund();
+
+            // Decide: an inactive fund, or a department or object the fund does not allow.
+            Verdict verdict;
+            if (!fund.IsActive)
+                verdict = Fail($"Fund {fund.Code} is inactive (line {line.LineNo}).");
+            else if (fund.Restriction == FundRestriction.DepartmentNotAllowed)
+                verdict = Fail($"Department {line.Account.Department} may not spend from fund {fund.Code} ({fund.Name}) (line {line.LineNo}).");
+            else if (fund.Restriction == FundRestriction.ObjectNotAllowed)
+                verdict = Fail($"Object {line.Account.Object} is not an allowed use of fund {fund.Code} ({fund.Name}) (line {line.LineNo}).");
+            else
+                continue;
+
+            // Evidence
+            yield return verdict.On(line)
+                .InputAs("fund", fund.Code)
+                .Computed(fund.Restriction)
+                .ComputedAs("active", fund.IsActive);
+        }
+    }
 }
-

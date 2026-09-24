@@ -1,20 +1,31 @@
-using GovErp.Domain.Validation.Entities;
 using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.DomainServices.Rules;
 
-/// <summary>Step 1. Fund/Dept/Object are guaranteed by the AccountCode type; the Grant is checked against the fund's policy.</summary>
-public sealed class SegRequiredRule : IValidationRule
+/// <summary>Step 1. A fund whose grant policy is Required needs a grant segment on every line charged to it.</summary>
+public sealed class SegRequiredRule : ValidationRule
 {
-    public string RuleId => "SEG_REQUIRED";
+    public override string RuleId => "SEG_REQUIRED";
 
-    public IReadOnlyList<RuleOutcome> Evaluate(ValidationSubject subject, RuleDefinition definition) =>
-        subject.Distributions
-            .Where(d => d.Fund is null || d.Fund.GrantRule == GrantRule.Required && d.Account.Grant is null)
-            .Select(d => d.Fund is null ? RuleSupport.MissingFact(definition, d, "fund") : RuleOutcome.From(definition, definition.Severity ?? Severity.HardStop, d.LineNo,
-                RuleSupport.Inputs(d, ("fund", d.Fund!.Code), ("grantPolicy", d.Fund.GrantRule.ToString())),
-                RuleSupport.Map(("missingSegment", "Grant")),
-                $"Fund {d.Fund.Code} ({d.Fund.Name}) requires a grant segment on line {d.LineNo}."))
-            .ToList();
+    protected override IEnumerable<Finding> Check(ValidationSubject subject, RuleParameters parameters)
+    {
+        // Scope: every invoice line. Fund, department and object are guaranteed by the AccountCode type.
+        foreach (var line in subject.Distributions)
+        {
+            var fund = line.KnownFund();
+
+            // Decide: the fund requires a grant segment and the line has none.
+            Verdict verdict;
+            if (fund.GrantRule == GrantRule.Required && line.Account.Grant is null)
+                verdict = Fail($"Fund {fund.Code} ({fund.Name}) requires a grant segment on line {line.LineNo}.");
+            else
+                continue;
+
+            // Evidence
+            yield return verdict.On(line)
+                .InputAs("fund", fund.Code)
+                .InputAs("grantPolicy", fund.GrantRule)
+                .ComputedAs("missingSegment", "Grant");
+        }
+    }
 }
-

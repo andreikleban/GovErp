@@ -1,42 +1,54 @@
-using GovErp.Domain.Validation.Entities;
 using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.DomainServices.Rules;
 
-public sealed class BudgetAvailabilityRule : IValidationRule
+/// <summary>
+/// Step 5. Per budget line: available = amended − actuals − encumbered − held. The invoice needs new budget for its amount
+/// minus what it liquidates from a PO, and its own reservation is added back. The fund's budget control sets the severity.
+/// </summary>
+public sealed class BudgetAvailabilityRule : ValidationRule
 {
-    public string RuleId => "BUDGET_AVAILABILITY";
+    public override string RuleId => "BUDGET_AVAILABILITY";
 
-    public IReadOnlyList<RuleOutcome> Evaluate(ValidationSubject subject, RuleDefinition definition)
+    protected override IEnumerable<Finding> Check(ValidationSubject subject, RuleParameters parameters)
     {
-        var outcomes = new List<RuleOutcome>();
-        foreach (var group in BudgetAllocation.Allocate(subject).GroupBy(x => (x.Distribution.Account, x.Distribution.Budget.FiscalYear)))
+        // Scope: every budget line (account and fiscal year) the invoice charges.
+        foreach (var demand in BudgetAllocation.ByBudgetLine(subject))
         {
-            var d = group.First().Distribution;
-            var b = d.Budget;
-            var required = new Money(group.Sum(x => x.RequiredNewBudget.Amount));
-            var liquidation = new Money(group.Sum(x => x.LiquidationAmount.Amount));
-            var after = b.Available + b.OwnHeld - required;
-            var inputs = new Dictionary<string, string> {
-                ["account"] = d.Account.ToString(), ["fiscalYear"] = b.FiscalYear.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                ["amended"] = b.Amended.ToString(), ["actuals"] = b.Actuals.ToString(),
-                ["encumbered"] = b.Encumbered.ToString(), ["held"] = b.Held.ToString(),
-                ["ownHeld"] = b.OwnHeld.ToString(), ["amountToCheck"] = required.ToString(),
-                ["invoiceAmount"] = new Money(group.Sum(x => x.Distribution.Amount.Amount)).ToString(),
-                ["controlMode"] = d.Fund?.Control.ToString() ?? "Unknown" };
-            var computed = new Dictionary<string, string> {
-                ["available"] = b.Available.ToString(), ["availableForThisInvoice"] = b.AvailableForThisInvoice.ToString(),
-                ["requiredNewBudget"] = required.ToString(), ["eligibleLiquidation"] = liquidation.ToString(),
-                ["overage"] = Money.Max(Money.Zero, -after).ToString(), ["availableAfter"] = after.ToString(),
-                ["projectedAvailable"] = after.ToString() };
-            var error = group.Select(x => x.Error).FirstOrDefault(x => x != null);
-            if (error != null || !b.Exists)
-                outcomes.Add(RuleOutcome.From(definition, Severity.HardStop, d.LineNo, inputs, computed,
-                    error ?? $"No budget line exists for {d.Account} in FY{b.FiscalYear}."));
-            else if (after.IsNegative)
-                outcomes.Add(RuleOutcome.From(definition, d.Fund?.Control == BudgetControl.Soft ? Severity.SoftStop : Severity.HardStop,
-                    d.LineNo, inputs, computed, $"Invoice exceeds available budget for {d.Account} in FY{b.FiscalYear} by {-after}."));
+            var budget = demand.Budget;
+
+            // Decide: inconsistent balances, no budget line, or not enough budget (hard or soft by the fund's control).
+            Verdict verdict;
+            if (demand.Error is { } error)
+                verdict = HardStop(error);
+            else if (!budget.Exists)
+                verdict = HardStop($"No budget line exists for {demand.Account} in FY{budget.FiscalYear}.");
+            else if (demand.AvailableAfter.IsNegative && demand.Control == BudgetControl.Soft)
+                verdict = SoftStop($"Invoice exceeds available budget for {demand.Account} in FY{budget.FiscalYear} by {demand.Overage}.");
+            else if (demand.AvailableAfter.IsNegative)
+                verdict = HardStop($"Invoice exceeds available budget for {demand.Account} in FY{budget.FiscalYear} by {demand.Overage}.");
+            else
+                continue;
+
+            // Evidence
+            yield return verdict.OnGroup(demand.FirstLine)
+                .Input(demand.Account)
+                .Input(budget.FiscalYear)
+                .Input(budget.Amended)
+                .Input(budget.Actuals)
+                .Input(budget.Encumbered)
+                .Input(budget.Held)
+                .Input(budget.OwnHeld)
+                .InputAs("amountToCheck", demand.RequiredNewBudget)
+                .Input(demand.InvoiceAmount)
+                .InputAs("controlMode", demand.Control?.ToString() ?? "Unknown")
+                .Computed(budget.Available)
+                .Computed(budget.AvailableForThisInvoice)
+                .Computed(demand.RequiredNewBudget)
+                .ComputedAs("eligibleLiquidation", demand.Liquidation)
+                .Computed(demand.Overage)
+                .Computed(demand.AvailableAfter)
+                .ComputedAs("projectedAvailable", demand.AvailableAfter);
         }
-        return outcomes;
     }
 }

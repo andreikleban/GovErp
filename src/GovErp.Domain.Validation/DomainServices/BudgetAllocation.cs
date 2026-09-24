@@ -67,5 +67,25 @@ public static class BudgetAllocation
         }
         return result.AsReadOnly();
     }
-}
 
+    /// <summary>The invoice's demand on each budget line (account and fiscal year), in line order.</summary>
+    public static IReadOnlyList<BudgetDemand> ByBudgetLine(ValidationSubject subject) =>
+        Allocate(subject)
+            .GroupBy(x => (x.Distribution.Account, x.Distribution.Budget.FiscalYear))
+            .Select(g => new BudgetDemand(g.First().Distribution, Total(g, x => x.Distribution.Amount),
+                Total(g, x => x.LiquidationAmount), Total(g, x => x.RequiredNewBudget), FirstError(g)))
+            .ToList();
+
+    /// <summary>The invoice's billing of each PO line it references, in line order.</summary>
+    public static IReadOnlyList<PoLineBilling> ByPoLine(ValidationSubject subject) =>
+        Allocate(subject)
+            .Where(x => x.Distribution.Encumbrance is not null)
+            .GroupBy(x => x.Distribution.Encumbrance!.PoLineRef)
+            .Select(g => new PoLineBilling(g.First().Distribution, g.First().Distribution.Encumbrance!,
+                Total(g, x => x.Distribution.Amount), Total(g, x => x.LiquidationAmount), FirstError(g)))
+            .ToList();
+
+    private static Money Total(IEnumerable<Line> lines, Func<Line, Money> amount) => new(lines.Sum(x => amount(x).Amount));
+
+    private static string? FirstError(IEnumerable<Line> lines) => lines.Select(x => x.Error).FirstOrDefault(e => e is not null);
+}

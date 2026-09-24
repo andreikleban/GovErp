@@ -110,7 +110,7 @@ public static class RuleDescriptions
             "For each PO line: the invoice first liquidates the line's unclaimed encumbrance; any excess needs new budget (checked by BUDGET_AVAILABILITY). Cumulative billing on the line (already posted + other open invoices + this invoice) is compared with the authorized PO amount.",
             ["PO line: authorized amount, remaining encumbrance, already posted, other open claims", "Invoice amount on the PO line"],
             new Dictionary<string, string> { ["tolerance_pct"] = "Allowed cumulative billing above the authorized PO amount, as a share (0 to 1)." },
-            "Allowed when fully covered by the encumbrance; Warning when part of the amount needs new budget or billing is above the PO within tolerance; Hard Stop when cumulative billing exceeds the tolerance or the PO line is missing or closed.",
+            "Allowed when fully covered by the encumbrance; Warning when part of the amount needs new budget or billing is above the PO within tolerance; Hard Stop when cumulative billing exceeds the tolerance or the PO line is closed. A line of a PO-backed invoice without a PO line is refused before the rules run (VALIDATION_INPUT).",
             "Hard Stop: a PO change order. Warning: no action required.",
             $"{Assignment}: behaviour of a PO-backed invoice that liquidates an encumbrance. The 5% tolerance is a {DemoAssumption.ToLowerInvariant()}.",
             ["Is the tolerance a percentage, an absolute cap, or both?", "Is receipt matching (two- or three-way match) required before payment?"]),

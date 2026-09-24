@@ -1,21 +1,34 @@
-using GovErp.Domain.Validation.Entities;
 using GovErp.Domain.Validation.ValueObjects;
 
 namespace GovErp.Domain.Validation.DomainServices.Rules;
 
-public sealed class CoaCombinationActiveRule : IValidationRule
+/// <summary>Step 2. The full account combination exists in the chart of accounts and is active on the invoice date.</summary>
+public sealed class CoaCombinationActiveRule : ValidationRule
 {
-    public string RuleId => "COA_COMBINATION_ACTIVE";
+    public override string RuleId => "COA_COMBINATION_ACTIVE";
 
-    public IReadOnlyList<RuleOutcome> Evaluate(ValidationSubject subject, RuleDefinition definition) =>
-        subject.Distributions
-            .Where(d => d.Combination is null || !d.Combination.Exists || !d.Combination.IsActiveOnDate)
-            .Select(d => d.Combination is null ? RuleSupport.MissingFact(definition, d, "combination") : RuleOutcome.From(definition, definition.Severity ?? Severity.HardStop, d.LineNo,
-                RuleSupport.Inputs(d, ("exists", d.Combination.Exists.ToString()), ("status", d.Combination.Status), ("date", subject.Transaction.Date.ToString("yyyy-MM-dd"))),
-                RuleSupport.Map(),
-                d.Combination.Exists
-                    ? $"Account combination {d.Account} is {d.Combination.Status} on {subject.Transaction.Date:yyyy-MM-dd} (line {d.LineNo})."
-                    : $"Account combination {d.Account} does not exist in the chart of accounts (line {d.LineNo})."))
-            .ToList();
+    protected override IEnumerable<Finding> Check(ValidationSubject subject, RuleParameters parameters)
+    {
+        // Scope: every invoice line, on the invoice date.
+        var date = subject.Transaction.Date;
+        foreach (var line in subject.Distributions)
+        {
+            var combination = line.Combination;
+
+            // Decide: the combination is unknown, or known but not active on that date.
+            Verdict verdict;
+            if (!combination.Exists)
+                verdict = Fail($"Account combination {line.Account} does not exist in the chart of accounts (line {line.LineNo}).");
+            else if (!combination.IsActiveOnDate)
+                verdict = Fail($"Account combination {line.Account} is {combination.Status} on {date:yyyy-MM-dd} (line {line.LineNo}).");
+            else
+                continue;
+
+            // Evidence
+            yield return verdict.On(line)
+                .Input(combination.Exists)
+                .Input(combination.Status)
+                .Input(date);
+        }
+    }
 }
-
